@@ -484,3 +484,57 @@ tests/test_market_structure.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-06
+
+## Date:
+2026-06-09
+
+## Area:
+Strategy
+
+## Decision:
+The liquidity map engine (P3-002) builds a map of resting-liquidity levels only:
+swing highs/lows (reusing P3-001), equal highs/lows (clusters of near-equal
+swings within equal_tolerance, default 0.1), session highs/lows (reusing P2-002,
+main sessions only), and previous day/week highs/lows. High-type levels are
+classified BUY_SIDE (rest above price), low-type SELL_SIDE. Equal-cluster price =
+top for highs / bottom for lows; previous day/week = the period immediately
+before the latest candle's period. Sweep/manipulation detection is deliberately
+excluded (it is task P3-003).
+
+## Reason:
+Matches the P3-002 goal exactly and 15_LIQUIDITY_ENGINEERING.md liquidity types,
+while keeping scope tight (map only). Reuses existing swing and session engines
+to stay consistent and DRY. No look-ahead: levels derive only from supplied
+candles.
+
+## Evidence:
+tests/test_liquidity_map.py — 9 tests on known examples covering swing levels +
+sides, equal highs (and the outside-tolerance negative), session highs/lows,
+previous day and previous week levels, single-period (no prev), empty input, and
+a no-look-ahead prefix check. All pass (134 total).
+
+## Alternatives Considered:
+- Including round-number and breakout zones (in the policy): deferred — not in the
+  P3-002 goal; avoid scope creep.
+- Basing equal highs/lows on raw candle highs instead of swing pivots: rejected —
+  swing-based clustering reduces noise.
+
+## Risk:
+equal_tolerance and swing strength affect which clusters/levels appear; round
+numbers and breakout liquidity are not yet mapped.
+
+## Mitigation:
+Both are configurable; remaining liquidity types can be added later without
+changing the level model.
+
+## Files Affected:
+src/liquidity/liquidity_map.py, src/liquidity/__init__.py,
+tests/test_liquidity_map.py
+
+## Status:
+Accepted
