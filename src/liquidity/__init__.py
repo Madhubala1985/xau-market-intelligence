@@ -7,6 +7,11 @@ from src.liquidity.liquidity_map import (
     LiquidityMapEngine,
     LiquiditySide,
 )
+from src.liquidity.sweep import (
+    SweepEngine,
+    SweepEvent,
+    SweepStatus,
+)
 
 __all__ = [
     "LiquidityMapEngine",
@@ -14,4 +19,7 @@ __all__ = [
     "LiquidityLevel",
     "LiquidityKind",
     "LiquiditySide",
+    "SweepEngine",
+    "SweepEvent",
+    "SweepStatus",
 ]

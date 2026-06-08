@@ -14,13 +14,13 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 3: Market Structure and Liquidity
 
 ## Current Task ID:
-P3-003
+P3-004
 
 ## Current Task Goal:
-Liquidity Sweep Engine — detect sweep, rejection, reclaim, displacement confirmation.
+FVG / Order Block / Supply-Demand Engine — detect FVGs, order-block-like zones, supply/demand zones, mitigation status.
 
 ## Current Status:
-P3-002 complete. Liquidity map engine implemented and tested.
+P3-003 complete. Liquidity sweep engine implemented and tested.
 
 ---
 
@@ -37,24 +37,26 @@ P3-002 complete. Liquidity map engine implemented and tested.
 - P2-002 completed: session/kill-zone engine implemented and tested.
 - P3-001 completed: swing & market-structure engine implemented and tested.
 - P3-002 completed: liquidity map engine implemented and tested.
+- P3-003 completed: liquidity sweep engine implemented and tested.
 
-## P3-002 Details
+## P3-003 Details
 
 Files added/changed:
-- src/liquidity/liquidity_map.py — LiquidityMapEngine + LiquidityMap, LiquidityLevel, and LiquidityKind/LiquiditySide enums.
-- src/liquidity/__init__.py — package exports.
-- tests/test_liquidity_map.py — 9 tests (known examples).
+- src/liquidity/sweep.py — SweepEngine + SweepEvent + SweepStatus.
+- src/liquidity/__init__.py — export sweep API.
+- tests/test_sweep.py — 8 tests (true / false / no sweep + edges).
 
 Design notes:
-- Scope is the liquidity MAP only (where liquidity rests). Sweep/manipulation detection is P3-003 and is intentionally NOT here.
-- Level kinds: SWING_HIGH/LOW (reuses src/structure swings), EQUAL_HIGHS/LOWS (clusters of near-equal swings within equal_tolerance, default 0.1), SESSION_HIGH/LOW (reuses src/data/sessions.py; main sessions only: Asian/London/NY/overlap), PREV_DAY_HIGH/LOW and PREV_WEEK_HIGH/LOW.
-- Side convention: high-type levels = BUY_SIDE (rest above price); low-type = SELL_SIDE. Helpers: map.buy_side(), map.sell_side(), map.of_kind(kind).
-- Equal cluster representative price = top of cluster for highs, bottom for lows; touches = cluster size; time = most recent touch.
-- Previous day/week = the period immediately before the latest candle's period (handles gaps/weekends by using the previous available period key).
-- No look-ahead: levels derive only from supplied candles; swings are confirmed pivots; prev day/week are completed past periods. Covered by a prefix test.
+- Candidate sweep = a known liquidity level is taken (wick beyond) AND price closes back across it with a rejection wick >= rejection_ratio of the candle range. "A wick alone is not enough."
+- Confirmation = displacement candle in the rejection direction (range >= displacement_factor * baseline range) AND a structure event (BOS/CHOCH, reusing P3-001) in the rejection direction within confirm_window.
+- Status: TRUE_SWEEP (both confirmations), FALSE_SWEEP (window elapsed without both), PENDING (window not yet elapsed). A level taken but closed-through (breakout) yields no candidate; an untouched level yields nothing.
+- Buy-side level swept -> bearish rejection; sell-side -> bullish rejection.
+- No look-ahead: only levels established strictly before the sweep candle are used; confirmation sets confirmed_index at the later candle; unconfirmed-but-open candidates are PENDING (not FALSE). Each level is consumed by its first sweep.
+- A sweep is NOT a trade by itself (15_LIQUIDITY_ENGINEERING.md) — engine only classifies.
+- Accepts a LiquidityMap or a list of LiquidityLevel.
 
 Tests run:
-- `.venv/bin/python -m pytest tests/ -q` → 134 passed (9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
+- `.venv/bin/python -m pytest tests/ -q` → 142 passed (8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
 
 Errors: none.
 
@@ -63,22 +65,21 @@ Errors: none.
 # Next Task
 
 ## Task:
-P3-003: Liquidity Sweep Engine
+P3-004: FVG / Order Block / Supply-Demand Engine
 
 ## Goal:
-Detect sweep, rejection, reclaim, and displacement confirmation against liquidity levels.
+Detect fair value gaps (FVGs), order-block-like zones, supply/demand zones, and mitigation status.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- likely src/liquidity/, src/utils/, tests/. Reuse src/liquidity/ map and src/structure/. Do not touch src/execution|risk|strategy.
+- likely src/orderflow/ or a new structure/zones module + src/utils/ + tests/. Check the queue. src/orderflow/ exists. Reuse src/structure/ and src/data/ schemas. Do not touch src/execution|risk|strategy.
 
 ## Tests:
-- true sweep,
-- false sweep,
-- no sweep.
+- valid/invalid zones.
 
-## Notes for P3-003:
-- A sweep requires: a known liquidity level is taken (wick beyond), price fails to continue, closes back / rejects, displacement appears, structure confirms (15_LIQUIDITY_ENGINEERING.md). A wick alone is not enough.
-- A sweep is NOT a trade by itself; output detection only.
+## Notes for P3-004:
+- FVG (3-candle imbalance): bullish FVG when candle[i-1].high < candle[i+1].low (gap), bearish when candle[i-1].low > candle[i+1].high. Mitigation = later price trades back into the gap.
+- Order block = last opposing candle before displacement that breaks structure; supply/demand = zone left behind by displacement.
+- Mitigation status must be evaluated with no look-ahead (only candles available at decision time).
 
 ---
 
@@ -98,7 +99,7 @@ Detect sweep, rejection, reclaim, and displacement confirmation against liquidit
 
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, and 10_TASK_QUEUE.md.
 
-Continue P3-003 only.
+Continue P3-004 only.
 
 Do not broaden scope.
 Do not trade real money.

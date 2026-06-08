@@ -10,7 +10,7 @@ Phase 3: Market Structure and Liquidity
 
 ## Current Task
 
-P3-003: Liquidity Sweep Engine
+P3-004: FVG / Order Block / Supply-Demand Engine
 
 ## Last Completed Task
 
@@ -24,10 +24,11 @@ P2-001: Timeframe Aggregation
 P2-002: Session/Kill-Zone Engine
 P3-001: Swing and Structure Engine
 P3-002: Liquidity Map Engine
+P3-003: Liquidity Sweep Engine
 
 ## Next Task
 
-P3-003: Liquidity Sweep Engine
+P3-004: FVG / Order Block / Supply-Demand Engine
 
 ## Current Execution Mode
 
@@ -54,11 +55,11 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P3-003:
-Implement the Liquidity Sweep Engine that detects sweep, rejection, reclaim, and
-displacement confirmation against the liquidity map (src/liquidity/). Tests cover
-true sweep, false sweep, and no sweep. Build on the Candle schema and the
-liquidity map / structure engines; no look-ahead.
+Start P3-004:
+Implement the FVG / Order Block / Supply-Demand Engine that detects fair value
+gaps, order-block-like zones, supply/demand zones, and mitigation status. Tests
+cover valid/invalid zones. Build on the Candle schema (src/data/) and reuse the
+structure engine where useful; no look-ahead.
 
 ## Safety Notes
 
@@ -67,5 +68,5 @@ liquidity map / structure engines; no look-ahead.
 - Do not print credentials.
 - Do not place MT5 orders (data / analysis only).
 - MT5 adapter (src/broker/) is data-read only; order_send is never called.
-- Sweep detection must not use future candles (no look-ahead); a sweep is not a
-  trade by itself (15_LIQUIDITY_ENGINEERING.md).
+- Zone detection must not use future candles (no look-ahead); mitigation is
+  evaluated only from candles available at decision time.

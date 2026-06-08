@@ -538,3 +538,57 @@ tests/test_liquidity_map.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-07
+
+## Date:
+2026-06-09
+
+## Area:
+Strategy
+
+## Decision:
+The liquidity sweep engine (P3-003) classifies sweeps against known liquidity
+levels in three states: a CANDIDATE forms when a level is taken (wick beyond)
+and price closes back across it with a rejection wick >= rejection_ratio of the
+candle range; it becomes TRUE_SWEEP when, within confirm_window, both a
+displacement candle (range >= displacement_factor * baseline) and a structure
+event (BOS/CHOCH, reusing P3-001) appear in the rejection direction; it is
+FALSE_SWEEP if the window elapses without both, and PENDING while the window is
+still open. A taken-but-closed-through level (breakout) and an untouched level
+produce no event. Buy-side sweep -> bearish rejection; sell-side -> bullish.
+
+## Reason:
+Encodes 15_LIQUIDITY_ENGINEERING.md mechanically ("a wick alone is not enough";
+sweep requires take-out + close-back + displacement + structure). Reuses the
+structure engine for confirmation. A sweep is not a trade by itself, so the
+engine only classifies.
+
+## Evidence:
+tests/test_sweep.py — 8 tests covering true sweep (buy- and sell-side), false
+sweep (no confirmation), no sweep (clean breakout / untouched level), level
+formed after the candle ignored, PENDING before the window elapses, and a level
+consumed by its first sweep. All pass (142 total).
+
+## Alternatives Considered:
+- Self-contained "follow-through past sweep candle" instead of reusing the
+  structure engine: rejected — reusing P3-001 is more faithful and DRY.
+- Marking unconfirmed open candidates as FALSE immediately: rejected — would be
+  look-ahead-unsafe; PENDING until the window elapses is correct for live use.
+
+## Risk:
+Thresholds (rejection_ratio, displacement_factor, confirm_window) affect
+sensitivity; structure confirmation depends on swing strength.
+
+## Mitigation:
+All thresholds and requirement flags are configurable; detection is deterministic
+and documented.
+
+## Files Affected:
+src/liquidity/sweep.py, src/liquidity/__init__.py, tests/test_sweep.py
+
+## Status:
+Accepted
