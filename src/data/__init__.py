@@ -17,6 +17,11 @@ from src.data.schemas import (
     TradeDecision,
     TradeRecord,
 )
+from src.data.aggregation import (
+    AggregationError,
+    TimeframeAggregator,
+    aggregate,
+)
 from src.data.validation import (
     DataValidator,
     IssueSeverity,
@@ -51,4 +56,8 @@ __all__ = [
     "ValidationStatus",
     "ValidationCode",
     "IssueSeverity",
+    # aggregation
+    "TimeframeAggregator",
+    "aggregate",
+    "AggregationError",
 ]

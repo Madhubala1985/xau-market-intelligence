@@ -330,3 +330,53 @@ src/data/validation.py, src/data/__init__.py, tests/test_data_validation.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-03
+
+## Date:
+2026-06-09
+
+## Area:
+Data
+
+## Decision:
+Timeframe aggregation (P2-001) groups source candles into aligned UTC windows
+[start, start+step). open=first open, high=max, low=min, close=last close,
+tick_volume=sum, real_volume=sum (None if any source bar lacks it), spread=None.
+Daily aligns to UTC midnight; intraday aligns to the UTC epoch grid. The bar is
+labeled by the window start, and the still-forming trailing bar is withheld by
+default (drop_incomplete=True): with a `now` reference, buckets whose end is
+after `now` are dropped; without `now`, the most recent bucket is dropped.
+
+## Reason:
+Prevents future leakage (06_DATA_POLICY.md): each bar uses only data inside its
+own window and is only emitted once the window has fully elapsed. UTC alignment
+matches the single-internal-timezone policy.
+
+## Evidence:
+tests/test_aggregation.py — 22 tests covering OHLCV correctness, alignment
+(intraday + daily), volume rules, broker-offset preservation, and no-future-
+leakage (forming bar withheld, bars exclude next-window data). All pass (90 total).
+
+## Alternatives Considered:
+- Carrying a spread on aggregated bars (avg/last): rejected — an aggregated bar
+  has no single spread; None avoids inventing data.
+- Session/broker-day daily boundaries: deferred — UTC-midnight daily bars now;
+  session-aware boundaries belong to P2-002 and can be layered on later.
+
+## Risk:
+UTC-midnight daily boundaries may not match a broker's trading day, and a None
+`now` drops a possibly-complete last bar.
+
+## Mitigation:
+Daily boundary choice is documented; callers pass `now` (or drop_incomplete=False)
+for precise control. Session engine (P2-002) will own session-relative windows.
+
+## Files Affected:
+src/data/aggregation.py, src/data/__init__.py, tests/test_aggregation.py
+
+## Status:
+Accepted
