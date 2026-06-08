@@ -1,0 +1,12 @@
+python-dotenv
+pydantic
+pandas
+numpy
+pytest
+pytest-cov
+pyyaml
+loguru
+rich
+typer
+matplotlib
+scikit-learn

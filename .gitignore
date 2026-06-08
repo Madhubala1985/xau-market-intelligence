@@ -1,0 +1,32 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logs / runtime
+logs/
+reports/runtime/
+*.log
+
+# Data
+data/raw/
+data/processed/
+data/cache/
+
+# Broker/account sensitive dumps
+broker_state_*.json
+account_info_*.json
+trade_dump_*.json
+
+# Editor / OS
+.vscode/settings.json
+.DS_Store
