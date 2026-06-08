@@ -14,13 +14,13 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 3: Market Structure and Liquidity
 
 ## Current Task ID:
-P3-004
+P3-005
 
 ## Current Task Goal:
-FVG / Order Block / Supply-Demand Engine — detect FVGs, order-block-like zones, supply/demand zones, mitigation status.
+Premium/Discount Engine — mark premium/discount areas using selected swing ranges and optional Gann-box-style segmentation.
 
 ## Current Status:
-P3-003 complete. Liquidity sweep engine implemented and tested.
+P3-004 complete. FVG / order block / supply-demand engine implemented and tested.
 
 ---
 
@@ -38,25 +38,25 @@ P3-003 complete. Liquidity sweep engine implemented and tested.
 - P3-001 completed: swing & market-structure engine implemented and tested.
 - P3-002 completed: liquidity map engine implemented and tested.
 - P3-003 completed: liquidity sweep engine implemented and tested.
+- P3-004 completed: FVG / order block / supply-demand engine implemented and tested.
 
-## P3-003 Details
+## P3-004 Details
 
 Files added/changed:
-- src/liquidity/sweep.py — SweepEngine + SweepEvent + SweepStatus.
-- src/liquidity/__init__.py — export sweep API.
-- tests/test_sweep.py — 8 tests (true / false / no sweep + edges).
+- src/structure/zones.py — ZoneEngine + Zone + ZoneKind. (Placed in src/structure/ alongside market_structure.py since FVG/OB/SD are structural zones.)
+- src/structure/__init__.py — export zones API.
+- tests/test_zones.py — 11 tests (valid/invalid zones + mitigation).
 
 Design notes:
-- Candidate sweep = a known liquidity level is taken (wick beyond) AND price closes back across it with a rejection wick >= rejection_ratio of the candle range. "A wick alone is not enough."
-- Confirmation = displacement candle in the rejection direction (range >= displacement_factor * baseline range) AND a structure event (BOS/CHOCH, reusing P3-001) in the rejection direction within confirm_window.
-- Status: TRUE_SWEEP (both confirmations), FALSE_SWEEP (window elapsed without both), PENDING (window not yet elapsed). A level taken but closed-through (breakout) yields no candidate; an untouched level yields nothing.
-- Buy-side level swept -> bearish rejection; sell-side -> bullish rejection.
-- No look-ahead: only levels established strictly before the sweep candle are used; confirmation sets confirmed_index at the later candle; unconfirmed-but-open candidates are PENDING (not FALSE). Each level is consumed by its first sweep.
-- A sweep is NOT a trade by itself (15_LIQUIDITY_ENGINEERING.md) — engine only classifies.
-- Accepts a LiquidityMap or a list of LiquidityLevel.
+- FAIR_VALUE_GAP: 3-candle imbalance. Bullish when candle[i+1].low - candle[i-1].high > min_gap; bearish when candle[i-1].low - candle[i+1].high > min_gap. Created at i+1.
+- ORDER_BLOCK: last opposing candle before a structure-breaking move (reuses P3-001 MarketStructureEngine events). Bullish break -> last bearish candle = bullish OB; created at the break index. Each origin consumed once.
+- SUPPLY_DEMAND: base candle immediately before a displacement candle (range >= displacement_factor * baseline). Up displacement -> demand (BULLISH); down -> supply (BEARISH). No structure break required.
+- Bias: BULLISH = demand/support (below price); BEARISH = supply/resistance (above price). Zone.size = top - bottom.
+- Mitigation: a later candle overlaps the zone range (low <= top and high >= bottom). Evaluated only from candles after created_index -> no look-ahead, prefix-stable. mitigated + mitigation_index recorded.
+- build() returns all kinds sorted by created_index.
 
 Tests run:
-- `.venv/bin/python -m pytest tests/ -q` → 142 passed (8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
+- `.venv/bin/python -m pytest tests/ -q` → 153 passed (11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
 
 Errors: none.
 
@@ -65,21 +65,21 @@ Errors: none.
 # Next Task
 
 ## Task:
-P3-004: FVG / Order Block / Supply-Demand Engine
+P3-005: Premium/Discount Engine
 
 ## Goal:
-Detect fair value gaps (FVGs), order-block-like zones, supply/demand zones, and mitigation status.
+Mark premium/discount areas using selected swing ranges and optional Gann-box-style segmentation.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- likely src/orderflow/ or a new structure/zones module + src/utils/ + tests/. Check the queue. src/orderflow/ exists. Reuse src/structure/ and src/data/ schemas. Do not touch src/execution|risk|strategy.
+- likely src/structure/ (new module) + src/utils/ + tests/. Reuse src/structure/ swings. Do not touch src/execution|risk|strategy.
 
 ## Tests:
-- valid/invalid zones.
+- correct zone mapping.
 
-## Notes for P3-004:
-- FVG (3-candle imbalance): bullish FVG when candle[i-1].high < candle[i+1].low (gap), bearish when candle[i-1].low > candle[i+1].high. Mitigation = later price trades back into the gap.
-- Order block = last opposing candle before displacement that breaks structure; supply/demand = zone left behind by displacement.
-- Mitigation status must be evaluated with no look-ahead (only candles available at decision time).
+## Notes for P3-005:
+- Premium = upper half of a selected swing range (above the 50% equilibrium); discount = lower half. Equilibrium = midpoint of the chosen swing high/low range.
+- Optional Gann-box-style segmentation = subdividing the range into bands (e.g., quartiles or configurable fractions).
+- Range selection should use confirmed swings (no look-ahead).
 
 ---
 
@@ -99,7 +99,7 @@ Detect fair value gaps (FVGs), order-block-like zones, supply/demand zones, and 
 
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, and 10_TASK_QUEUE.md.
 
-Continue P3-004 only.
+Continue P3-005 only.
 
 Do not broaden scope.
 Do not trade real money.

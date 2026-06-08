@@ -10,7 +10,7 @@ Phase 3: Market Structure and Liquidity
 
 ## Current Task
 
-P3-004: FVG / Order Block / Supply-Demand Engine
+P3-005: Premium/Discount Engine
 
 ## Last Completed Task
 
@@ -25,10 +25,11 @@ P2-002: Session/Kill-Zone Engine
 P3-001: Swing and Structure Engine
 P3-002: Liquidity Map Engine
 P3-003: Liquidity Sweep Engine
+P3-004: FVG / Order Block / Supply-Demand Engine
 
 ## Next Task
 
-P3-004: FVG / Order Block / Supply-Demand Engine
+P3-005: Premium/Discount Engine
 
 ## Current Execution Mode
 
@@ -55,11 +56,11 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P3-004:
-Implement the FVG / Order Block / Supply-Demand Engine that detects fair value
-gaps, order-block-like zones, supply/demand zones, and mitigation status. Tests
-cover valid/invalid zones. Build on the Candle schema (src/data/) and reuse the
-structure engine where useful; no look-ahead.
+Start P3-005:
+Implement the Premium/Discount Engine that marks premium/discount areas using
+selected swing ranges (and optional Gann-box-style segmentation). Tests cover
+correct zone mapping. Build on the Candle schema and the swing engine
+(src/structure/); no look-ahead.
 
 ## Safety Notes
 
@@ -68,5 +69,4 @@ structure engine where useful; no look-ahead.
 - Do not print credentials.
 - Do not place MT5 orders (data / analysis only).
 - MT5 adapter (src/broker/) is data-read only; order_send is never called.
-- Zone detection must not use future candles (no look-ahead); mitigation is
-  evaluated only from candles available at decision time.
+- Premium/discount mapping must not use future candles (no look-ahead).

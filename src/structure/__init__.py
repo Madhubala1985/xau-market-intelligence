@@ -9,6 +9,11 @@ from src.structure.market_structure import (
     SwingPoint,
     SwingType,
 )
+from src.structure.zones import (
+    Zone,
+    ZoneEngine,
+    ZoneKind,
+)
 
 __all__ = [
     "MarketStructureEngine",
@@ -18,4 +23,7 @@ __all__ = [
     "SwingPoint",
     "SwingType",
     "Bias",
+    "ZoneEngine",
+    "Zone",
+    "ZoneKind",
 ]

@@ -592,3 +592,56 @@ src/liquidity/sweep.py, src/liquidity/__init__.py, tests/test_sweep.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-08
+
+## Date:
+2026-06-09
+
+## Area:
+Strategy
+
+## Decision:
+The zone engine (P3-004) detects three zone categories from candles: FVG
+(3-candle imbalance, created at the third candle), ORDER_BLOCK (the last opposing
+candle before a structure-breaking move, reusing P3-001 structure events,
+created at the break), and SUPPLY_DEMAND (the base candle before a displacement
+candle, no structure break required). Bias BULLISH = demand/support, BEARISH =
+supply/resistance. Mitigation is set when a later candle overlaps the zone range
+and is evaluated only from candles after the creation index. The engine lives in
+src/structure/zones.py alongside the market-structure engine.
+
+## Reason:
+Encodes 02_ARCHITECTURE.md section 7 and 13_XAUUSD_SMC_PLAYBOOK.md mechanically.
+Reuses the structure engine for order blocks (DRY). Mitigation after creation
+keeps results no-look-ahead and prefix-stable. Co-locating with market structure
+keeps structural concepts together (no new top-level package needed).
+
+## Evidence:
+tests/test_zones.py — 11 tests on valid/invalid zones: bullish/bearish FVG, no-gap
+negative, FVG mitigation, bullish order block, no-OB-without-break, demand/supply
+zones, no-supply-demand-without-displacement, build() combining kinds, and a
+no-look-ahead prefix mitigation check. All pass (153 total).
+
+## Alternatives Considered:
+- A new top-level package for zones: rejected — structural zones belong with
+  src/structure.
+- Modeling supply/demand identically to order blocks: rejected — supply/demand is
+  displacement-origin based (no structure break) and kept distinct.
+
+## Risk:
+min_gap, displacement_factor, swing strength, and order-block lookback affect
+which zones appear; OB uses full candle range rather than body.
+
+## Mitigation:
+All thresholds are configurable; detection is deterministic and documented.
+Body-based OB can be added later without changing the Zone model.
+
+## Files Affected:
+src/structure/zones.py, src/structure/__init__.py, tests/test_zones.py
+
+## Status:
+Accepted
