@@ -180,3 +180,52 @@ Small real capital requires capital survival before scaling.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-08-01
+
+## Date:
+2026-06-08
+
+## Area:
+Data
+
+## Decision:
+Core data schemas (P1-001) are Pydantic v2 models that are frozen (immutable)
+and reject unknown fields (extra="forbid"). Candle/Tick preserve both the
+original broker timestamp and a UTC-normalized timestamp; naive (timezone-
+unaware) datetimes are rejected. Impossible OHLC and inconsistent bid/ask are
+rejected at construction. TradeDecision enforces that an actionable LONG/SHORT
+requires a thesis and an invalidation price. No schema in the data layer carries
+credential fields.
+
+## Reason:
+Enforces 06_DATA_POLICY.md (single internal timezone, preserved timestamps,
+rejection of malformed data) and the CLAUDE.md credentials rule at the type
+boundary, so bad data and credentials cannot enter the pipeline silently.
+
+## Evidence:
+tests/test_schemas.py — 29 tests covering valid acceptance, invalid rejection,
+timestamp normalization, immutability, and absence of credential fields. All
+pass (30 total with the structure test).
+
+## Alternatives Considered:
+- Plain dataclasses: rejected — weaker validation, no built-in constraint checks.
+- Storing a precomputed spread field on SpreadSnapshot: rejected in favor of a
+  derived property to avoid redundant-but-inconsistent data.
+
+## Risk:
+Schema-level guardrails could be too strict for some upstream feeds.
+
+## Mitigation:
+Validation rules mirror documented policy; the P1-002 adapter is responsible for
+mapping/localizing broker data into these schemas.
+
+## Files Affected:
+src/data/schemas.py, src/data/enums.py, src/data/__init__.py, src/utils/time.py,
+tests/test_schemas.py
+
+## Status:
+Accepted
