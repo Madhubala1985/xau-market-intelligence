@@ -30,3 +30,15 @@ trade_dump_*.json
 # Editor / OS
 .vscode/settings.json
 .DS_Store
+
+# Keep runtime folder structure but ignore contents
+!data/
+!data/raw/
+!data/processed/
+!data/cache/
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/cache/.gitkeep
+
+!logs/
+!logs/.gitkeep
