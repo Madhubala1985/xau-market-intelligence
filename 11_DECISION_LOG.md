@@ -229,3 +229,54 @@ tests/test_schemas.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-01
+
+## Date:
+2026-06-09
+
+## Area:
+Broker
+
+## Decision:
+The MT5 demo data adapter (P1-002) is read-only and takes an injected MT5 client
+(lazy-importing MetaTrader5 only when none is provided). It never calls
+order_send / order_check. Settings are loaded from environment variables, the
+password and login are masked in repr/str, missing variables are reported by
+NAME only, and a DEMO-only configuration is enforced before any connection.
+MT5 server epochs are normalized using an optional MT5_SERVER_UTC_OFFSET_MINUTES
+(default 0 == treat epoch as UTC).
+
+## Reason:
+MetaTrader5 is Windows-only, so dependency injection keeps the adapter testable
+on Linux/WSL and lets tests prove no order function is ever invoked. Masking and
+name-only error reporting enforce the CLAUDE.md Credentials Rule; the demo gate
+enforces the Trading Safety Rule.
+
+## Evidence:
+tests/test_mt5_data_adapter.py — 21 tests covering settings validation, demo
+enforcement, connect/fetch, timestamp normalization, symbol rejection, credential
+masking, and order_send-never-called. All pass (51 total).
+
+## Alternatives Considered:
+- Hard import of MetaTrader5 at module load: rejected — breaks import/tests on
+  non-Windows hosts.
+- Adding MetaTrader5 to requirements.txt: rejected for now — not installable on
+  Linux/WSL; to be installed on the Windows MT5 host at runtime.
+
+## Risk:
+The default server-time offset (0) may not match a given broker's server clock.
+
+## Mitigation:
+broker_time preserves the raw server wall-clock and the offset is configurable;
+session/aggregation tasks (P2) can set it explicitly.
+
+## Files Affected:
+src/broker/errors.py, src/broker/mt5_settings.py, src/broker/mt5_data_adapter.py,
+src/broker/__init__.py, tests/test_mt5_data_adapter.py
+
+## Status:
+Accepted

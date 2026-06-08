@@ -14,13 +14,13 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 1: Data Foundation
 
 ## Current Task ID:
-P1-002
+P1-003
 
 ## Current Task Goal:
-MT5 Demo Data Adapter — connect to MT5 demo terminal and fetch XAU/USD candles safely.
+Data Validation Engine — detect missing/duplicate/stale candles, bad OHLC, spread anomalies, timestamp issues; invalid data must produce NO_TRADE.
 
 ## Current Status:
-P1-001 complete. Core data schemas are defined, validated, and tested.
+P1-002 complete. MT5 demo data adapter implemented (data fetch only) and tested.
 
 ---
 
@@ -31,62 +31,58 @@ P1-001 complete. Core data schemas are defined, validated, and tested.
 - P0-002 completed: repository structure created.
 - P0-003 completed: runtime directory structure preserved.
 - P1-001 completed: core data schemas defined and tested.
+- P1-002 completed: MT5 demo data adapter (data fetch only) implemented and tested.
 
-## P1-001 Details
+## P1-002 Details
 
 Files added/changed:
-- src/utils/time.py — UTC normalization helpers (ensure_aware, to_utc); naive datetimes rejected.
-- src/data/enums.py — Timeframe, Direction, DecisionStatus, SessionType, BrokerConnectionStatus, TradeOutcome.
-- src/data/schemas.py — Candle, Tick, SpreadSnapshot, SessionState, BrokerState, TradeDecision, TradeRecord.
-- src/data/__init__.py — package exports.
-- tests/test_schemas.py — 29 tests (validation, invalid rejection, timestamp handling, immutability, no-credential checks).
+- src/broker/errors.py — broker exceptions (messages never contain secret values).
+- src/broker/mt5_settings.py — MT5Settings + load_mt5_settings(); validates required env vars by NAME only, masks credentials in repr/str, enforces DEMO-only config, optional MT5_SERVER_UTC_OFFSET_MINUTES.
+- src/broker/mt5_data_adapter.py — MT5DataAdapter: connect/shutdown, fetch_candles -> Candle, XAUUSD-only symbol validation, MT5 timestamp normalization. NEVER calls order_send.
+- src/broker/__init__.py — package exports.
+- tests/test_mt5_data_adapter.py — 21 tests.
 
-Design notes:
-- All schemas are frozen (immutable) and use extra="forbid" so unknown fields are rejected.
-- Candle/Tick preserve broker_time (original offset) and time_utc (normalized to UTC).
-- Impossible OHLC and inconsistent bid/ask are rejected; naive timestamps are rejected.
-- TradeDecision enforces P6-001 guardrails: actionable LONG/SHORT requires thesis + invalidation_price; stop must be on the correct side of entry.
-- BrokerState carries NO credential fields and defaults to UNKNOWN connection / trade_allowed=False (safe by default).
+Design / safety notes:
+- MetaTrader5 is Windows-only and NOT installed here; the adapter lazily imports it or accepts an injected client, so it is testable on Linux. Tests inject a FakeMT5.
+- order_send / order_check are mocked in tests and asserted never called across the full connect+fetch+shutdown cycle. No trade/order calls exist in src/.
+- Credentials: loaded from env (populated from local .env, never committed). Password and login are masked in MT5Settings repr/str. Missing vars reported by NAME only; invalid login does not echo its value.
+- Demo-only gate: REAL_TRADING_ENABLED=true, TRADING_MODE!=DEMO, MT5_ACCOUNT_TYPE!=DEMO, or non-XAU MT5_SYMBOL are all rejected.
+- Timestamps: MT5 server epoch -> broker_time (server offset preserved) + time_utc (normalized). Default offset 0 treats epoch as UTC. Configurable via MT5_SERVER_UTC_OFFSET_MINUTES (optional, non-secret; .env.example not modified).
 
 Tests run:
-- `.venv/bin/python -m pytest tests/ -q` → 30 passed (29 schema + 1 structure).
+- `.venv/bin/python -m pytest tests/ -q` → 51 passed (21 adapter + 29 schema + 1 structure).
 
 Errors: none.
+
+Note: requirements.txt was NOT modified; MetaTrader5 is not Linux-installable. Install it on the Windows MT5 host before running against a live demo terminal (P1-003+ / runtime).
 
 ---
 
 # Next Task
 
 ## Task:
-P1-002: MT5 Demo Data Adapter
+P1-003: Data Validation Engine
 
 ## Goal:
-Connect to MT5 demo terminal and fetch XAU/USD candles safely into the Candle schema.
+Detect missing candles, duplicate candles, stale data, bad OHLC, spread anomalies, timestamp issues. Invalid data must produce a NO_TRADE status.
 
-## Rules:
-- demo credentials loaded from .env (secure loading, never printed),
-- no real trading,
-- order sending disabled,
-- symbol must be XAU/USD mapped carefully.
-
-## Allowed Files:
-- src/broker/ and/or src/data/ (adapter), src/utils/, tests/
-- (Confirm against 10_TASK_QUEUE.md before starting.)
+## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
+- src/data/, src/utils/, tests/
 
 ## Tests:
-- adapter initializes,
-- fetches latest candles,
-- rejects wrong symbols,
-- does not print credentials.
+- malformed data is rejected,
+- valid data passes,
+- invalid data produces NO_TRADE status.
 
 ---
 
 # Current Known Risks
 
 - Real-money trading is forbidden.
-- Demo order execution must not be implemented in P1-002 (data fetch only).
+- Demo order execution must not be implemented (data fetch / validation only).
 - Exness/MT5 credentials must not be committed and must never be printed.
 - .env must remain local only.
+- MetaTrader5 cannot be imported on this Linux/WSL host; keep using dependency injection for tests.
 - No live self-mutation is allowed.
 
 ---
@@ -95,7 +91,7 @@ Connect to MT5 demo terminal and fetch XAU/USD candles safely into the Candle sc
 
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, and 10_TASK_QUEUE.md.
 
-Continue P1-002 only.
+Continue P1-003 only.
 
 Do not broaden scope.
 Do not trade real money.
