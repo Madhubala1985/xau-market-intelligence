@@ -280,3 +280,53 @@ src/broker/__init__.py, tests/test_mt5_data_adapter.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-02
+
+## Date:
+2026-06-09
+
+## Area:
+Data
+
+## Decision:
+The Data Validation Engine (P1-003) validates a series of already-constructed
+Candle objects and returns a ValidationReport whose status is NO_TRADE whenever
+any BLOCKING issue is present. It detects empty input, mixed/mismatched symbols,
+mixed timeframes, duplicate timestamps, non-monotonic/misaligned intervals,
+missing candles, bad OHLC (defensive), spread-too-high, zero volume, stale data,
+and look-ahead. Zero-volume is a WARNING by default. Stale/look-ahead checks
+require an explicit `now` reference and are skipped otherwise.
+
+## Reason:
+Schema-level construction already rejects impossible OHLC and inconsistent
+bid/ask, so the engine focuses on series-level and freshness properties the
+schema cannot see. Enforces 06_DATA_POLICY.md: bad data must never produce a
+trade.
+
+## Evidence:
+tests/test_data_validation.py — 17 tests covering valid-passes, malformed-
+rejected, and NO_TRADE on each detection. All pass (68 total).
+
+## Alternatives Considered:
+- Validating raw dict rows before schema construction: rejected — duplicates
+  the schema's guarantees; the adapter already emits validated Candles.
+- Treating weekend/session gaps here: rejected — that belongs to the P2 session
+  engine; gap detection is configurable (detect_gaps).
+
+## Risk:
+Strict gap detection could false-positive across legitimate weekend/session
+breaks for XAU/USD.
+
+## Mitigation:
+detect_gaps is configurable and freshness checks require an explicit `now`;
+session-aware handling is deferred to P2.
+
+## Files Affected:
+src/data/validation.py, src/data/__init__.py, tests/test_data_validation.py
+
+## Status:
+Accepted

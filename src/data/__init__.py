@@ -17,6 +17,15 @@ from src.data.schemas import (
     TradeDecision,
     TradeRecord,
 )
+from src.data.validation import (
+    DataValidator,
+    IssueSeverity,
+    ValidationCode,
+    ValidationConfig,
+    ValidationIssue,
+    ValidationReport,
+    ValidationStatus,
+)
 
 __all__ = [
     # enums
@@ -34,4 +43,12 @@ __all__ = [
     "Tick",
     "TradeDecision",
     "TradeRecord",
+    # validation
+    "DataValidator",
+    "ValidationConfig",
+    "ValidationReport",
+    "ValidationIssue",
+    "ValidationStatus",
+    "ValidationCode",
+    "IssueSeverity",
 ]

@@ -6,11 +6,11 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 1: Data Foundation
+Phase 2: Session and Timeframe Context
 
 ## Current Task
 
-P1-003: Data Validation Engine
+P2-001: Timeframe Aggregation
 
 ## Last Completed Task
 
@@ -19,10 +19,11 @@ P0-002: Create Repository Structure
 P0-003: Preserve Runtime Directory Structure
 P1-001: Define Core Data Schemas
 P1-002: MT5 Demo Data Adapter
+P1-003: Data Validation Engine
 
 ## Next Task
 
-P1-003: Data Validation Engine
+P2-001: Timeframe Aggregation
 
 ## Current Execution Mode
 
@@ -49,16 +50,17 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P1-003:
-Implement the Data Validation Engine that detects missing candles, duplicate
-candles, stale data, bad OHLC, spread anomalies, and timestamp issues, and
-produces a NO_TRADE status on invalid data. Build it on top of the Candle/Tick
-schemas (src/data/) and the MT5 adapter output (src/broker/).
+Start P2-001:
+Implement reliable timeframe aggregation (1M -> 5M/15M/1H/4H/Daily) on top of
+the Candle schema (src/data/). Must guarantee aggregation correctness and no
+future leakage (only completed source bars contribute to an aggregated bar).
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading.
 - Do not print credentials.
-- Do not place MT5 orders (data fetch / validation only).
+- Do not place MT5 orders (data / analysis only).
 - MT5 adapter (src/broker/) is data-read only; order_send is never called.
+- DataValidator (src/data/validation.py) emits NO_TRADE on bad data; feed
+  validated candles into aggregation. No look-ahead.
