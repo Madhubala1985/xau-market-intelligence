@@ -6,11 +6,11 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 3: Market Structure and Liquidity
+Phase 4: Regime and Bias
 
 ## Current Task
 
-P3-005: Premium/Discount Engine
+P4-001: Daily and 4H Bias Engine
 
 ## Last Completed Task
 
@@ -26,10 +26,11 @@ P3-001: Swing and Structure Engine
 P3-002: Liquidity Map Engine
 P3-003: Liquidity Sweep Engine
 P3-004: FVG / Order Block / Supply-Demand Engine
+P3-005: Premium/Discount Engine
 
 ## Next Task
 
-P3-005: Premium/Discount Engine
+P4-001: Daily and 4H Bias Engine
 
 ## Current Execution Mode
 
@@ -56,11 +57,10 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P3-005:
-Implement the Premium/Discount Engine that marks premium/discount areas using
-selected swing ranges (and optional Gann-box-style segmentation). Tests cover
-correct zone mapping. Build on the Candle schema and the swing engine
-(src/structure/); no look-ahead.
+Start P4-001:
+Implement the Daily and 4H Bias Engine that classifies higher-timeframe bias as
+bullish, bearish, neutral, or no-trade. Build on the structure engine
+(src/structure/) and aggregation (src/data/aggregation.py); no look-ahead.
 
 ## Safety Notes
 
@@ -69,4 +69,4 @@ correct zone mapping. Build on the Candle schema and the swing engine
 - Do not print credentials.
 - Do not place MT5 orders (data / analysis only).
 - MT5 adapter (src/broker/) is data-read only; order_send is never called.
-- Premium/discount mapping must not use future candles (no look-ahead).
+- Bias classification must not use future candles (no look-ahead).

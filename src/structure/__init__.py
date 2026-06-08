@@ -9,6 +9,13 @@ from src.structure.market_structure import (
     SwingPoint,
     SwingType,
 )
+from src.structure.premium_discount import (
+    DealingRange,
+    DEFAULT_SEGMENTS,
+    PremiumDiscountBand,
+    PremiumDiscountEngine,
+    PriceZone,
+)
 from src.structure.zones import (
     Zone,
     ZoneEngine,
@@ -26,4 +33,9 @@ __all__ = [
     "ZoneEngine",
     "Zone",
     "ZoneKind",
+    "PremiumDiscountEngine",
+    "DealingRange",
+    "PremiumDiscountBand",
+    "PriceZone",
+    "DEFAULT_SEGMENTS",
 ]

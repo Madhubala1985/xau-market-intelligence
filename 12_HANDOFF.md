@@ -11,16 +11,16 @@ Claude must update this file before stopping, before token/session exhaustion, a
 # Current Project State
 
 ## Current Phase:
-Phase 3: Market Structure and Liquidity
+Phase 4: Regime and Bias
 
 ## Current Task ID:
-P3-005
+P4-001
 
 ## Current Task Goal:
-Premium/Discount Engine — mark premium/discount areas using selected swing ranges and optional Gann-box-style segmentation.
+Daily and 4H Bias Engine — classify higher-timeframe bias as bullish, bearish, neutral, or no-trade.
 
 ## Current Status:
-P3-004 complete. FVG / order block / supply-demand engine implemented and tested.
+P3-005 complete. Premium/discount engine implemented and tested. Phase 3 finished.
 
 ---
 
@@ -39,24 +39,23 @@ P3-004 complete. FVG / order block / supply-demand engine implemented and tested
 - P3-002 completed: liquidity map engine implemented and tested.
 - P3-003 completed: liquidity sweep engine implemented and tested.
 - P3-004 completed: FVG / order block / supply-demand engine implemented and tested.
+- P3-005 completed: premium/discount engine implemented and tested.
 
-## P3-004 Details
+## P3-005 Details
 
 Files added/changed:
-- src/structure/zones.py — ZoneEngine + Zone + ZoneKind. (Placed in src/structure/ alongside market_structure.py since FVG/OB/SD are structural zones.)
-- src/structure/__init__.py — export zones API.
-- tests/test_zones.py — 11 tests (valid/invalid zones + mitigation).
+- src/structure/premium_discount.py — PremiumDiscountEngine + DealingRange, PremiumDiscountBand, PriceZone, DEFAULT_SEGMENTS.
+- src/structure/__init__.py — export premium/discount API.
+- tests/test_premium_discount.py — 11 tests (correct zone mapping).
 
 Design notes:
-- FAIR_VALUE_GAP: 3-candle imbalance. Bullish when candle[i+1].low - candle[i-1].high > min_gap; bearish when candle[i-1].low - candle[i+1].high > min_gap. Created at i+1.
-- ORDER_BLOCK: last opposing candle before a structure-breaking move (reuses P3-001 MarketStructureEngine events). Bullish break -> last bearish candle = bullish OB; created at the break index. Each origin consumed once.
-- SUPPLY_DEMAND: base candle immediately before a displacement candle (range >= displacement_factor * baseline). Up displacement -> demand (BULLISH); down -> supply (BEARISH). No structure break required.
-- Bias: BULLISH = demand/support (below price); BEARISH = supply/resistance (above price). Zone.size = top - bottom.
-- Mitigation: a later candle overlaps the zone range (low <= top and high >= bottom). Evaluated only from candles after created_index -> no look-ahead, prefix-stable. mitigated + mitigation_index recorded.
-- build() returns all kinds sorted by created_index.
+- DealingRange(high, low) with equilibrium = 50% midpoint; rejects degenerate (high <= low).
+- classify(range, price): discount below equilibrium, premium above, EQUILIBRIUM within a configurable band around 50% (default 0 -> exact midpoint). Prices outside the range still map (frac<0 discount, frac>1 premium).
+- segments(range): Gann-box-style bands at configurable fractions (default quartiles 0/25/50/75/100%), each labeled and classified premium/discount/equilibrium.
+- range_from_candles(candles): auto-selects the most recent confirmed swing high and swing low (reuses P3-001). Returns None if no swings or degenerate. No look-ahead (confirmed swings only).
 
 Tests run:
-- `.venv/bin/python -m pytest tests/ -q` → 153 passed (11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
+- `.venv/bin/python -m pytest tests/ -q` → 164 passed (11 premium/discount + 11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
 
 Errors: none.
 
@@ -65,21 +64,21 @@ Errors: none.
 # Next Task
 
 ## Task:
-P3-005: Premium/Discount Engine
+P4-001: Daily and 4H Bias Engine
 
 ## Goal:
-Mark premium/discount areas using selected swing ranges and optional Gann-box-style segmentation.
+Classify higher-timeframe bias as bullish, bearish, neutral, or no-trade.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- likely src/structure/ (new module) + src/utils/ + tests/. Reuse src/structure/ swings. Do not touch src/execution|risk|strategy.
+- likely src/regime/ + src/utils/ + tests/ (src/regime/ exists). Reuse src/structure/ (structure final_bias, premium/discount) and src/data/aggregation.py. Do not touch src/execution|risk|strategy.
 
 ## Tests:
-- correct zone mapping.
+- bias cases (bullish / bearish / neutral / no-trade).
 
-## Notes for P3-005:
-- Premium = upper half of a selected swing range (above the 50% equilibrium); discount = lower half. Equilibrium = midpoint of the chosen swing high/low range.
-- Optional Gann-box-style segmentation = subdividing the range into bands (e.g., quartiles or configurable fractions).
-- Range selection should use confirmed swings (no look-ahead).
+## Notes for P4-001:
+- Derive HTF bias from market structure (P3-001 final_bias / BOS-CHOCH sequence) on Daily and 4H, optionally combined with premium/discount location.
+- Output one of: BULLISH, BEARISH, NEUTRAL, NO_TRADE. Consider a no-trade when structure is unclear / conflicting.
+- No look-ahead; reuse the existing Bias enum from src/structure/market_structure.py where possible.
 
 ---
 
@@ -99,7 +98,7 @@ Mark premium/discount areas using selected swing ranges and optional Gann-box-st
 
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, and 10_TASK_QUEUE.md.
 
-Continue P3-005 only.
+Continue P4-001 only.
 
 Do not broaden scope.
 Do not trade real money.

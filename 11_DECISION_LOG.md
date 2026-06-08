@@ -645,3 +645,55 @@ src/structure/zones.py, src/structure/__init__.py, tests/test_zones.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-09
+
+## Date:
+2026-06-09
+
+## Area:
+Strategy
+
+## Decision:
+The premium/discount engine (P3-005) models a DealingRange (swing high/low) with
+equilibrium at the 50% midpoint. classify() returns DISCOUNT below equilibrium,
+PREMIUM above, and EQUILIBRIUM within a configurable band around 50% (default 0).
+segments() produces Gann-box-style bands at configurable fractions (default
+quartiles 0/25/50/75/100%), each classified premium/discount/equilibrium.
+range_from_candles() auto-selects the most recent confirmed swing high and low
+(reusing P3-001). Lives in src/structure/premium_discount.py.
+
+## Reason:
+Encodes premium/discount location (13_XAUUSD_SMC_PLAYBOOK.md) mechanically and
+deterministically. Reuses confirmed swings so range selection is no-look-ahead.
+Decoupling DealingRange from selection lets callers supply explicit ranges.
+
+## Evidence:
+tests/test_premium_discount.py — 11 tests covering range geometry, degenerate
+rejection, premium/discount/equilibrium classification (incl. outside-range and a
+band), default quartile + custom segmentation, invalid segments, and auto range
+selection from candles. All pass (164 total).
+
+## Alternatives Considered:
+- Fibonacci/OTE sub-zones: deferred — not required by P3-005; segmentation
+  fractions are configurable so OTE bands can be added later.
+- A new top-level package: rejected — premium/discount is a structural concept,
+  kept in src/structure.
+
+## Risk:
+Range selection uses only the most recent swing high/low; multi-leg or
+higher-timeframe range selection may be needed later.
+
+## Mitigation:
+DealingRange can be constructed explicitly by callers (e.g., the bias engine);
+segmentation and equilibrium band are configurable.
+
+## Files Affected:
+src/structure/premium_discount.py, src/structure/__init__.py,
+tests/test_premium_discount.py
+
+## Status:
+Accepted
