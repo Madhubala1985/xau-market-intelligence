@@ -380,3 +380,55 @@ src/data/aggregation.py, src/data/__init__.py, tests/test_aggregation.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-04
+
+## Date:
+2026-06-09
+
+## Area:
+Data
+
+## Decision:
+The Session/Kill-Zone engine (P2-002) tiles the UTC day into ordered,
+non-overlapping segments covering [00:00, 24:00). The London-New-York overlap is
+its own segment between London-only and New-York-only, so each UTC timestamp maps
+to exactly one SessionType with exact [start, end) bounds and no gaps. Default
+tiling: 00-08 ASIAN, 08-13 LONDON, 13-16 LONDON_NY_OVERLAP, 16-21 NEW_YORK,
+21-22 ROLLOVER, 22-24 LOW_LIQUIDITY. Market is closed Saturday all day, Friday
+from 21:00 UTC, and Sunday before 22:00 UTC. is_kill_zone and is_tradeable are
+flags only and never trigger trades. Session highs/lows are tracked per
+occurrence and as running (no-look-ahead) values via annotate().
+
+## Reason:
+A tiling model gives unambiguous, gap-free timestamp->session mapping with exact
+bounds, satisfying 06_DATA_POLICY.md (classify on normalized UTC time) and
+14_SESSION_KILLZONE_POLICY.md (distinct overlap and low-liquidity classes; kill
+zone cannot trigger trades).
+
+## Evidence:
+tests/test_sessions.py — 27 tests covering hour mapping, half-open boundaries,
+UTC normalization, weekend/closed handling, flags/bounds, and per-occurrence +
+running level tracking. All pass (117 total).
+
+## Alternatives Considered:
+- Overlapping session windows (London 08-16, NY 13-21) with precedence: rejected
+  in favor of explicit tiling for exact bounds and no ambiguity.
+- DST-aware session shifts: deferred — windows are configurable; fixed UTC
+  defaults now, broker/DST nuances later.
+
+## Risk:
+Fixed UTC windows may drift from real session opens under DST.
+
+## Mitigation:
+All windows and weekend thresholds are configurable via SessionConfig (validated
+to tile the day); defaults documented.
+
+## Files Affected:
+src/data/sessions.py, src/data/__init__.py, tests/test_sessions.py
+
+## Status:
+Accepted

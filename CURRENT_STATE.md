@@ -6,11 +6,11 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 2: Session and Timeframe Context
+Phase 3: Market Structure and Liquidity
 
 ## Current Task
 
-P2-002: Session/Kill-Zone Engine
+P3-001: Swing and Structure Engine
 
 ## Last Completed Task
 
@@ -21,10 +21,11 @@ P1-001: Define Core Data Schemas
 P1-002: MT5 Demo Data Adapter
 P1-003: Data Validation Engine
 P2-001: Timeframe Aggregation
+P2-002: Session/Kill-Zone Engine
 
 ## Next Task
 
-P2-002: Session/Kill-Zone Engine
+P3-001: Swing and Structure Engine
 
 ## Current Execution Mode
 
@@ -51,12 +52,11 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P2-002:
-Implement the Session/Kill-Zone Engine that classifies Asian, London, New York,
-London-New-York overlap, and low-liquidity periods, and tracks session
-highs/lows. Map normalized (UTC) timestamps to sessions (06_DATA_POLICY.md
-timestamp policy; 14_SESSION_KILLZONE_POLICY.md). Build on the Candle schema and
-SessionState (src/data/).
+Start P3-001:
+Implement the Swing and Structure Engine that detects swing highs/lows, BOS
+(break of structure), and CHOCH (change of character) from a Candle series.
+Tests use fixed candle examples. Build on the Candle schema (src/data/) with no
+look-ahead.
 
 ## Safety Notes
 
@@ -65,4 +65,4 @@ SessionState (src/data/).
 - Do not print credentials.
 - Do not place MT5 orders (data / analysis only).
 - MT5 adapter (src/broker/) is data-read only; order_send is never called.
-- Session classification must use normalized UTC time; no look-ahead.
+- Structure detection must not use future candles (no look-ahead).

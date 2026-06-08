@@ -22,6 +22,13 @@ from src.data.aggregation import (
     TimeframeAggregator,
     aggregate,
 )
+from src.data.sessions import (
+    DEFAULT_SEGMENTS,
+    SessionConfig,
+    SessionEngine,
+    SessionLevels,
+    SessionSegment,
+)
 from src.data.validation import (
     DataValidator,
     IssueSeverity,
@@ -60,4 +67,10 @@ __all__ = [
     "TimeframeAggregator",
     "aggregate",
     "AggregationError",
+    # sessions
+    "SessionEngine",
+    "SessionConfig",
+    "SessionSegment",
+    "SessionLevels",
+    "DEFAULT_SEGMENTS",
 ]
