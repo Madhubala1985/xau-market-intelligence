@@ -432,3 +432,55 @@ src/data/sessions.py, src/data/__init__.py, tests/test_sessions.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-05
+
+## Date:
+2026-06-09
+
+## Area:
+Strategy
+
+## Decision:
+The swing & market-structure engine (P3-001) detects swings as fractal pivots
+(strict extreme vs `strength` candles each side, default 2) that are CONFIRMED
+only at index i + strength. BOS/CHOCH are decided from candle closes breaking the
+most recent confirmed swing level: a break continuing the prevailing bias is BOS;
+the first break against it is CHOCH (flips bias); the first break overall is
+reported as BOS. Broken levels are consumed until a new swing of that type
+confirms. Equal highs/lows produce no swing (strict comparison).
+
+## Reason:
+Mechanical, deterministic detection per 13_XAUUSD_SMC_PLAYBOOK.md, with strict
+no-look-ahead: confirmation lag plus close-based breaks make results prefix-
+stable, so live and backtest see identical structure.
+
+## Evidence:
+tests/test_market_structure.py — 8 tests on fixed candle examples covering swing
+detection, confirmation lag, equal-high suppression, a full BOS/BOS/CHOCH
+narrative, ranging (no events), short series, and prefix stability (no look-ahead).
+All pass (125 total).
+
+## Alternatives Considered:
+- Wick-based breaks: rejected for now in favor of close-based breaks (fewer false
+  breaks); can be made configurable later if needed.
+- Treating equal highs/lows as swings: rejected — they are liquidity (equal
+  highs/lows) and belong to the P3-002 liquidity engine.
+
+## Risk:
+Close-based detection may lag wick-driven breaks; fractal strength affects
+sensitivity.
+
+## Mitigation:
+strength is configurable; break basis can be extended later. Detection is
+documented and deterministic.
+
+## Files Affected:
+src/structure/market_structure.py, src/structure/__init__.py,
+tests/test_market_structure.py
+
+## Status:
+Accepted

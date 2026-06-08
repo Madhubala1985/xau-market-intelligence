@@ -10,7 +10,7 @@ Phase 3: Market Structure and Liquidity
 
 ## Current Task
 
-P3-001: Swing and Structure Engine
+P3-002: Liquidity Map Engine
 
 ## Last Completed Task
 
@@ -22,10 +22,11 @@ P1-002: MT5 Demo Data Adapter
 P1-003: Data Validation Engine
 P2-001: Timeframe Aggregation
 P2-002: Session/Kill-Zone Engine
+P3-001: Swing and Structure Engine
 
 ## Next Task
 
-P3-001: Swing and Structure Engine
+P3-002: Liquidity Map Engine
 
 ## Current Execution Mode
 
@@ -52,11 +53,11 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P3-001:
-Implement the Swing and Structure Engine that detects swing highs/lows, BOS
-(break of structure), and CHOCH (change of character) from a Candle series.
-Tests use fixed candle examples. Build on the Candle schema (src/data/) with no
-look-ahead.
+Start P3-002:
+Implement the Liquidity Map Engine that detects buy-side liquidity, sell-side
+liquidity, equal highs/lows, session highs/lows, and previous day/week
+highs/lows. Tests use known examples. Build on the Candle schema and the swing
+engine (src/structure/) and session engine (src/data/sessions.py); no look-ahead.
 
 ## Safety Notes
 
@@ -65,4 +66,4 @@ look-ahead.
 - Do not print credentials.
 - Do not place MT5 orders (data / analysis only).
 - MT5 adapter (src/broker/) is data-read only; order_send is never called.
-- Structure detection must not use future candles (no look-ahead).
+- Liquidity detection must not use future candles (no look-ahead).

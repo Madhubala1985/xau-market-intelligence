@@ -14,13 +14,13 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 3: Market Structure and Liquidity
 
 ## Current Task ID:
-P3-001
+P3-002
 
 ## Current Task Goal:
-Swing and Structure Engine — detect swing highs/lows, BOS, CHOCH from a Candle series.
+Liquidity Map Engine — detect buy-side/sell-side liquidity, equal highs/lows, session highs/lows, previous day/week highs/lows.
 
 ## Current Status:
-P2-002 complete. Session/kill-zone engine implemented and tested. Phase 2 finished.
+P3-001 complete. Swing & market-structure engine implemented and tested.
 
 ---
 
@@ -35,24 +35,23 @@ P2-002 complete. Session/kill-zone engine implemented and tested. Phase 2 finish
 - P1-003 completed: data validation engine implemented and tested.
 - P2-001 completed: timeframe aggregation implemented and tested.
 - P2-002 completed: session/kill-zone engine implemented and tested.
+- P3-001 completed: swing & market-structure engine implemented and tested.
 
-## P2-002 Details
+## P3-001 Details
 
 Files added/changed:
-- src/data/sessions.py — SessionEngine, SessionConfig, SessionSegment, SessionLevels, DEFAULT_SEGMENTS.
-- src/data/__init__.py — export session API.
-- tests/test_sessions.py — 27 tests.
+- src/structure/market_structure.py — MarketStructureEngine + SwingPoint, StructureEvent, StructureResult, and SwingType/StructureEventType/Bias enums.
+- src/structure/__init__.py — package exports.
+- tests/test_market_structure.py — 8 tests (fixed candle examples).
 
 Design notes:
-- The UTC day is tiled into ordered, non-overlapping segments covering [00:00,24:00). London-NY overlap is its own segment between London-only and NY-only, so every timestamp maps to exactly one session with exact [start,end) bounds and no gaps.
-- Default tiling (UTC): 00-08 ASIAN, 08-13 LONDON, 13-16 LONDON_NY_OVERLAP, 16-21 NEW_YORK, 21-22 ROLLOVER, 22-24 LOW_LIQUIDITY. All configurable; SessionConfig validates the tiling.
-- Weekend/closed: Saturday all day; Friday >= 21:00 UTC; Sunday < 22:00 UTC (configurable). classify() returns CLOSED.
-- Flags: is_kill_zone for {LONDON, NEW_YORK, LONDON_NY_OVERLAP}; is_tradeable False for {ROLLOVER, LOW_LIQUIDITY, CLOSED}. Flags only — kill zone never triggers a trade (risk governor decides).
-- Timestamps are normalized to UTC; naive datetimes are rejected.
-- Level tracking: track_session_levels() returns per-occurrence high/low (keyed by session + start instant, so same session on different days are separate). annotate() returns a SessionState per candle with running high/low up to that candle (no look-ahead).
+- Swings are fractal pivots: a swing high/low is a strict extreme vs `strength` candles on each side (default strength=2). It is CONFIRMED only at index i + strength, so it is never used before then.
+- BOS/CHOCH use close-based breaks of the most recent confirmed swing level. A break continuing the prevailing bias is BOS; the first break against it is CHOCH (flips bias); the first break overall establishes the bias and is reported as BOS. A broken level is consumed until a new swing of that type confirms.
+- No look-ahead: results are prefix-stable (a break detected on a prefix is identical on the full series) — covered by tests.
+- Strict comparison means equal highs/lows form no swing (left for the liquidity engine in P3-002 to treat as equal-highs/equal-lows liquidity).
 
 Tests run:
-- `.venv/bin/python -m pytest tests/ -q` → 117 passed (27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure).
+- `.venv/bin/python -m pytest tests/ -q` → 125 passed (8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
 
 Errors: none.
 
@@ -61,16 +60,16 @@ Errors: none.
 # Next Task
 
 ## Task:
-P3-001: Swing and Structure Engine
+P3-002: Liquidity Map Engine
 
 ## Goal:
-Detect swing highs/lows, BOS (break of structure), CHOCH (change of character).
+Detect buy-side liquidity, sell-side liquidity, equal highs/lows, session highs/lows, previous day/week highs/lows.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- likely src/structure/, src/utils/, tests/ (src/structure/ exists). Confirm against the queue; do not touch src/execution|risk|strategy.
+- likely src/liquidity/, src/utils/, tests/ (src/liquidity/ exists). Reuse src/structure/ swings and src/data/sessions.py. Do not touch src/execution|risk|strategy.
 
 ## Tests:
-- fixed candle examples (deterministic swing/BOS/CHOCH cases).
+- known examples.
 
 ---
 
@@ -81,8 +80,7 @@ Detect swing highs/lows, BOS (break of structure), CHOCH (change of character).
 - Exness/MT5 credentials must not be committed and must never be printed.
 - .env must remain local only.
 - MetaTrader5 cannot be imported on this Linux/WSL host; keep using dependency injection for tests.
-- Structure detection must avoid look-ahead (only past/known candles).
-- Session boundaries are fixed UTC windows; DST/broker-session nuances are deferred and configurable.
+- Analysis engines must avoid look-ahead (only past/known candles); preserve prefix stability.
 - No live self-mutation is allowed.
 
 ---
@@ -91,7 +89,7 @@ Detect swing highs/lows, BOS (break of structure), CHOCH (change of character).
 
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, and 10_TASK_QUEUE.md.
 
-Continue P3-001 only.
+Continue P3-002 only.
 
 Do not broaden scope.
 Do not trade real money.
