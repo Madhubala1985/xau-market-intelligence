@@ -1178,3 +1178,57 @@ tests/test_execution_gateway.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-19
+
+## Date:
+2026-06-09
+
+## Area:
+Risk
+
+## Decision:
+Stop placement intelligence (P8-001) places the stop beyond the thesis
+invalidation by clearance = max(atr * atr_multiple, min_buffer), plus spread,
+and pushes it beyond any liquidity pool within clearance. evaluate() rejects a
+proposed stop as REJECTED_WRONG_SIDE, REJECTED_NOT_BEYOND_INVALIDATION,
+REJECTED_OBVIOUS (on/too near the invalidation or a liquidity pool), or
+REJECTED_TOO_TIGHT (distance from entry below the broker/min buffer); otherwise
+ACCEPTED. Stop placement only (trailing is P8-002); no order placement.
+
+## Reason:
+Implements 17_STOP_AND_TRAILING_POLICY.md "be harder to kill": stops must sit
+beyond invalidation with a volatility/liquidity buffer, never on obvious retail
+pools and never fear-tight. A computed stop always passes its own evaluation.
+
+## Evidence:
+tests/test_stop_placement.py — 14 tests: obvious-on-invalidation and
+obvious-on-pool rejected (long & short), logical accepted, wrong-side,
+not-beyond-invalidation, too-tight, placement beyond invalidation (long/short),
+push-beyond-pool, spread-widens-buffer, decision convenience, and bad-invalidation
+guard. All pass (280 total).
+
+## Alternatives Considered:
+- Fixed pip buffer only: rejected — volatility (ATR) scaling adapts to gold's
+  conditions; min_buffer is the floor.
+- Auto-correcting an obvious stop silently: rejected here — placement computes a
+  logical stop, evaluation reports the verdict; callers decide (reduce size/skip
+  per policy).
+
+## Risk:
+ATR and liquidity levels are inputs; broker minimum stop distance is broker
+specific.
+
+## Mitigation:
+atr_multiple, min_buffer, broker_min_stop are configurable; the live adapter
+supplies broker minimums; the Risk Governor independently requires a stop.
+
+## Files Affected:
+src/trade_management/stop_placement.py, src/trade_management/__init__.py,
+tests/test_stop_placement.py
+
+## Status:
+Accepted

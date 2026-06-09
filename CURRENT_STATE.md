@@ -10,7 +10,7 @@ Phase 8: Trade Management
 
 ## Current Task
 
-P8-001: Stop Placement Intelligence
+P8-002: Trailing Stop Engine
 
 ## Last Completed Task
 
@@ -36,10 +36,11 @@ P6-002: Confidence and Uncertainty Engine
 P7-001: Risk Governor
 P7-002: Position Sizing
 P7-003: MT5 Demo Execution Gateway
+P8-001: Stop Placement Intelligence
 
 ## Next Task
 
-P8-001: Stop Placement Intelligence
+P8-002: Trailing Stop Engine
 
 ## Current Execution Mode
 
@@ -66,18 +67,19 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P8-001:
-Implement Stop Placement Intelligence that places the stop beyond the thesis
-invalidation using a volatility and liquidity buffer (not at obvious retail stop
-pools). Tests: obvious stop rejected, logical stop accepted. Build in
-src/trade_management/; reuse TradeDecision and structure/liquidity outputs. No
-order placement; no look-ahead.
+Start P8-002:
+Implement the Trailing Stop Engine with structure-based, volatility-based, and
+liquidity-target trailing, plus partial/runner logic. Tests: no premature
+trailing, no widening stop, valid partial/runners. Build in src/trade_management/;
+reuse StopPlacementEngine and structure/liquidity outputs. No order placement; no
+look-ahead.
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading; ALLOW_REAL_ORDERS must stay false.
 - Do not print credentials.
-- Do not place MT5 orders (stop logic only; the gateway/risk governor remain the
-  only execution path, both already gated).
-- Never widen a stop to avoid a loss; never place stops at obvious retail pools.
+- Do not place MT5 orders (trailing logic only; gateway/risk governor remain the
+  only gated execution path).
+- A trailing stop may only move in the trade's favor; NEVER widen a stop. No
+  premature trailing before confirmation. No look-ahead.

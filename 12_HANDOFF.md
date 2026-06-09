@@ -14,13 +14,13 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 8: Trade Management
 
 ## Current Task ID:
-P8-001
+P8-002
 
 ## Current Task Goal:
-Stop Placement Intelligence — place stop beyond thesis invalidation using volatility and liquidity buffer.
+Trailing Stop Engine — structure-based, volatility-based, and liquidity-target trailing; partial/runner logic.
 
 ## Current Status:
-P7-003 complete. MT5 demo execution gateway implemented and tested. Phase 7 finished.
+P8-001 complete. Stop placement intelligence implemented and tested.
 
 ---
 
@@ -46,6 +46,26 @@ P7-003 complete. MT5 demo execution gateway implemented and tested. Phase 7 fini
 - P7-001 completed: risk governor.
 - P7-002 completed: position sizing.
 - P7-003 completed: MT5 demo execution gateway.
+- P8-001 completed: stop placement intelligence.
+
+## P8-001 Details
+
+Files added/changed:
+- src/trade_management/stop_placement.py — StopPlacementEngine + StopPlacement + StopEvaluation + StopVerdict.
+- src/trade_management/__init__.py — export API.
+- tests/test_stop_placement.py — 14 tests.
+
+Design notes:
+- Scope is stop PLACEMENT only (trailing is P8-002). No order placement; no look-ahead.
+- clearance(atr) = max(atr*atr_multiple(0.5), min_buffer(1.0)). place(): LONG stop = min(invalidation - (clearance+spread), entry - broker_min_stop); pushed beyond any liquidity pool within clearance; SHORT mirrored.
+- evaluate(): REJECTED_WRONG_SIDE, REJECTED_NOT_BEYOND_INVALIDATION, REJECTED_OBVIOUS (on/too near invalidation OR on a liquidity pool, gap < clearance), REJECTED_TOO_TIGHT (distance from entry < max(broker_min_stop, min_buffer)), else ACCEPTED.
+- place_for_decision / evaluate_decision read entry/invalidation/stop from a TradeDecision.
+- A computed stop always passes its own evaluate() (tested).
+
+Tests run:
+- `.venv/bin/python -m pytest tests/ -q` → 280 passed (14 stop-placement + 266 prior).
+
+Errors: none.
 
 ## P7-003 Details
 
@@ -115,22 +135,24 @@ Errors: none.
 # Next Task
 
 ## Task:
-P8-001: Stop Placement Intelligence
+P8-002: Trailing Stop Engine
 
 ## Goal:
-Place the stop beyond the thesis invalidation using a volatility and liquidity buffer (not at obvious retail stop pools).
+Implement structure-based, volatility-based, and liquidity-target trailing; partial profit + runner logic.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- src/trade_management/ + src/utils/ + tests/. Reuse TradeDecision (src/data/), structure swings and liquidity levels (src/structure/, src/liquidity/). Do not touch src/execution|risk internals.
+- src/trade_management/ + src/utils/ + tests/. Reuse StopPlacementEngine, structure swings (src/structure/), liquidity levels (src/liquidity/), TradeDecision. Do not touch src/execution|risk internals.
 
-## Tests (10_TASK_QUEUE.md P8-001):
-- obvious stop rejected,
-- logical stop accepted.
+## Tests (10_TASK_QUEUE.md P8-002):
+- no premature trailing,
+- no widening stop,
+- valid partial/runners.
 
-## Notes for P8-001 (17_STOP_AND_TRAILING_POLICY.md; read it first):
-- The stop must sit BEYOND the thesis invalidation level with a volatility (e.g., ATR-based) and liquidity buffer, so it is not parked exactly on an obvious swing/round level where retail stops cluster.
-- An "obvious" stop (right at the swing/level, no buffer) must be rejected; a logical stop (beyond invalidation + buffer, on the correct side of entry) accepted.
-- Never widen a stop to avoid a loss. No order placement. No look-ahead.
+## Notes for P8-002 (17_STOP_AND_TRAILING_POLICY.md):
+- Trailing methods: structure-based (trail to last confirmed swing), volatility-based (ATR trail), liquidity-target (toward next pool), break-even only AFTER confirmation, partial profit + runner.
+- A trailing stop may only move in the trade's favor (LONG: up, SHORT: down); it must NEVER widen (move against). Return the unchanged stop if the proposed trail would loosen it.
+- No premature trailing before the confirmation condition (e.g., reaching 1R / break-even trigger). Partial logic: take partial at 1R / next liquidity; runner held only while structure valid.
+- No order placement; no look-ahead (only candles/levels available now).
 
 ---
 
