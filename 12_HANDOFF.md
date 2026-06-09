@@ -14,52 +14,53 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 6: Trade Hypothesis and Scoring
 
 ## Current Task ID:
-P6-001
+P6-002
 
 ## Current Task Goal:
-Trade Hypothesis Engine — generate LONG/SHORT/WAIT/NO_TRADE hypotheses with thesis, invalidation, target logic.
+Confidence and Uncertainty Engine — score structure, liquidity, regime, volatility, session, order-flow proxy, futures confirmation, execution quality.
 
 ## Current Status:
-P5-002 complete. Gold futures confirmation layer implemented and tested. Phase 5 finished.
+P6-001 complete. Trade hypothesis engine implemented and tested.
 
 ---
 
 # Completed Work
 
-- P0-000 completed: repository environment initialized.
-- P0-001 completed: master control pack created.
-- P0-002 completed: repository structure created.
-- P0-003 completed: runtime directory structure preserved.
-- P1-001 completed: core data schemas defined and tested.
-- P1-002 completed: MT5 demo data adapter (data fetch only) implemented and tested.
-- P1-003 completed: data validation engine implemented and tested.
-- P2-001 completed: timeframe aggregation implemented and tested.
-- P2-002 completed: session/kill-zone engine implemented and tested.
-- P3-001 completed: swing & market-structure engine implemented and tested.
-- P3-002 completed: liquidity map engine implemented and tested.
-- P3-003 completed: liquidity sweep engine implemented and tested.
-- P3-004 completed: FVG / order block / supply-demand engine implemented and tested.
-- P3-005 completed: premium/discount engine implemented and tested.
-- P4-001 completed: daily and 4H bias engine implemented and tested.
-- P4-002 completed: regime engine implemented and tested.
-- P5-001 completed: order-flow proxy engine implemented and tested.
-- P5-002 completed: gold futures confirmation layer implemented and tested.
+- P0-000..P0-003 completed: environment, control pack, repo structure, runtime dirs.
+- P1-001 completed: core data schemas.
+- P1-002 completed: MT5 demo data adapter (data fetch only).
+- P1-003 completed: data validation engine.
+- P2-001 completed: timeframe aggregation.
+- P2-002 completed: session/kill-zone engine.
+- P3-001 completed: swing & market-structure engine.
+- P3-002 completed: liquidity map engine.
+- P3-003 completed: liquidity sweep engine.
+- P3-004 completed: FVG / order block / supply-demand engine.
+- P3-005 completed: premium/discount engine.
+- P4-001 completed: daily and 4H bias engine.
+- P4-002 completed: regime engine.
+- P5-001 completed: order-flow proxy engine.
+- P5-002 completed: gold futures confirmation layer.
+- P6-001 completed: trade hypothesis engine.
 
-## P5-002 Details
+## P6-001 Details
 
 Files added/changed:
-- src/orderflow/futures_confirmation.py — FuturesConfirmationEngine + FuturesConfirmation + FuturesAlignment enum.
-- src/orderflow/__init__.py — export futures API.
-- tests/test_futures_confirmation.py — 11 tests.
+- src/strategy/hypothesis.py — TradeHypothesisEngine + HypothesisInput.
+- src/strategy/__init__.py — package exports.
+- tests/test_hypothesis.py — 11 tests.
 
 Design notes:
-- Derives futures directional bias from futures candles via the P3-001 structure engine (final_bias), then compares to the spot thesis bias.
-- ALIGNED (same direction) -> confidence up; CONFLICT (opposite) -> confidence down + uncertainty up; NEUTRAL (either side neutral) -> no change; UNAVAILABLE (missing/insufficient futures, < min_candles=6) -> zero adjustment + note (graceful, no crash).
-- HARD RULE (INIT-006 / 19_GOLD_FUTURES_CONFIRMATION_POLICY.md): futures is context/confidence only; never a trade trigger. FuturesConfirmation.is_trade_signal is always False; no direction/signal/order field; engine has no decide/trade/buy/sell method. Tests enforce this.
-- Adjustments are bounded by max_adjustment (default 0.2). No look-ahead (structure prefix-stable).
+- Composes analysis context (HypothesisInput: symbol, time, current_price, htf_bias, regime, thesis_reason, invalidation_price, entry_price, target_price, setup_type, confidence, uncertainty) into a TradeDecision (status PROPOSED).
+- Gates (return WAIT/NO_TRADE, never an invalid actionable): htf_bias NO_TRADE -> NO_TRADE; regime in {NO_TRADE, NEWS_RISK, CHOPPY} -> NO_TRADE; htf_bias NEUTRAL -> WAIT.
+- Direction from bias: BULLISH->LONG, BEARISH->SHORT.
+- HARD RULES: no thesis (empty thesis_reason) -> NO_TRADE; no invalidation_price -> NO_TRADE; invalidation on wrong side of entry -> NO_TRADE. These are also enforced structurally by the TradeDecision schema.
+- Target logic: explicit target_price if it sits in the trade direction, else a default risk-reward target (default_rr=2.0) from entry/invalidation. Stop placed at the invalidation level.
+- Hypotheses are proposals only (PROPOSED); risk governor (P7) decides permission. No look-ahead (composition only).
+- NOTE: src/strategy/ was "forbidden" only in earlier data/analysis tasks; it is the working area for P6-001+.
 
 Tests run:
-- `.venv/bin/python -m pytest tests/ -q` → 202 passed (11 futures + 10 orderflow + 7 regime + 10 htf-bias + 11 premium/discount + 11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
+- `.venv/bin/python -m pytest tests/ -q` → 213 passed (11 hypothesis + 11 futures + 10 orderflow + 7 regime + 10 htf-bias + 11 premium/discount + 11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
 
 Errors: none.
 
@@ -68,22 +69,22 @@ Errors: none.
 # Next Task
 
 ## Task:
-P6-001: Trade Hypothesis Engine
+P6-002: Confidence and Uncertainty Engine
 
 ## Goal:
-Generate LONG, SHORT, WAIT, NO_TRADE hypotheses with thesis, invalidation, and target logic.
+Score structure, liquidity, regime, volatility, session, order-flow proxy, futures confirmation, execution quality.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- likely src/strategy/ + src/utils/ + tests/ (src/strategy/ exists and was previously FORBIDDEN under earlier tasks — it becomes the working area for P6-001). Reuse src/structure/, src/liquidity/, src/regime/, src/orderflow/, and the TradeDecision schema in src/data/. Do not touch src/execution|risk.
+- likely src/strategy/ + src/utils/ + tests/. Reuse src/orderflow/ (proxy + futures confidence/uncertainty adjustments), src/regime/, src/structure/, and TradeDecision. Do not touch src/execution|risk.
 
 ## Tests:
-- no thesis = no trade,
-- no invalidation = no trade.
+- high uncertainty blocks/reduces trade,
+- confidence alone cannot bypass risk.
 
-## Notes for P6-001:
-- Build hypotheses from the analysis stack (HTF bias, regime, structure, liquidity sweep, zones, premium/discount). Use the existing TradeDecision schema (src/data/schemas.py) which already enforces: actionable LONG/SHORT requires a non-empty thesis and an invalidation_price, and stop must be on the correct side of entry.
-- Output WAIT/NO_TRADE when conditions are not met (regime NO_TRADE/CHOPPY, bias NO_TRADE/NEUTRAL, missing thesis/invalidation).
-- Hypotheses are proposals only; the risk governor (P7) decides permission. No look-ahead.
+## Notes for P6-002:
+- Aggregate component scores (structure, liquidity, regime, volatility, session, order-flow proxy, futures confirmation, execution quality) into an overall confidence in [0,1] and uncertainty in [0,1].
+- Reuse the confidence_adjustment / uncertainty_adjustment outputs from the order-flow proxy (P5-001) and futures (P5-002).
+- Enforce: when uncertainty exceeds a threshold, the trade is blocked or reduced (size factor); confidence alone must NOT bypass risk — output a recommendation that still defers to the risk governor (P7). No look-ahead.
 
 ---
 
@@ -95,7 +96,7 @@ Generate LONG, SHORT, WAIT, NO_TRADE hypotheses with thesis, invalidation, and t
 - .env must remain local only.
 - MetaTrader5 cannot be imported on this Linux/WSL host; keep using dependency injection for tests.
 - Analysis engines must avoid look-ahead (only past/known candles); preserve prefix stability.
-- Order-flow proxy and futures are confirmation/confidence only; they cannot trigger trades alone.
+- Proxy/futures are confidence-only; hypotheses are proposals; the risk governor (P7) has final authority.
 - No live self-mutation is allowed.
 
 ---
@@ -104,7 +105,7 @@ Generate LONG, SHORT, WAIT, NO_TRADE hypotheses with thesis, invalidation, and t
 
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, and 10_TASK_QUEUE.md.
 
-Continue P6-001 only.
+Continue P6-002 only.
 
 Do not broaden scope.
 Do not trade real money.

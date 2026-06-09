@@ -905,3 +905,58 @@ tests/test_futures_confirmation.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-14
+
+## Date:
+2026-06-09
+
+## Area:
+Strategy
+
+## Decision:
+The trade hypothesis engine (P6-001) composes analysis context (HypothesisInput)
+into a TradeDecision (status PROPOSED). Gates return WAIT/NO_TRADE and never an
+invalid actionable decision: htf_bias NO_TRADE -> NO_TRADE; regime in {NO_TRADE,
+NEWS_RISK, CHOPPY} -> NO_TRADE; htf_bias NEUTRAL -> WAIT. Direction follows bias
+(BULLISH->LONG, BEARISH->SHORT). Hard rules: empty thesis -> NO_TRADE; missing
+invalidation -> NO_TRADE; invalidation on the wrong side of entry -> NO_TRADE.
+Target logic uses an explicit target if it sits in the trade direction, else a
+default risk-reward target (default_rr=2.0); the stop is the invalidation level.
+
+## Reason:
+Implements 13_XAUUSD_SMC_PLAYBOOK.md "Valid Trade Hypothesis" and the P6-001 rule
+"no thesis = no trade; no invalidation = no trade". Reuses the TradeDecision
+schema, which enforces the same invariants structurally, so an invalid actionable
+hypothesis cannot be constructed. Hypotheses are proposals only; the risk governor
+(P7) decides permission. No look-ahead (composition only).
+
+## Evidence:
+tests/test_hypothesis.py — 11 tests: valid long/short, default-RR target,
+no-thesis -> NO_TRADE, blank-thesis -> NO_TRADE, no-invalidation -> NO_TRADE,
+wrong-side invalidation -> NO_TRADE, neutral bias -> WAIT, NO_TRADE bias,
+blocking regimes, and proposed-only status. All pass (213 total).
+
+## Alternatives Considered:
+- Wiring the engine directly to every analysis engine: deferred — an orchestrator
+  builds HypothesisInput from the engines; the hypothesis engine stays a pure
+  composer, which is simpler and fully testable.
+- Deriving invalidation from sweep/zone internally: deferred — provided via input
+  for now; richer derivation can be added without changing the decision contract.
+
+## Risk:
+Quality of hypotheses depends on the upstream context passed in; default RR is a
+placeholder until position sizing (P7-002).
+
+## Mitigation:
+default_rr is configurable; the TradeDecision schema guards the invariants; risk
+governor has final authority.
+
+## Files Affected:
+src/strategy/hypothesis.py, src/strategy/__init__.py, tests/test_hypothesis.py
+
+## Status:
+Accepted

@@ -10,7 +10,7 @@ Phase 6: Trade Hypothesis and Scoring
 
 ## Current Task
 
-P6-001: Trade Hypothesis Engine
+P6-002: Confidence and Uncertainty Engine
 
 ## Last Completed Task
 
@@ -31,10 +31,11 @@ P4-001: Daily and 4H Bias Engine
 P4-002: Regime Engine
 P5-001: Order-Flow Proxy Engine
 P5-002: Gold Futures Confirmation Layer
+P6-001: Trade Hypothesis Engine
 
 ## Next Task
 
-P6-001: Trade Hypothesis Engine
+P6-002: Confidence and Uncertainty Engine
 
 ## Current Execution Mode
 
@@ -61,11 +62,12 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P6-001:
-Implement the Trade Hypothesis Engine that generates LONG, SHORT, WAIT, NO_TRADE
-hypotheses with thesis, invalidation, and target logic. Enforce: no thesis = no
-trade; no invalidation = no trade. Build on the analysis engines (structure,
-liquidity, regime, bias) and the TradeDecision schema (src/data/); no look-ahead.
+Start P6-002:
+Implement the Confidence and Uncertainty Engine that scores structure, liquidity,
+regime, volatility, session, order-flow proxy, futures confirmation, and execution
+quality. Enforce: high uncertainty blocks/reduces a trade; confidence alone cannot
+bypass risk. Build on the analysis engines and TradeDecision (src/data/); reuse
+the proxy/futures confidence-adjustment outputs; no look-ahead.
 
 ## Safety Notes
 
@@ -74,5 +76,5 @@ liquidity, regime, bias) and the TradeDecision schema (src/data/); no look-ahead
 - Do not print credentials.
 - Do not place MT5 orders (data / analysis only).
 - MT5 adapter (src/broker/) is data-read only; order_send is never called.
-- Hypotheses are proposals only; the risk governor (later) has final authority.
-  No thesis = no trade; no invalidation = no trade. No look-ahead.
+- Confidence alone cannot bypass risk; high uncertainty must block/reduce. The
+  risk governor (P7) still has final authority. No look-ahead.
