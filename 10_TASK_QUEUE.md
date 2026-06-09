@@ -398,3 +398,154 @@ Rules:
 
 Stop condition:
 - readiness report only.
+
+---
+
+# Phase 12: Live Demo Readiness
+
+## Task RISK-001: Leverage-Aware Sizing and Protected Pyramiding
+
+Goal:
+Update risk/position-sizing logic so the system understands XAU/USD lot size, contract size, min lot, lot step, margin, leverage, stop distance, implied USD loss, total open risk, confidence-tiered demo sizing, and protected add-on trades.
+
+Rules:
+- Do not enable real trading.
+- Do not place orders.
+- Do not print credentials.
+- Do not touch .env.
+- Demo may allow higher loss caps than real mode.
+- Real-money initial risk remains conservative.
+- 0.05 and 0.10 lot may be allowed in demo only if calculated stop-loss risk is inside the demo tier cap.
+- Fixed lot size must never bypass calculated risk.
+- Leverage/margin availability must never bypass max-loss rules.
+- Adding another same-direction trade is allowed only when the existing trade is protected at break-even or locked profit.
+- Adding to a losing trade is forbidden.
+
+Required tests:
+- 0.01, 0.05, and 0.10 lot XAU/USD scenarios,
+- leverage/margin cannot bypass max-loss rules,
+- pyramiding allowed only into protected winning trades,
+- averaging down / adding into loss is blocked,
+- total open XAU/USD exposure enforced.
+
+Stop condition:
+- all tests pass,
+- docs updated,
+- commit RISK-001.
+
+---
+
+## Task LIVE-VERIFY-001: Generate Implementation Evidence Pack
+
+Goal:
+Create a compact report showing implemented modules, tested modules, stubbed/mocked modules, live-proven modules, and not-yet-live-proven modules.
+
+Rules:
+- No broad rewrite.
+- No strategy changes.
+- No order placement.
+
+Stop condition:
+- evidence report created under reports/runtime/,
+- commit LIVE-VERIFY-001.
+
+---
+
+## Task WINMT5-001: Validate MT5 Demo Connectivity
+
+Goal:
+Validate MT5 demo terminal connectivity and XAU/USD read-only data.
+
+Rules:
+- No orders.
+- No order_send.
+- No credentials printed.
+- If WSL cannot import MetaTrader5, create a Windows-side runner or safe bridge plan.
+
+Required proof:
+- MT5 init/login,
+- demo account verified,
+- XAU/USD symbol detected,
+- symbol info read,
+- candles fetched,
+- spread read,
+- account info read safely.
+
+Stop condition:
+- validation report created,
+- commit WINMT5-001.
+
+---
+
+## Task LIVE-001: Connect Live/Replay Data to DecisionPipeline and ShadowRunner
+
+Goal:
+Feed real or replayed XAU/USD data into DecisionPipeline and ShadowRunner.
+
+Rules:
+- No orders.
+- Pipeline may generate decisions.
+- ShadowRunner may log would-trade decisions.
+- ExecutionGateway must not send orders.
+
+Stop condition:
+- end-to-end shadow run works on replay/live data,
+- tests pass,
+- commit LIVE-001.
+
+---
+
+## Task LIVE-002: Run Live Shadow Session
+
+Goal:
+Run supervised XAU/USD live shadow mode with real market data.
+
+Rules:
+- No orders.
+- Log every decision and no-trade.
+- Produce session report.
+
+Stop condition:
+- shadow session report created,
+- commit LIVE-002.
+
+---
+
+## Task DEMO-001: Demo Execution Preflight
+
+Goal:
+Verify all demo execution gates before order_send is allowed.
+
+Rules:
+- No real orders.
+- Demo only.
+- Check all env flags.
+- Verify account is demo.
+- Verify stop-loss enforcement.
+- Verify risk governor.
+- Verify journal/state persistence.
+
+Stop condition:
+- preflight report created,
+- commit DEMO-001.
+
+---
+
+## Task DEMO-002: Supervised MT5 Demo Trading Run
+
+Goal:
+Run supervised MT5 demo trading with XAU/USD only.
+
+Rules:
+- Demo only.
+- Real trading forbidden.
+- Risk governor final authority.
+- Stop-loss mandatory.
+- Protected pyramiding only.
+- Manual kill switch required.
+- Session report required.
+
+Stop condition:
+- supervised demo session completed,
+- journal and reflection report created,
+- commit DEMO-002.
