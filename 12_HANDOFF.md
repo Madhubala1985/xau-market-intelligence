@@ -12,19 +12,29 @@ This file allows Claude sessions to resume without losing direction.
 Phase 12: Live Demo Readiness
 
 ## Current Task ID:
-DEMO-001
+DEMO-002 (BLOCKED — see blockers)
 
 ## Current Task Goal:
-Implement the demo execution preflight: verify every demo order gate
-(env flags, demo account, XAUUSDm symbol, risk governor, mandatory stop-loss,
-journal/state health, kill switch) WITHOUT placing any order.
+Supervised MT5 demo trading. NOT to be implemented/run until the recorded
+blockers clear and the user manually starts supervised demo mode.
 
 ## Current Status:
-LIVE-001 and LIVE-002 tooling are complete and committed. WINMT5-LIVE-001 live
-proof passed on Windows PowerShell (VALIDATED, XAUUSDm, demo account, candles +
-spread read, no order_send). The supervised LIVE-002 session itself must be run
-manually by the user on the Windows MT5 host:
-`python scripts/live_shadow_run.py --duration-minutes 5 --poll-seconds 60 --report-name live_shadow_session`
+LIVE-001, LIVE-002 (tooling) and DEMO-001 (preflight tooling) are complete and
+committed. WINMT5-LIVE-001 live proof passed on Windows PowerShell (VALIDATED,
+XAUUSDm, demo account, candles + spread read, no order_send).
+
+## DEMO-002 Blockers (recorded 2026-06-10):
+1. LIVE-002 supervised shadow session evidence not yet produced — user must run
+   on the Windows MT5 host:
+   `python scripts/live_shadow_run.py --duration-minutes 5 --poll-seconds 60 --report-name live_shadow_session`
+2. DEMO-001 preflight has not yet PASSED on the Windows MT5 host — user must run:
+   `python scripts/demo_preflight.py`
+   (On WSL the account/symbol gates are SKIPPED, which blocks readiness.)
+3. DEMO-002 requires the user to manually start supervised demo mode; Claude
+   must not start it.
+4. The demo order path itself (gateway wiring of live sizing + protected
+   pyramiding into a supervised session loop) is intentionally NOT implemented
+   until blockers 1-2 clear.
 
 ---
 
@@ -47,13 +57,12 @@ manually by the user on the Windows MT5 host:
 - LIVE-002 committed: cycle results and session report now carry confidence,
   uncertainty, and the Risk Governor action/reasons; --report-name lets the
   supervised session write reports/runtime/live_shadow_session.md/.json.
-
----
-
-# Current Blocker
-
-None for LIVE-002 tooling; the actual short shadow session must be run manually
-by the user on the Windows MT5 host (Claude must not run live sessions itself).
+- DEMO-001 committed: src/execution/preflight.py (12 gates, no orders),
+  src/execution/kill_switch.py (file-based manual halt at control/KILL_SWITCH,
+  honored by ExecutionGateway as a blocking check), scripts/demo_preflight.py
+  (honest SKIPPED gates off-Windows -> NOT ready, exit 2). .gitignore defect
+  fixed (!logs/ was un-ignoring runtime journals; now logs/* + !logs/.gitkeep;
+  control/ ignored).
 
 ---
 
@@ -61,9 +70,13 @@ by the user on the Windows MT5 host (Claude must not run live sessions itself).
 
 1. User runs on Windows PowerShell (short smoke first):
    `python scripts/live_shadow_run.py --cycles 5`
-2. Review reports/runtime/live_shadow_run.md (outcome COMPLETED, orders_sent 0).
-3. Record LIVE-002 session evidence and commit as LIVE-002.
-4. Then DEMO-001: demo execution preflight (gates only, NO order placement).
+2. User runs the supervised LIVE-002 session:
+   `python scripts/live_shadow_run.py --duration-minutes 5 --poll-seconds 60 --report-name live_shadow_session`
+   Review reports/runtime/live_shadow_session.md (COMPLETED, orders_sent 0).
+3. User runs DEMO-001 preflight on the Windows MT5 host:
+   `python scripts/demo_preflight.py`
+   All 12 gates must be PASS (exit 0).
+4. Only then consider DEMO-002, started manually by the user.
 
 ---
 

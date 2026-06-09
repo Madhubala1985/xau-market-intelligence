@@ -2064,3 +2064,71 @@ tests/test_live_shadow.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-10-01
+
+## Date:
+2026-06-10
+
+## Area:
+Execution / Risk
+
+## Decision:
+DEMO-001 preflight verifies 12 gates without placing any order: the 5 demo env
+flags, demo/non-real account, exact-case broker symbol on the terminal, Risk
+Governor blocking a no-stop-loss probe, ExecutionGateway stop-loss enforcement,
+journal writability, restart-safe state persistence, and a manual kill switch.
+The kill switch is a file at control/KILL_SWITCH (engage = create, release =
+delete) and is wired into ExecutionGateway as a BLOCKING check evaluated before
+pre-checks and the order path. SKIPPED gates (no MT5 client on the host) block
+readiness — preflight can only pass on the Windows MT5 host. Additionally a
+.gitignore defect was fixed: the `!logs/` negation re-included the entire logs
+directory, so runtime journals were NOT actually git-ignored; now `logs/*` +
+`!logs/.gitkeep` (same fix for data/ dirs), and `control/` is ignored.
+
+## Reason:
+DEMO-002 requires a manual kill switch; none existed. A file-based switch works
+from any terminal on the host without touching the running process, and wiring
+it into the gateway makes it effective at the only order pathway. Functional
+probes (no-SL decision blocked by governor AND gateway) prove the safety rules
+are active rather than merely configured. The .gitignore fix prevents runtime
+journals (which include decision histories) from being accidentally committed.
+
+## Evidence:
+tests/test_demo_preflight.py — 17 tests: all gates PASS in a ready demo env;
+each wrong env flag fails its gate; REAL account fails; CONTEST accepted;
+missing symbol fails; exact XAUUSDm case used; no client -> SKIPPED gates block
+readiness; kill switch engage/release cycle; gateway blocks while engaged;
+preflight leaves a user-engaged switch untouched; report credential-free;
+journal probe round-trips; order_send/order_check never called. Existing
+gateway/shadow tests unaffected. Full suite: 451 passed.
+pre_demo_safety_check.sh passed. WSL preflight run: Ready False, exit 2.
+
+## Alternatives Considered:
+- Env-var kill switch: rejected — cannot be flipped for an already-running
+  process from another terminal.
+- Treating SKIPPED MT5 gates as PASS off-Windows: rejected — would fake
+  readiness; preflight must only pass against the real terminal.
+- Leaving the kill switch out of the gateway (runbook-only): rejected — a
+  halt that the order pathway does not enforce is not a halt.
+
+## Risk:
+The kill-switch file could be deleted accidentally, silently re-enabling
+sending in a future DEMO-002 session.
+
+## Mitigation:
+DEMO-002 will require the supervised operator to verify kill-switch state at
+session start (runbook); the gateway still enforces governor approval,
+stop-loss, and all demo flags independently of the switch.
+
+## Files Affected:
+src/execution/kill_switch.py, src/execution/preflight.py,
+src/execution/gateway.py, src/execution/__init__.py,
+scripts/demo_preflight.py, scripts/generate_evidence_pack.py,
+tests/test_demo_preflight.py, .gitignore
+
+## Status:
+Accepted

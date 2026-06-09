@@ -67,6 +67,7 @@ class ExecutionCheck(str, Enum):
     BROKER_DISCONNECTED = "BROKER_DISCONNECTED"
     DUPLICATE = "DUPLICATE"
     RISK_BLOCKED = "RISK_BLOCKED"
+    KILL_SWITCH = "KILL_SWITCH"
 
 
 @dataclass(frozen=True)
@@ -146,6 +147,7 @@ class ExecutionGateway:
         expected_symbol: str = "XAUUSD",
         magic: int = 0,
         deviation: int = 20,
+        kill_switch: Optional[Any] = None,
     ) -> None:
         self._governor = governor
         self._flags = flags or ExecutionFlags()  # safe default: sends nothing
@@ -153,6 +155,8 @@ class ExecutionGateway:
         self._expected_symbol = expected_symbol.strip().upper()
         self._magic = magic
         self._deviation = deviation
+        # Manual halt (DEMO-001): anything with a truthy .engaged blocks sending.
+        self._kill_switch = kill_switch
 
     @property
     def flags(self) -> ExecutionFlags:
@@ -171,10 +175,19 @@ class ExecutionGateway:
                 reason="real trading is forbidden; only DEMO is permitted",
             )
 
-        # 2) Execution pre-checks (05_EXECUTION_POLICY.md checklist).
+        # 2) Manual kill switch: an engaged halt blocks everything downstream.
+        if self._kill_switch is not None and self._kill_switch.engaged:
+            log.fail(ExecutionCheck.KILL_SWITCH)
+            log.state(OrderState.BLOCKED)
+            return self._result(
+                ExecutionStatus.BLOCKED, log, sent=False,
+                reason="manual kill switch is engaged; all sending halted",
+            )
+
+        # 3) Execution pre-checks (05_EXECUTION_POLICY.md checklist).
         self._pre_checks(decision, context, log)
 
-        # 3) Risk Governor is final authority; execution can never bypass it.
+        # 4) Risk Governor is final authority; execution can never bypass it.
         verdict = self._governor.evaluate(decision, context)
         if verdict.is_blocked:
             log.fail(ExecutionCheck.RISK_BLOCKED)
@@ -188,7 +201,7 @@ class ExecutionGateway:
 
         log.state(OrderState.RISK_APPROVED)
 
-        # 4) Safe default: if demo sending is not fully enabled, do not send.
+        # 5) Safe default: if demo sending is not fully enabled, do not send.
         if not self._flags.demo_send_enabled:
             log.state(OrderState.ORDER_PREPARED)
             return self._result(
@@ -196,7 +209,7 @@ class ExecutionGateway:
                 reason="demo order sending disabled; dry-run only",
             )
 
-        # 5) Prepare and send the demo order.
+        # 6) Prepare and send the demo order.
         log.state(OrderState.ORDER_PREPARED)
         request = self._build_request(decision, context, verdict)
         log.state(OrderState.ORDER_SENT)

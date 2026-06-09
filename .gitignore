@@ -12,15 +12,19 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Logs / runtime
-logs/
+# Logs / runtime (contents ignored; .gitkeep preserves structure)
+logs/*
+!logs/.gitkeep
 reports/runtime/
 *.log
 
-# Data
-data/raw/
-data/processed/
-data/cache/
+# Data (contents ignored; .gitkeep preserves structure)
+data/raw/*
+data/processed/*
+data/cache/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/cache/.gitkeep
 
 # Broker/account sensitive dumps
 broker_state_*.json
@@ -31,14 +35,6 @@ trade_dump_*.json
 .vscode/settings.json
 .DS_Store
 
-# Keep runtime folder structure but ignore contents
-!data/
-!data/raw/
-!data/processed/
-!data/cache/
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-!data/cache/.gitkeep
 
-!logs/
-!logs/.gitkeep
+# Kill switch / runtime control state
+control/

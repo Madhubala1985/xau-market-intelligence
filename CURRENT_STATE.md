@@ -10,7 +10,7 @@ Phase 12: Live Demo Readiness
 
 ## Current Task
 
-DEMO-001: Demo execution preflight (gates only, no orders)
+DEMO-002: Supervised MT5 demo trading (BLOCKED until gates pass; see blockers)
 
 ## Last Completed Task
 
@@ -29,11 +29,19 @@ LIVE-002: supervised session support added — per-cycle confidence, uncertainty
 risk action/reasons in the cycle results and the markdown/json session report;
 --report-name live_shadow_session for LIVE-002 evidence. The actual short
 supervised session must be run manually on the Windows MT5 host.
+DEMO-001: demo execution preflight implemented (scripts/demo_preflight.py).
+12 gates: 5 env flags, demo account, XAUUSDm symbol, governor blocks no-SL,
+gateway stop-loss mandatory, journal writable, state persistence, manual kill
+switch (control/KILL_SWITCH, honored by ExecutionGateway). No orders placed.
+Also fixed a .gitignore defect: !logs/ negation was un-ignoring runtime logs.
 
 ## Next Task
 
-DEMO-001 (demo execution preflight; no order placement), after the user runs
-the short LIVE-002 supervised session on Windows and the report is clean.
+1. User runs the LIVE-002 supervised session on the Windows MT5 host.
+2. User runs DEMO-001 preflight on the Windows MT5 host:
+   python scripts/demo_preflight.py
+   (Preflight passes only there; on WSL the MT5 gates are SKIPPED = NOT ready.)
+3. DEMO-002 only after both are clean and the user manually starts it.
 
 ## Current Execution Mode
 

@@ -19,6 +19,13 @@ from src.execution.live_shadow import (
     LiveShadowSession,
     make_live_pipeline,
 )
+from src.execution.kill_switch import KillSwitch
+from src.execution.preflight import (
+    DemoPreflight,
+    GateResult,
+    GateStatus,
+    PreflightReport,
+)
 
 __all__ = [
     "ExecutionGateway",
@@ -35,4 +42,10 @@ __all__ = [
     "LiveShadowReport",
     "LiveCycleResult",
     "make_live_pipeline",
+    # Demo preflight (DEMO-001)
+    "KillSwitch",
+    "DemoPreflight",
+    "PreflightReport",
+    "GateResult",
+    "GateStatus",
 ]

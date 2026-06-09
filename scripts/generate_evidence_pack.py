@@ -215,6 +215,14 @@ _TABLE: Dict[str, dict] = {
         layer="execution",
         summary="live MT5 data -> pipeline -> shadow journal (LIVE-001; never sends)",
         test_file="test_live_shadow.py", test_note="", **_MT5_BOUNDARY),
+    "src.execution.kill_switch": dict(
+        layer="execution",
+        summary="file-based manual halt honored by the gateway (DEMO-001)",
+        test_file="test_demo_preflight.py", test_note="", **_PURE_SHADOW_READY),
+    "src.execution.preflight": dict(
+        layer="execution",
+        summary="demo execution preflight gates (DEMO-001; places no orders)",
+        test_file="test_demo_preflight.py", test_note="", **_MT5_BOUNDARY),
 }
 
 
