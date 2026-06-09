@@ -123,15 +123,23 @@ class MT5DataAdapter:
 
     # -- symbol handling ---------------------------------------------------
     def _resolve_symbol(self, symbol: Optional[str]) -> str:
-        """Validate the requested symbol against the configured XAU/USD symbol."""
-        requested = (symbol or self._settings.symbol).strip().upper()
-        expected = self._settings.symbol.strip().upper()
-        if requested != expected:
+        """Validate the requested symbol and return the EXACT broker symbol.
+
+        Comparison is case-insensitive (canonical), so a caller may pass
+        "xauusd"/"XAUUSD". The returned value is always the configured broker
+        symbol with its case PRESERVED (e.g. Exness "XAUUSDm"), because that is
+        what MT5 symbol_select / copy_rates calls require.
+        """
+        configured = self._settings.symbol.strip()
+        if symbol is None:
+            return configured
+        requested = symbol.strip()
+        if requested.upper() != configured.upper():
             raise WrongSymbolError(
                 f"Unexpected symbol {requested!r}; this adapter only serves "
-                f"{expected!r}"
+                f"{configured!r}"
             )
-        return requested
+        return configured
 
     # -- data fetch --------------------------------------------------------
     def fetch_candles(

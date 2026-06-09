@@ -19,6 +19,7 @@ INT-001: DecisionPipeline integration completed.
 RISK-001: Leverage-Aware Sizing and Protected Pyramiding completed.
 LIVE-VERIFY-001: Implementation Evidence Pack completed.
 WINMT5-001: MT5 validation tooling completed, but live Windows MT5 proof is still pending.
+WINMT5-001 (case fix): broker symbols now preserve exact case (e.g. Exness XAUUSDm) for all MT5 API calls; uppercase is used only for canonical validation.
 
 ## Next Task
 

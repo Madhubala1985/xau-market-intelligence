@@ -47,6 +47,9 @@ class MT5Settings:
     login: int = field(repr=False)
     password: str = field(repr=False)
     server: str
+    # Exact broker symbol, case PRESERVED (e.g. Exness "XAUUSDm"). This is the
+    # value passed verbatim to every MT5 API call (symbol_select, symbol_info,
+    # copy_rates, symbol_info_tick). Never uppercase it for an API call.
     symbol: str = DEFAULT_SYMBOL
     path: Optional[str] = None
     # Optional server-clock offset from UTC, in minutes (default 0 == treat
@@ -62,6 +65,16 @@ class MT5Settings:
         )
 
     __str__ = __repr__
+
+    @property
+    def canonical_symbol(self) -> str:
+        """Uppercase symbol for canonical comparison / validation ONLY.
+
+        Use this when deciding whether the configured symbol is XAU/USD or when
+        comparing a caller-supplied symbol case-insensitively. NEVER pass this to
+        an MT5 API call — those require the exact broker case (`self.symbol`).
+        """
+        return self.symbol.upper()
 
 
 def load_dotenv_file(dotenv_path: str = ".env") -> None:
@@ -110,8 +123,10 @@ def load_mt5_settings(env: Optional[Mapping[str, str]] = None) -> MT5Settings:
         raise InvalidCredentialsError("MT5_LOGIN must be an integer") from exc
 
     # 4. Symbol must be a XAU/USD symbol (system trades XAU/USD only).
-    symbol = str(source.get("MT5_SYMBOL", "") or DEFAULT_SYMBOL).strip().upper()
-    if "XAU" not in symbol:
+    #    Preserve the EXACT broker case (e.g. Exness "XAUUSDm") for MT5 API
+    #    calls; only the uppercase canonical form is used for the XAU check.
+    symbol = str(source.get("MT5_SYMBOL", "") or DEFAULT_SYMBOL).strip()
+    if "XAU" not in symbol.upper():
         raise RealTradingForbiddenError(
             "MT5_SYMBOL must be a XAU/USD symbol (system trades XAU/USD only)"
         )

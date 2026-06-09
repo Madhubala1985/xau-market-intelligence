@@ -31,6 +31,9 @@ MT5 validation tooling exists, but live MT5 proof is not complete because WSL/Li
 - WINMT5-001 tooling completed.
 - Windows-side validation script exists: scripts/winmt5_validate.py.
 - Windows runner instructions exist: scripts/winmt5_runner_README.md.
+- Case-sensitivity bug fixed: MT5_SYMBOL keeps exact broker case (e.g. XAUUSDm)
+  for symbol_select / symbol_info / copy_rates / symbol_info_tick; uppercase is
+  used only for canonical XAU/USD validation (commit WINMT5-001 case fix).
 
 ---
 

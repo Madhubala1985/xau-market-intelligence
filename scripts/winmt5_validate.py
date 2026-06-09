@@ -134,7 +134,7 @@ def build_environment_issue_report(
         "import_reason": import_reason,
         "env_load": "",  # filled by caller
         "credentials": creds_status,
-        "symbol": str(os.environ.get("MT5_SYMBOL", "XAUUSD")).strip().upper() or "XAUUSD",
+        "symbol": str(os.environ.get("MT5_SYMBOL", "XAUUSD")).strip() or "XAUUSD",
         "checks": checks,
         "facts": {},
         "bridge_plan": _BRIDGE_PLAN,
@@ -260,7 +260,7 @@ def main() -> int:
         except BrokerError as exc:
             report = {
                 "task": "WINMT5-001", "outcome": "FAIL", "environment": "AVAILABLE",
-                "symbol": str(os.environ.get("MT5_SYMBOL", "XAUUSD")).upper(),
+                "symbol": str(os.environ.get("MT5_SYMBOL", "XAUUSD")).strip() or "XAUUSD",
                 "import_reason": import_reason, "env_load": env_load,
                 "checks": [{"name": "mt5_initialize", "status": "FAIL",
                             "detail": str(exc)}],

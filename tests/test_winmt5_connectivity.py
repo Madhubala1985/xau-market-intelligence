@@ -167,6 +167,26 @@ def test_missing_symbol_reports_failure(settings):
     assert names["symbol_info_read"] is CheckStatus.SKIPPED
 
 
+def test_validator_preserves_case_sensitive_broker_symbol():
+    # Exness uses a case-sensitive suffix: XAUUSDm. Every MT5 API call must
+    # receive that exact case, never an uppercased XAUUSDM.
+    settings = load_mt5_settings(demo_env(MT5_SYMBOL="XAUUSDm"))
+    client = FakeMT5()
+    # Spy on the read-only symbol calls while keeping their behaviour.
+    client.symbol_info = MagicMock(side_effect=client.symbol_info)
+    client.symbol_info_tick = MagicMock(side_effect=client.symbol_info_tick)
+
+    report = MT5ConnectivityValidator(settings).validate(client)
+
+    assert report.all_proven
+    assert report.symbol == "XAUUSDm"
+    assert client.symbol_select.call_args.args[0] == "XAUUSDm"
+    assert client.symbol_info.call_args.args[0] == "XAUUSDm"
+    assert client.symbol_info_tick.call_args.args[0] == "XAUUSDm"
+    assert client.copy_rates_from_pos.call_args.args[0] == "XAUUSDm"
+    client.assert_no_trades()
+
+
 def test_facts_have_contract_and_spread(settings):
     report = MT5ConnectivityValidator(settings).validate(FakeMT5())
     assert report.facts["symbol_contract_size"] == 100.0

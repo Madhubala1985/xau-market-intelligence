@@ -1891,3 +1891,58 @@ scripts/generate_evidence_pack.py (classify the new module)
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-01
+
+## Date:
+2026-06-09
+
+## Area:
+Broker
+
+## Decision:
+Broker symbol names from MT5_SYMBOL are passed to MT5 API calls (symbol_select,
+symbol_info, copy_rates_from_pos, symbol_info_tick) with their EXACT case
+preserved. Uppercasing is used only for canonical XAU/USD validation and for
+case-insensitive symbol comparison — never for an actual MT5 API argument.
+
+## Reason:
+WINMT5-LIVE-001 surfaced a real bug: Exness uses the case-sensitive symbol
+"XAUUSDm". The loader uppercased it to "XAUUSDM", which the terminal does not
+recognize, so symbol detection failed. MT5 symbol names are case-sensitive at
+the broker, so the exact case must reach every API call.
+
+## Evidence:
+tests/test_mt5_data_adapter.py — settings preserve "XAUUSDm" (canonical_symbol
+== "XAUUSDM"); fetch_candles calls symbol_select/copy_rates_from_pos with
+"XAUUSDm"; a canonical-case caller ("XAUUSDM") still drives MT5 with "XAUUSDm".
+tests/test_winmt5_connectivity.py — validator drives symbol_select/symbol_info/
+symbol_info_tick/copy_rates_from_pos with "XAUUSDm" and report.symbol == "XAUUSDm".
+Full suite: 412 passed.
+
+## Alternatives Considered:
+- Keep uppercasing the symbol everywhere: rejected — that is the bug; it breaks
+  case-sensitive brokers like Exness.
+- Also preserve case in the Candle.symbol data field: rejected — the schema
+  canonicalizes symbols to uppercase as the internal representation; that field
+  is never used as an MT5 API argument, so it is left unchanged (out of scope).
+
+## Risk:
+Downstream code that builds an MT5 API argument from a canonical (uppercased)
+symbol string instead of MT5Settings.symbol could reintroduce the mismatch.
+
+## Mitigation:
+The adapter's _resolve_symbol always returns MT5Settings.symbol (exact case) for
+API calls; MT5Settings.canonical_symbol is documented as validation-only; tests
+assert the exact broker case reaches every read-only MT5 call.
+
+## Files Affected:
+src/broker/mt5_settings.py, src/broker/mt5_data_adapter.py,
+scripts/winmt5_validate.py, tests/test_mt5_data_adapter.py,
+tests/test_winmt5_connectivity.py
+
+## Status:
+Accepted

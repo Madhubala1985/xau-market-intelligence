@@ -228,6 +228,45 @@ def test_symbol_case_insensitive_accepted(adapter):
 
 
 # ---------------------------------------------------------------------------
+# Case-sensitive broker symbols (e.g. Exness XAUUSDm) must be preserved
+# ---------------------------------------------------------------------------
+
+def test_settings_preserve_broker_symbol_case():
+    settings = load_mt5_settings(demo_env(MT5_SYMBOL="XAUUSDm"))
+    # Exact broker case is preserved for MT5 API calls...
+    assert settings.symbol == "XAUUSDm"
+    # ...while the canonical form (uppercase) is used only for validation.
+    assert settings.canonical_symbol == "XAUUSDM"
+
+
+def test_fetch_uses_exact_broker_symbol_case(fake_mt5):
+    settings = load_mt5_settings(demo_env(MT5_SYMBOL="XAUUSDm"))
+    adapter = MT5DataAdapter(settings, client=fake_mt5)
+    adapter.connect()
+    candles = adapter.fetch_candles(Timeframe.H1, count=2)
+
+    # The MT5 API calls MUST receive the exact broker case (the bug fix).
+    assert fake_mt5.symbol_select.call_args.args[0] == "XAUUSDm"
+    assert fake_mt5.copy_rates_from_pos.call_args.args[0] == "XAUUSDm"
+    # The Candle data-model field is canonicalized (uppercase) by the schema;
+    # this is the canonical representation, NOT a value passed to MT5.
+    assert candles[-1].symbol == "XAUUSDM"
+    fake_mt5.assert_no_trades()
+
+
+def test_canonical_match_still_uses_broker_case(fake_mt5):
+    # Caller passes the uppercase canonical form; the adapter accepts it but
+    # must still call MT5 with the exact configured broker case.
+    settings = load_mt5_settings(demo_env(MT5_SYMBOL="XAUUSDm"))
+    adapter = MT5DataAdapter(settings, client=fake_mt5)
+    adapter.connect()
+    adapter.fetch_candles(Timeframe.H1, count=1, symbol="XAUUSDM")
+
+    assert fake_mt5.symbol_select.call_args.args[0] == "XAUUSDm"
+    assert fake_mt5.copy_rates_from_pos.call_args.args[0] == "XAUUSDm"
+
+
+# ---------------------------------------------------------------------------
 # Timestamp normalization
 # ---------------------------------------------------------------------------
 
