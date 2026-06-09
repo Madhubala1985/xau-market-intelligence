@@ -11,16 +11,16 @@ Claude must update this file before stopping, before token/session exhaustion, a
 # Current Project State
 
 ## Current Phase:
-Phase 8: Trade Management
+Phase 9: Journal and Reflection
 
 ## Current Task ID:
-P8-002
+P9-001
 
 ## Current Task Goal:
-Trailing Stop Engine — structure-based, volatility-based, and liquidity-target trailing; partial/runner logic.
+Trade Journal — log every trade and no-trade decision; restart-safe.
 
 ## Current Status:
-P8-001 complete. Stop placement intelligence implemented and tested.
+P8-002 complete. Trailing stop engine implemented and tested. Phase 8 finished.
 
 ---
 
@@ -47,6 +47,26 @@ P8-001 complete. Stop placement intelligence implemented and tested.
 - P7-002 completed: position sizing.
 - P7-003 completed: MT5 demo execution gateway.
 - P8-001 completed: stop placement intelligence.
+- P8-002 completed: trailing stop engine.
+
+## P8-002 Details
+
+Files added/changed:
+- src/trade_management/trailing.py — TrailingStopEngine + PositionState + TrailResult + TrailMethod + RunnerConditions + PartialPlan.
+- src/trade_management/__init__.py — export trailing API.
+- tests/test_trailing.py — 14 tests.
+
+Design notes:
+- update_stop(state, method, last_swing=, protect_level=) -> TrailResult. Methods: VOLATILITY (price ∓ atr*mult), STRUCTURE (last_swing ∓ buffer), LIQUIDITY (protect_level ∓ buffer), BREAK_EVEN (entry).
+- No premature trailing: holds the current stop until profit_r >= be_trigger_r (default 1R); break-even only after confirmation.
+- Never widen: a candidate is applied only if it improves the stop toward price (LONG up, SHORT down) and is on the correct side of price; otherwise the stop is held (moved=False).
+- partial_plan(state, next_liquidity=, conditions=) -> PartialPlan: take_levels = [1R, then next_liquidity if beyond 1R]; runner_allowed = structure_valid and not opposite_displacement and spread_safe.
+- No order placement; no look-ahead.
+
+Tests run:
+- `.venv/bin/python -m pytest tests/ -q` → 294 passed (14 trailing + 280 prior).
+
+Errors: none.
 
 ## P8-001 Details
 
@@ -135,24 +155,22 @@ Errors: none.
 # Next Task
 
 ## Task:
-P8-002: Trailing Stop Engine
+P9-001: Trade Journal
 
 ## Goal:
-Implement structure-based, volatility-based, and liquidity-target trailing; partial profit + runner logic.
+Log every trade and no-trade decision; restart-safe persistence.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- src/trade_management/ + src/utils/ + tests/. Reuse StopPlacementEngine, structure swings (src/structure/), liquidity levels (src/liquidity/), TradeDecision. Do not touch src/execution|risk internals.
+- src/journal/ + src/utils/ + tests/. Reuse TradeDecision/TradeRecord (src/data/). Persist to a path under data/ or logs/ (gitignored). Do not touch src/execution|risk internals.
 
-## Tests (10_TASK_QUEUE.md P8-002):
-- no premature trailing,
-- no widening stop,
-- valid partial/runners.
+## Tests (10_TASK_QUEUE.md P9-001):
+- decisions persisted,
+- restart-safe.
 
-## Notes for P8-002 (17_STOP_AND_TRAILING_POLICY.md):
-- Trailing methods: structure-based (trail to last confirmed swing), volatility-based (ATR trail), liquidity-target (toward next pool), break-even only AFTER confirmation, partial profit + runner.
-- A trailing stop may only move in the trade's favor (LONG: up, SHORT: down); it must NEVER widen (move against). Return the unchanged stop if the proposed trail would loosen it.
-- No premature trailing before the confirmation condition (e.g., reaching 1R / break-even trigger). Partial logic: take partial at 1R / next liquidity; runner held only while structure valid.
-- No order placement; no look-ahead (only candles/levels available now).
+## Notes for P9-001 (06_DATA_POLICY.md storage; 05_EXECUTION_POLICY.md TRADE_LOGGED):
+- Append every decision (trade AND no-trade) to a durable store (e.g., JSON Lines file); a new journal instance pointed at the same path reloads prior entries (restart-safe).
+- Use the existing TradeRecord schema (and/or TradeDecision) for entries; serialize via pydantic model_dump_json.
+- Never write credentials. Tests should use a tmp_path file. Default persistence path should sit under the gitignored runtime area (data/ or logs/), not committed.
 
 ---
 

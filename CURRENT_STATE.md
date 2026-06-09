@@ -6,11 +6,11 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 8: Trade Management
+Phase 9: Journal and Reflection
 
 ## Current Task
 
-P8-002: Trailing Stop Engine
+P9-001: Trade Journal
 
 ## Last Completed Task
 
@@ -37,10 +37,11 @@ P7-001: Risk Governor
 P7-002: Position Sizing
 P7-003: MT5 Demo Execution Gateway
 P8-001: Stop Placement Intelligence
+P8-002: Trailing Stop Engine
 
 ## Next Task
 
-P8-002: Trailing Stop Engine
+P9-001: Trade Journal
 
 ## Current Execution Mode
 
@@ -67,19 +68,16 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P8-002:
-Implement the Trailing Stop Engine with structure-based, volatility-based, and
-liquidity-target trailing, plus partial/runner logic. Tests: no premature
-trailing, no widening stop, valid partial/runners. Build in src/trade_management/;
-reuse StopPlacementEngine and structure/liquidity outputs. No order placement; no
-look-ahead.
+Start P9-001:
+Implement the Trade Journal that logs every trade and no-trade decision, and is
+restart-safe (persisted and reloadable). Tests: decisions persisted, restart-safe.
+Build in src/journal/; reuse TradeDecision/TradeRecord (src/data/). Persist under
+the runtime data/ or logs/ area; never write credentials.
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading; ALLOW_REAL_ORDERS must stay false.
-- Do not print credentials.
-- Do not place MT5 orders (trailing logic only; gateway/risk governor remain the
-  only gated execution path).
-- A trailing stop may only move in the trade's favor; NEVER widen a stop. No
-  premature trailing before confirmation. No look-ahead.
+- Do not print credentials; never write credentials into the journal.
+- Do not place MT5 orders (logging only).
+- Journal must be restart-safe (reload persisted decisions); do not log secrets.

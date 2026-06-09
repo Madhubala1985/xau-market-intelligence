@@ -1232,3 +1232,57 @@ tests/test_stop_placement.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-20
+
+## Date:
+2026-06-09
+
+## Area:
+Risk
+
+## Decision:
+The trailing stop engine (P8-002) updates a stop via STRUCTURE (last swing ∓
+buffer), VOLATILITY (price ∓ atr*multiple), LIQUIDITY (cleared level ∓ buffer),
+or BREAK_EVEN (entry). Trailing is inactive until profit reaches be_trigger_r
+(default 1R) -> no premature trailing. A candidate is applied only if it improves
+the stop toward price and is on the correct side of price; it can NEVER widen.
+partial_plan() returns take levels [1R, next liquidity beyond 1R] and a
+runner_allowed flag (structure valid, no opposite displacement, spread safe).
+
+## Reason:
+Implements 17_STOP_AND_TRAILING_POLICY.md: be harder to kill, never widen a stop,
+break-even/partials only after confirmation, hold runners only while structure
+holds. Confirmation gating and the never-widen rule are the core safety
+invariants.
+
+## Evidence:
+tests/test_trailing.py — 14 tests: no trailing before confirmation, break-even
+only after confirmation, volatility/structure/liquidity trails after
+confirmation, no-widening (long & short), candidate-wrong-side ignored, short
+volatility trail, partial levels (1R + liquidity, skip liquidity below 1R), and
+runner allowed/blocked cases. All pass (294 total).
+
+## Alternatives Considered:
+- Allowing trailing immediately from entry: rejected — premature trailing chops
+  out winners; gate behind a confirmation R.
+- A single fixed trailing method: rejected — structure/volatility/liquidity each
+  suit different regimes; the caller selects.
+
+## Risk:
+Inputs (last swing, protect level, ATR, be_trigger_r) come from upstream; method
+choice affects behavior.
+
+## Mitigation:
+atr_multiple, buffer, be_trigger_r are configurable; the never-widen and
+confirmation invariants are enforced regardless of inputs; no order placement.
+
+## Files Affected:
+src/trade_management/trailing.py, src/trade_management/__init__.py,
+tests/test_trailing.py
+
+## Status:
+Accepted
