@@ -1946,3 +1946,73 @@ tests/test_winmt5_connectivity.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-02
+
+## Date:
+2026-06-09
+
+## Area:
+Execution / Data
+
+## Decision:
+LIVE-001 wires live read-only MT5 demo data into DecisionPipeline and
+ShadowRunner via a new LiveShadowSession. The live pipeline is built by
+make_live_pipeline, which (a) disables candle gap detection and adds a
+30-minute staleness gate in the DataValidator, and (b) configures the
+RiskGovernor with the CANONICAL broker symbol (XAUUSDM for Exness XAUUSDm) and
+a price-unit max_spread of 1.0. The runner script requires a mandatory stop
+condition (--cycles or --duration-minutes) and verifies the account is
+demo/non-real before any cycle.
+
+## Reason:
+Default engine configs block live data: gap detection treats normal XAU
+session/trading-break gaps as BLOCKING MISSING_CANDLES (the validator's own
+docstring defers session gaps to the session engine), and the governor's
+default expected_symbol XAUUSD rejects canonicalized XAUUSDM decisions.
+Without these two fixes every live cycle would be DATA_REJECTED or
+risk-blocked WRONG_SYMBOL. The staleness gate replaces gap detection as the
+liveness defence: a frozen feed yields an honest NO_TRADE. max_spread=1.0 in
+price units is stricter than the points-oriented default of 50 (live spread is
+fed as ask-bid in price terms).
+
+## Evidence:
+tests/test_live_shadow.py — 13 tests: cycles journal every decision; session-
+gapped data accepted; stale feed -> DATA_REJECTED journaled as NO_TRADE; exact
+XAUUSDm case in every MT5 call; live spread read; no order_send across full
+session; sending-enabled gateway refused; unbounded run refused; report and
+journal credential-free; runner refuses REAL account, accepts DEMO/CONTEST;
+honest ENVIRONMENT_ISSUE off-Windows. Adapter tests for fetch_tick /
+fetch_broker_state (read-only, credential-free). Full suite: 431 passed.
+pre_demo_safety_check.sh passed. WSL smoke run: ENVIRONMENT_ISSUE, exit 2.
+
+## Alternatives Considered:
+- Feeding spread in broker points to match the governor default: rejected —
+  the pipeline and sizer consume price-unit spread; converting at the governor
+  boundary invites unit bugs.
+- Keeping detect_gaps=True with a session-aware whitelist: rejected — the
+  validator explicitly scopes session gaps to the session engine; a whitelist
+  duplicates that logic.
+- Letting LiveShadowSession run unbounded with external kill: rejected — a
+  mandatory stop condition is a hard safety property.
+
+## Risk:
+Disabling gap detection could mask a genuinely broken feed that delivers
+sparse candles.
+
+## Mitigation:
+The 30-minute max_staleness gate rejects a frozen/stale feed; duplicate,
+non-monotonic, bad-OHLC, and symbol-mismatch checks remain BLOCKING; every
+rejection is journaled as an explicit NO_TRADE.
+
+## Files Affected:
+src/broker/mt5_data_adapter.py, src/execution/live_shadow.py,
+src/execution/__init__.py, scripts/live_shadow_run.py,
+scripts/generate_evidence_pack.py, tests/test_live_shadow.py,
+tests/test_mt5_data_adapter.py
+
+## Status:
+Accepted

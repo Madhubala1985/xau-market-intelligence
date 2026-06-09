@@ -12,99 +12,91 @@ This file allows Claude sessions to resume without losing direction.
 Phase 12: Live Demo Readiness
 
 ## Current Task ID:
-WINMT5-LIVE-001
+LIVE-002
 
 ## Current Task Goal:
-Execute Windows MT5 demo validation against the real Exness demo terminal.
+Run a short supervised live shadow validation session on the Windows MT5 host
+and record the report, then proceed to DEMO-001 (demo execution preflight).
 
 ## Current Status:
-MT5 validation tooling exists, but live MT5 proof is not complete because WSL/Linux cannot import MetaTrader5. The next action is to run the Windows-side validator against the actual MT5 terminal.
+LIVE-001 is complete and committed. WINMT5-LIVE-001 live proof passed on
+Windows PowerShell (VALIDATED, XAUUSDm, demo account, candles + spread read,
+no order_send). The live shadow runner exists and is safe by construction.
 
 ---
 
 # Completed Work
 
-- P0-P11 roadmap completed.
-- INT-001 completed.
-- RISK-001 completed.
-- LIVE-VERIFY-001 completed.
-- WINMT5-001 tooling completed.
-- Windows-side validation script exists: scripts/winmt5_validate.py.
-- Windows runner instructions exist: scripts/winmt5_runner_README.md.
-- Case-sensitivity bug fixed: MT5_SYMBOL keeps exact broker case (e.g. XAUUSDm)
-  for symbol_select / symbol_info / copy_rates / symbol_info_tick; uppercase is
-  used only for canonical XAU/USD validation (commit WINMT5-001 case fix).
+- P0-P11 roadmap, INT-001, RISK-001, LIVE-VERIFY-001, WINMT5-001 completed.
+- WINMT5-LIVE-001 proven against the real Exness demo terminal (XAUUSDm).
+- Case-sensitive broker symbol fix committed (XAUUSDm preserved for MT5 calls).
+- LIVE-001 committed:
+  - MT5DataAdapter gained read-only fetch_tick + fetch_broker_state.
+  - src/execution/live_shadow.py: LiveShadowSession (live data -> DecisionPipeline
+    -> ShadowRunner/journal), make_live_pipeline (validator with detect_gaps=False
+    + max_staleness, governor expecting the CANONICAL broker symbol, price-unit
+    max_spread=1.0).
+  - scripts/live_shadow_run.py: Windows runner, --cycles N or --duration-minutes N,
+    verifies demo/non-real account before running, writes
+    reports/runtime/live_shadow_run.md/.json, journal at logs/live_shadow_journal.jsonl.
+  - Tests: tests/test_live_shadow.py + adapter tests (no order_send, no credentials,
+    exact XAUUSDm case in every MT5 call, stale data -> NO_TRADE journaled).
 
 ---
 
 # Current Blocker
 
-LIVE-001 replay/live pipeline work is paused until Windows MT5 demo validation is proven.
+None for LIVE-002 tooling; the actual short shadow session must be run manually
+by the user on the Windows MT5 host (Claude must not run live sessions itself).
 
 ---
 
-# Required Proof
+# Next Exact Steps
 
-WINMT5-LIVE-001 must prove:
-
-1. MT5 terminal path configured.
-2. Demo credentials load from .env without printing values.
-3. MT5 initializes.
-4. Demo login succeeds.
-5. Account is verified as demo / non-real.
-6. XAU/USD symbol is detected.
-7. symbol_info is read.
-8. Latest candles are fetched.
-9. Spread is read.
-10. no order_send is called.
+1. User runs on Windows PowerShell (short smoke first):
+   `python scripts/live_shadow_run.py --cycles 5`
+2. Review reports/runtime/live_shadow_run.md (outcome COMPLETED, orders_sent 0).
+3. Record LIVE-002 session evidence and commit as LIVE-002.
+4. Then DEMO-001: demo execution preflight (gates only, NO order placement).
 
 ---
 
 # Allowed Files
 
 - scripts/
+- src/execution/ (shadow/preflight only; gateway send path stays gated)
 - reports/runtime/
-- CURRENT_STATE.md
-- 12_HANDOFF.md
-- 11_DECISION_LOG.md
-- tests/ only if validator test needs a small update
+- tests/
+- CURRENT_STATE.md, 12_HANDOFF.md, 11_DECISION_LOG.md
 
 ---
 
-# Forbidden Files
+# Forbidden
 
-- .env
-- src/execution/
-- src/risk/
-- src/strategy/
-- real-money configuration
+- .env (never commit, never print values)
+- enabling REAL_TRADING_ENABLED / ALLOW_REAL_ORDERS
+- any order_send in shadow / preflight tasks
+- demo order placement before DEMO-001 passes and user starts DEMO-002 manually
 
 ---
 
 # Safety Rules
 
 - No real trading.
-- No demo orders.
+- No demo orders yet.
 - No order_send.
 - No credentials printed.
 - Do not fake live validation.
-- If Windows runner fails, record exact environment issue and next fix.
+- ExecutionGateway is the only order pathway; RiskGovernor is final authority.
 
 ---
 
 # Resume Prompt For Claude
 
-Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, 10_TASK_QUEUE.md, 22_MT5_WINDOWS_VALIDATION.md, and scripts/winmt5_runner_README.md.
+Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, 10_TASK_QUEUE.md,
+23_DEMO_TRADING_RUNBOOK.md.
 
-Continue WINMT5-LIVE-001 only.
-
-Do not continue LIVE-001.
-Do not use replay data yet.
-Do not trade real money.
-Do not place demo orders.
-Do not call order_send.
-Do not print credentials.
-Do not commit .env.
-Do not fake live validation.
-
-Guide the user to run the Windows-side MT5 validator and then record the result.
+Continue LIVE-002: guide the user to run the short live shadow session on the
+Windows MT5 host, then record results. Do not place orders. Do not run long
+sessions autonomously. After LIVE-002 evidence is recorded, continue DEMO-001
+(preflight checks only, no order placement).

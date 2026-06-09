@@ -211,6 +211,10 @@ _TABLE: Dict[str, dict] = {
     "src.execution.shadow": dict(
         layer="execution", summary="ShadowRunner (logs only, never sends)",
         test_file="test_shadow.py", test_note="", **_MT5_BOUNDARY),
+    "src.execution.live_shadow": dict(
+        layer="execution",
+        summary="live MT5 data -> pipeline -> shadow journal (LIVE-001; never sends)",
+        test_file="test_live_shadow.py", test_note="", **_MT5_BOUNDARY),
 }
 
 

@@ -13,6 +13,12 @@ from src.execution.shadow import (
     ShadowReport,
     ShadowRunner,
 )
+from src.execution.live_shadow import (
+    LiveCycleResult,
+    LiveShadowReport,
+    LiveShadowSession,
+    make_live_pipeline,
+)
 
 __all__ = [
     "ExecutionGateway",
@@ -24,4 +30,9 @@ __all__ = [
     "load_execution_flags",
     "ShadowRunner",
     "ShadowReport",
+    # Live shadow (LIVE-001)
+    "LiveShadowSession",
+    "LiveShadowReport",
+    "LiveCycleResult",
+    "make_live_pipeline",
 ]

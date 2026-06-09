@@ -20,8 +20,8 @@ from src.broker.errors import (
     WrongSymbolError,
 )
 from src.broker.mt5_settings import MT5Settings
-from src.data.enums import Timeframe
-from src.data.schemas import Candle
+from src.data.enums import BrokerConnectionStatus, Timeframe
+from src.data.schemas import BrokerState, Candle, Tick
 
 # Map our Timeframe enum to MetaTrader5 timeframe constant names. The constant
 # is resolved from the injected client via getattr, so we never depend on the
@@ -42,6 +42,36 @@ def _row_value(row: Any, key: str) -> Any:
     Supports both numpy structured-array rows (`row['open']`) and mapping rows.
     """
     return row[key]
+
+
+def _field(obj: Any, name: str, default: Any = None) -> Any:
+    """Read a field from an MT5 named-tuple-like object or a mapping (attr or item)."""
+    if obj is None:
+        return default
+    if hasattr(obj, name):
+        return getattr(obj, name)
+    try:
+        return obj[name]
+    except (KeyError, TypeError, IndexError):
+        return default
+
+
+def _pos_float(value: Any) -> Optional[float]:
+    """Coerce to a non-negative float, or None if absent/invalid/negative."""
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if out >= 0 else None
+
+
+def _pos_int(value: Any) -> Optional[int]:
+    """Coerce to a positive int, or None if absent/invalid/non-positive."""
+    try:
+        out = int(value)
+    except (TypeError, ValueError):
+        return None
+    return out if out > 0 else None
 
 
 class MT5DataAdapter:
@@ -190,6 +220,93 @@ class MT5DataAdapter:
             raise DataFetchError(f"empty candle data returned for {resolved_symbol}")
 
         return [self._to_candle(row, timeframe, resolved_symbol) for row in rates]
+
+    def fetch_tick(self, symbol: Optional[str] = None) -> Tick:
+        """Read the latest bid/ask tick (read-only). Used to derive live spread.
+
+        Raises:
+            WrongSymbolError: a non-XAUUSD symbol was requested / not selectable.
+            DataFetchError: no/invalid tick returned.
+            BrokerConnectionError: adapter is not connected.
+        """
+        if not self._connected:
+            raise BrokerConnectionError("adapter is not connected; call connect() first")
+        resolved_symbol = self._resolve_symbol(symbol)
+        mt5 = self._mt5
+
+        if hasattr(mt5, "symbol_select"):
+            if not mt5.symbol_select(resolved_symbol, True):
+                raise WrongSymbolError(
+                    f"symbol {resolved_symbol!r} could not be selected on the terminal"
+                )
+
+        raw = mt5.symbol_info_tick(resolved_symbol) if hasattr(mt5, "symbol_info_tick") else None
+        if raw is None:
+            raise DataFetchError(
+                f"no tick returned for {resolved_symbol}: {self._safe_last_error()}"
+            )
+        bid = _field(raw, "bid")
+        ask = _field(raw, "ask")
+        if bid is None or ask is None:
+            raise DataFetchError(f"tick for {resolved_symbol} is missing bid/ask")
+
+        epoch = _field(raw, "time")
+        if epoch is not None:
+            broker_time, time_utc = self._epoch_to_times(int(epoch))
+        else:  # pragma: no cover - defensive; real ticks carry a time
+            time_utc = datetime.now(timezone.utc)
+            broker_time = time_utc
+
+        last = _field(raw, "last")
+        return Tick(
+            symbol=resolved_symbol,
+            broker_time=broker_time,
+            time_utc=time_utc,
+            bid=float(bid),
+            ask=float(ask),
+            last=float(last) if last not in (None, 0) else None,
+            volume=int(_field(raw, "volume", 0) or 0),
+        )
+
+    def fetch_broker_state(self, now: datetime) -> BrokerState:
+        """Read a read-only account/broker health snapshot (no credentials).
+
+        Reads account_info() and positions_total() if available. Never reads or
+        stores login/password/server, and never calls any trade function.
+        """
+        if not self._connected:
+            raise BrokerConnectionError("adapter is not connected; call connect() first")
+        mt5 = self._mt5
+        info = mt5.account_info() if hasattr(mt5, "account_info") else None
+        connected = info is not None
+
+        open_positions = 0
+        if hasattr(mt5, "positions_total"):
+            try:
+                open_positions = int(mt5.positions_total() or 0)
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                open_positions = 0
+
+        return BrokerState(
+            time_utc=now,
+            connection_status=(
+                BrokerConnectionStatus.CONNECTED if connected
+                else BrokerConnectionStatus.DISCONNECTED
+            ),
+            symbol=self._settings.symbol,
+            account_currency=_field(info, "currency"),
+            balance=_pos_float(_field(info, "balance")),
+            equity=_pos_float(_field(info, "equity")),
+            margin=_pos_float(_field(info, "margin")),
+            free_margin=(
+                float(_field(info, "margin_free"))
+                if _field(info, "margin_free") is not None else None
+            ),
+            margin_level=_pos_float(_field(info, "margin_level")),
+            leverage=_pos_int(_field(info, "leverage")),
+            open_positions=max(0, open_positions),
+            trade_allowed=bool(_field(info, "trade_allowed", False)) and connected,
+        )
 
     def _to_candle(self, row: Any, timeframe: Timeframe, symbol: str) -> Candle:
         """Convert a single MT5 rate row into a validated Candle."""

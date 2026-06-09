@@ -64,6 +64,13 @@ def make_rate(epoch: int, o, h, l, c, tick_vol=100, spread=20, real_vol=0) -> di
     }
 
 
+class _TickObj:
+    """Attribute container mimicking MT5 named-tuple returns."""
+
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
 class FakeMT5:
     """Minimal in-memory stand-in for the MetaTrader5 module.
 
@@ -90,6 +97,19 @@ class FakeMT5:
         self.copy_rates_from_pos = MagicMock(
             side_effect=lambda symbol, tf, start, count: list(self._rates)[:count]
         )
+        self.symbol_info_tick = MagicMock(
+            side_effect=lambda symbol: _TickObj(
+                bid=2307.9, ask=2308.1, last=2308.0, time=BASE_EPOCH, volume=5
+            )
+        )
+        self.account_info = MagicMock(
+            side_effect=lambda: _TickObj(
+                currency="USD", leverage=500, balance=2000.0, equity=2010.5,
+                margin=12.5, margin_free=1998.0, margin_level=160.8,
+                trade_allowed=True, login=int(LOGIN_VALUE),
+            )
+        )
+        self.positions_total = MagicMock(return_value=0)
         # Trade functions that must NEVER be called by a data adapter.
         self.order_send = MagicMock()
         self.order_check = MagicMock()
@@ -309,5 +329,70 @@ def test_order_send_never_called_in_full_cycle(adapter, fake_mt5):
     adapter.connect()
     adapter.fetch_candles(Timeframe.H1, count=2)
     adapter.fetch_candles(Timeframe.M5, count=1)
+    adapter.fetch_tick()
+    adapter.fetch_broker_state(BASE_DT_UTC)
     adapter.shutdown()
     fake_mt5.assert_no_trades()
+
+
+# ---------------------------------------------------------------------------
+# Read-only tick + broker state (LIVE-001)
+# ---------------------------------------------------------------------------
+
+def test_fetch_tick_returns_bid_ask_spread(adapter, fake_mt5):
+    adapter.connect()
+    tick = adapter.fetch_tick()
+    assert tick.bid == pytest.approx(2307.9)
+    assert tick.ask == pytest.approx(2308.1)
+    assert tick.spread == pytest.approx(0.2)
+    assert tick.time_utc == BASE_DT_UTC
+    fake_mt5.assert_no_trades()
+
+
+def test_fetch_tick_requires_connection(adapter):
+    with pytest.raises(BrokerConnectionError):
+        adapter.fetch_tick()
+
+
+def test_fetch_tick_uses_exact_broker_symbol_case(fake_mt5):
+    settings = load_mt5_settings(demo_env(MT5_SYMBOL="XAUUSDm"))
+    adapter = MT5DataAdapter(settings, client=fake_mt5)
+    adapter.connect()
+    adapter.fetch_tick()
+    assert fake_mt5.symbol_info_tick.call_args.args[0] == "XAUUSDm"
+
+
+def test_fetch_tick_handles_no_data(settings):
+    client = FakeMT5()
+    client.symbol_info_tick = MagicMock(return_value=None)
+    adapter = MT5DataAdapter(settings, client=client)
+    adapter.connect()
+    with pytest.raises(DataFetchError):
+        adapter.fetch_tick()
+
+
+def test_fetch_broker_state_reads_account_safely(adapter, fake_mt5):
+    adapter.connect()
+    state = adapter.fetch_broker_state(BASE_DT_UTC)
+    assert state.connection_status.value == "CONNECTED"
+    assert state.balance == pytest.approx(2000.0)
+    assert state.equity == pytest.approx(2010.5)
+    assert state.leverage == 500
+    assert state.open_positions == 0
+    assert state.trade_allowed is True
+    # BrokerState carries no credential fields; its serialization must not
+    # contain the login value or password.
+    blob = state.model_dump_json()
+    assert SECRET_PASSWORD not in blob
+    assert LOGIN_VALUE not in blob
+    fake_mt5.assert_no_trades()
+
+
+def test_fetch_broker_state_disconnected_when_no_account_info(settings):
+    client = FakeMT5()
+    client.account_info = MagicMock(return_value=None)
+    adapter = MT5DataAdapter(settings, client=client)
+    adapter.connect()
+    state = adapter.fetch_broker_state(BASE_DT_UTC)
+    assert state.connection_status.value == "DISCONNECTED"
+    assert state.trade_allowed is False
