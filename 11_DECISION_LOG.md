@@ -799,3 +799,56 @@ src/regime/regime_engine.py, src/regime/__init__.py, tests/test_regime.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-12
+
+## Date:
+2026-06-09
+
+## Area:
+Order Flow
+
+## Decision:
+The order-flow proxy engine (P5-001) computes broker-level PROXY metrics from
+candles (volume ratio/state, spread behavior, candle aggression, delta/CVD proxy,
+CVD divergence, abnormal activity) and emits a ProxyPressure descriptor plus
+bounded confidence/uncertainty adjustments and a note. By construction it NEVER
+emits a trade signal: OrderFlowProxy.is_trade_signal is always False, the result
+has no direction/signal/order/entry field, and the engine has no
+decide/trade/buy/sell method. An optional structural_bias triggers a conflict
+flag and raises uncertainty when proxy opposes structure.
+
+## Reason:
+Enforces INIT-005 and 16_ORDERFLOW_PROXY_POLICY.md: MT5 volume/CVD/delta are
+proxies, may only adjust confidence/uncertainty (and downstream risk/trailing),
+and cannot trigger trades. Keeping the no-signal guarantee structural (fields +
+tests) makes the rule impossible to bypass accidentally.
+
+## Evidence:
+tests/test_orderflow_proxy.py — 10 tests: bullish expansion values, exhaustion,
+spread widening, CVD divergence, structure conflict, short-series inconclusive,
+and four no-trade-signal guards (is_trade_signal False, no decision fields, no
+decision methods, ProxyPressure != Direction). All pass (191 total).
+
+## Alternatives Considered:
+- Emitting a LONG/SHORT bias from the proxy: rejected — violates INIT-005;
+  pressure is a proxy descriptor only.
+- Tick-level (Tick schema) order flow: deferred — candle-based proxies cover the
+  P5-001 inputs; tick-level can be added later.
+
+## Risk:
+Thresholds (expansion/spread/abnormal factors, aggression cutoffs, adjustment
+step/cap) affect outputs; candle-based proxy is coarser than tick-level.
+
+## Mitigation:
+All thresholds configurable; adjustments are bounded; OrderFlowProxy exposes raw
+metrics for downstream confidence/uncertainty scoring.
+
+## Files Affected:
+src/orderflow/proxy.py, src/orderflow/__init__.py, tests/test_orderflow_proxy.py
+
+## Status:
+Accepted
