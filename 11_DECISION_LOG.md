@@ -1545,3 +1545,56 @@ tests/test_shadow.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-26
+
+## Date:
+2026-06-09
+
+## Area:
+Execution
+
+## Decision:
+The real-mode readiness review (P11-002) is a report generator. ReadinessReview.
+review(inputs) evaluates gates (tests passing, backtest/walk-forward/demo/shadow
+validated, risk governor present, stop-loss enforced, journal restart-safe, and
+real-currently-disabled derived from ExecutionFlags) and returns a ReadinessReport.
+Verdict is NOT_READY by default and whenever any gate fails or manual approval is
+absent; READY only when all gates pass AND manual_approval is explicitly granted.
+The report NEVER authorizes execution: real_execution_allowed is always False and
+the review has no execute/order/enable_real method.
+
+## Reason:
+Implements the P11-002 stop condition (readiness report only) and the
+CLAUDE.md/03_RISK_POLICY.md rule that real-money execution is forbidden without
+explicit manual approval. Making real_execution_allowed a constant False and
+omitting any execution method keeps "report only" a structural guarantee.
+
+## Evidence:
+tests/test_readiness.py — 9 tests: default NOT_READY, single failing gate blocks,
+real flags enabled fail the safety gate, all-gates-pass-but-no-approval NOT_READY,
+all-gates+approval READY, report never authorizes execution (real_execution_allowed
+False even when READY), no execution method, no execution field, summary text.
+All pass (349 total). This completes the 10_TASK_QUEUE.md roadmap.
+
+## Alternatives Considered:
+- Letting READY enable real trading: rejected — readiness is advisory; enabling
+  real is a separate, manual, out-of-scope step.
+- A new top-level src/readiness package: rejected — placed in src/reflection
+  (review/report concern) to avoid structural churn.
+
+## Risk:
+Gate inputs are supplied by the caller; a wrong input could mislabel readiness.
+
+## Mitigation:
+Default verdict is NOT_READY; the report never executes; real-money remains gated
+behind manual approval and the execution gateway's flags regardless of this report.
+
+## Files Affected:
+src/reflection/readiness.py, src/reflection/__init__.py, tests/test_readiness.py
+
+## Status:
+Accepted
