@@ -14,13 +14,13 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 7: Risk and Execution
 
 ## Current Task ID:
-P7-001
+P7-002
 
 ## Current Task Goal:
-Risk Governor — full risk checks; final authority over execution.
+Position Sizing — calculate lot size from risk, stop distance, broker contract rules, spread/slippage buffer.
 
 ## Current Status:
-P6-002 complete. Confidence/uncertainty engine implemented and tested. Phase 6 finished.
+P7-001 complete. Risk Governor implemented and tested (all 9 mandatory blocks proven).
 
 ---
 
@@ -41,59 +41,54 @@ P6-002 complete. Confidence/uncertainty engine implemented and tested. Phase 6 f
 - P4-002 completed: regime engine.
 - P5-001 completed: order-flow proxy engine.
 - P5-002 completed: gold futures confirmation layer.
-- P6-001 completed: trade hypothesis engine.
+- P6-001 completed: trade hypothesis engine (committed bb97d28).
 - P6-002 completed: confidence and uncertainty engine.
+- P7-001 completed: risk governor.
 
-## P6-002 Details
+## P7-001 Details
 
 Files added/changed:
-- src/strategy/scoring.py — ConfidenceEngine + ComponentScores + ConfidenceResult + ScoreRecommendation.
-- src/strategy/__init__.py — export scoring API.
-- tests/test_scoring.py — 10 tests.
+- src/risk/governor.py — RiskGovernor + RiskLimits + RiskContext + RiskDecision + RiskAction + RiskCheck.
+- src/risk/__init__.py — export risk API.
+- tests/test_risk_governor.py — 19 tests.
 
 Design notes:
-- ComponentScores: structure, liquidity, regime, volatility, session, execution_quality, each validated in [0,1].
-- confidence = clamp(mean(components) + proxy.confidence_adjustment + futures.confidence_adjustment, 0, 1).
-- uncertainty = clamp((1-mean)*0.5 + spread*0.5 + proxy.uncertainty_adjustment + futures.uncertainty_adjustment, 0, 1); spread = max-min component (disagreement raises uncertainty).
-- Reuses P5-001 OrderFlowProxy and P5-002 FuturesConfirmation adjustment outputs (optional args).
-- Recommendation: uncertainty >= block_uncertainty(0.7) OR confidence < min_confidence(0.3) -> BLOCK (size 0); uncertainty >= reduce_uncertainty(0.4) -> REDUCE (size 0.5); else ALLOW (size 1).
-- HARD RULE: confidence alone cannot bypass risk. ConfidenceResult always has authorizes_trade=False and risk_governor_required=True; no approval/authorization field; engine has no approve/authorize/execute method (test-enforced). Recommendation is eligibility only; risk governor (P7) has final authority. No look-ahead.
+- evaluate(decision: TradeDecision, context: RiskContext) -> RiskDecision (APPROVE / REDUCE / BLOCK). Never places orders (test asserts no order/send/execute/buy/sell/place method).
+- Accumulates ALL failing checks then BLOCKs if any. RiskCheck codes: NON_ACTIONABLE, WRONG_SYMBOL, BROKER_STATE_UNKNOWN, NO_STOP_LOSS, INVALID_LOT_SIZE, SPREAD_TOO_HIGH, RISK_TOO_HIGH, DAILY_LOSS_REACHED, WEEKLY_LOSS_REACHED, MAX_TRADES_REACHED, MAX_OPEN_TRADES, DUPLICATE_TRADE, CONSECUTIVE_LOSSES, SCORING_BLOCKED.
+- RiskLimits defaults = demo profile (INIT-007): max_risk_per_trade 0.005, max_daily_loss 0.02, max_weekly_loss 0.05, max_trades_per_day 3, max_open_trades 1, max_spread 50, lot min/step 0.01/max 100, max_consecutive_losses None (off by default).
+- RiskContext: broker (BrokerState), current_spread, lot_size, intended_risk_pct, daily/weekly_loss_pct, trades_today, consecutive_losses, open_symbols, size_factor_hint (from P6-002 scoring).
+- Broker state unknown = connection != CONNECTED, or trade_allowed False, or balance None.
+- Duplicate = decision.symbol already in open_symbols; exposure = broker.open_positions >= max_open_trades (separate codes).
+- size_factor_hint <= 0 -> BLOCK (scoring vetoed); < 1 -> REDUCE; else APPROVE. Confidence cannot bypass a hard block (test-proven).
+- intended_risk_pct is provided by the caller (position sizing is P7-002); the governor validates it against max_risk_per_trade.
 
 Tests run:
-- `.venv/bin/python -m pytest tests/ -q` → 223 passed (10 scoring + 11 hypothesis + 11 futures + 10 orderflow + 7 regime + 10 htf-bias + 11 premium/discount + 11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
+- `.venv/bin/python -m pytest tests/ -q` → 242 passed (19 risk-governor + 10 scoring + 11 hypothesis + 11 futures + 10 orderflow + 7 regime + 10 htf-bias + 11 premium/discount + 11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
 
 Errors: none.
-
-P6-001 was committed in this session as bb97d28 (its closeout commit had been missed before the resume).
 
 ---
 
 # Next Task
 
 ## Task:
-P7-001: Risk Governor
+P7-002: Position Sizing
 
 ## Goal:
-Implement full risk checks; the risk governor has final authority over execution (INIT-003).
+Calculate lot size from risk, stop distance, broker contract rules, spread/slippage buffer.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- src/risk/ + src/utils/ + tests/. Reuse TradeDecision, BrokerState (src/data/) and risk settings. Do not touch src/execution (P7-003) or src/strategy.
+- src/risk/ + src/utils/ + tests/. Reuse TradeDecision and RiskLimits. Do not touch src/execution.
 
-## Tests (07_TEST_POLICY.md Risk Tests — must all be proven):
-- no stop-loss = blocked,
-- too much risk = blocked,
-- daily loss reached = blocked,
-- weekly loss reached = blocked,
-- spread too high = blocked,
-- invalid lot size = blocked,
-- broker state unknown = blocked,
-- duplicate trade = blocked,
-- wrong symbol = blocked.
+## Tests:
+- correct lot calculation,
+- excessive risk blocked.
 
-## Notes for P7-001 (03_RISK_POLICY.md):
-- The governor APPROVES / REDUCES / BLOCKS a TradeDecision against account/broker state and risk limits. It must NEVER place orders (that is P7-003 execution gateway).
-- Do NOT weaken risk checks; do NOT delete/bypass risk tests (07_TEST_POLICY.md, 08_ERROR_POLICY.md).
-- Read 03_RISK_POLICY.md and INIT-007 (demo risk: 0.50%/trade, 2% daily, 5% weekly, 3 trades/day, 1 open) before implementing.
+## Notes for P7-002 (03_RISK_POLICY.md Position Sizing Rule):
+- lot = (account_balance * risk_pct) / (stop_distance_in_price * contract_value_per_price_unit), then snap DOWN to lot_step and clamp to [min_lot, max_lot]. Include a spread/slippage buffer in the effective stop distance.
+- NEVER reduce stop distance to increase size. If the logical stop is too wide (computed lot < min_lot), reduce size or skip (return a no-trade/blocked sizing result), do not shrink the stop.
+- Excessive resulting risk (e.g., min_lot still exceeds max_risk_per_trade) must be blocked.
+- Output feeds the Risk Governor's lot_size / intended_risk_pct. No order placement.
 
 ---
 

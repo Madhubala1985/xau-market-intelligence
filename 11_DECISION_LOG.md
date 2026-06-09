@@ -1013,3 +1013,56 @@ src/strategy/scoring.py, src/strategy/__init__.py, tests/test_scoring.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-16
+
+## Date:
+2026-06-09
+
+## Area:
+Risk
+
+## Decision:
+The Risk Governor (P7-001) evaluates a TradeDecision against a RiskContext
+(BrokerState + spread, lot, intended_risk_pct, loss %, counts, open symbols,
+scoring hint) and the RiskLimits (demo profile defaults from INIT-007). It
+accumulates every failing check and returns BLOCK if any fails, else REDUCE (when
+the scoring size hint < 1) or APPROVE. It never places orders. RiskCheck codes
+cover the nine mandatory blocks plus exposure, trades/day, consecutive losses,
+non-actionable, and scoring-veto.
+
+## Reason:
+Implements 03_RISK_POLICY.md and INIT-003 (risk has final authority). Accumulating
+all failures gives complete diagnostics. intended_risk_pct is an input because
+position sizing is P7-002; the governor validates it against the per-trade limit.
+Confidence/scoring can never bypass a hard block.
+
+## Evidence:
+tests/test_risk_governor.py — 19 tests: clean APPROVE, scoring REDUCE/BLOCK, all
+nine mandatory blocks (no stop-loss, too much risk, daily/weekly loss, spread too
+high, invalid lot, broker unknown, duplicate, wrong symbol), exposure, trades/day,
+consecutive losses, non-actionable, accumulated multi-failure, high-confidence
+cannot bypass, and no-execution-method guard. All pass (242 total).
+
+## Alternatives Considered:
+- Computing position size inside the governor: rejected — sizing is P7-002; the
+  governor consumes intended_risk_pct/lot_size and validates them.
+- Short-circuiting on the first failure: rejected — accumulating all failures is
+  better for diagnostics and audit.
+
+## Risk:
+Governor depends on accurate context (loss %, counts, spread, risk %) supplied by
+upstream state; max_consecutive_losses is off by default in demo.
+
+## Mitigation:
+All limits are configurable via RiskLimits; checks are deterministic and fully
+tested; the execution gateway (P7-003) will re-verify before any order.
+
+## Files Affected:
+src/risk/governor.py, src/risk/__init__.py, tests/test_risk_governor.py
+
+## Status:
+Accepted
