@@ -10,17 +10,18 @@ Phase 12: Live Demo Readiness
 
 ## Current Task
 
-LIVE-VERIFY-001: Generate Implementation Evidence Pack
+WINMT5-001: Validate MT5 Demo Connectivity
 
 ## Last Completed Task
 
 P0-P11 roadmap completed.
 INT-001: DecisionPipeline integration completed.
 RISK-001: Leverage-aware sizing and protected pyramiding completed.
+LIVE-VERIFY-001: Implementation evidence pack generator completed.
 
 ## Next Task
 
-LIVE-VERIFY-001
+WINMT5-001
 
 ## Current Execution Mode
 
@@ -48,14 +49,20 @@ ALLOWED
 
 ## Next Exact Action
 
-Start LIVE-VERIFY-001:
-Generate a compact implementation evidence pack (implemented / tested / stubbed /
-live-proven / not-yet-live-proven modules) under reports/runtime/.
+Start WINMT5-001:
+Validate MT5 demo terminal connectivity and XAU/USD read-only data on the Windows
+MT5 host (init/login, demo account, symbol info, candles, spread, account info),
+with NO order_send and no credentials printed. If MetaTrader5 cannot import in
+WSL, create a Windows-side runner / safe bridge plan (22_MT5_WINDOWS_VALIDATION.md).
+
+The implementation evidence pack is regenerated with:
+  python scripts/generate_evidence_pack.py
+Output lands in reports/runtime/ (git-ignored runtime artifact).
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading.
 - Do not print credentials.
-- Do not place orders in LIVE-VERIFY-001.
+- Do not place orders. Do not call order_send in WINMT5-001 (data validation only).
 - Do not start demo orders until WINMT5-001, LIVE-001, LIVE-002, and DEMO-001 pass.

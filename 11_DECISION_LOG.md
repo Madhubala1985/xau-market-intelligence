@@ -1750,3 +1750,71 @@ tests/test_leverage_sizing.py, tests/test_pyramiding.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+LIVE-VERIFY-001
+
+## Date:
+2026-06-09
+
+## Area:
+Testing / Execution
+
+## Decision:
+The implementation evidence pack (LIVE-VERIFY-001) is produced by a read-only
+generator script, scripts/generate_evidence_pack.py, not by hand. It performs
+filesystem introspection only (it does NOT import or execute src modules, never
+calls order_send, never trades, never reads/prints credentials). It discovers
+every non-trivial src module, joins each to a curated classification (layer,
+summary, tested-by, external-mock boundary, live-proven, shadow-ready,
+demo-order-ready, needs-Windows-MT5), auto-counts test functions per mapped test
+file (deduped for the total), and renders reports/runtime/evidence_pack.md +
+.json. build_evidence() RAISES if any discovered module is unclassified, so the
+report can never silently omit a module. By policy the table hard-codes
+live_proven=False for all modules (WINMT5-001 not run) and ready_for_demo_order=
+False for all modules (DEMO-001 gates not passed). The evidence output is written
+under reports/runtime/, which is git-ignored; the committed deliverable is the
+generator + its test + doc updates, and the artifact is regenerated on demand.
+
+## Reason:
+A generator keeps the evidence pack honest, deterministic, and refreshable as the
+codebase evolves, rather than a stale hand-written snapshot. Read-only
+introspection (no imports/execution) guarantees the report itself cannot trade or
+touch the broker. Treating reports/runtime/ as a runtime artifact matches the
+existing .gitignore policy (like logs/), avoiding a forced override of project
+config. Hard-coding the two safety invariants (no live-proven, no demo-order-ready)
+makes the report structurally unable to over-claim readiness.
+
+## Evidence:
+tests/test_evidence_pack.py — 8 tests: every src module classified (report set ==
+discovered set), all implemented, live_proven total == 0, ready_for_demo_order
+total == 0, MT5-boundary modules need Windows validation + external-mock, core
+modules have positive test counts, all required markdown sections render, and the
+generator contains no order_send call / no real-trading enablement. Full suite:
+395 passed. Generated pack: 34 modules, 368 test functions across 30 mapped test
+files, 5 modules requiring WINMT5-001, 0 live-proven, 0 demo-order-ready.
+
+## Alternatives Considered:
+- Hand-writing a static markdown report: rejected — goes stale and is unverifiable;
+  a tested generator stays accurate.
+- Importing src modules to introspect them: rejected — unnecessary and risks
+  side effects; filesystem introspection is sufficient and provably inert.
+- Force-committing the artifact into git-ignored reports/runtime/: rejected — would
+  override project .gitignore policy without evidence; commit the generator instead.
+
+## Risk:
+The classification table is curated judgment; if a new src module is added it must
+be classified or the generator (and its test) will fail.
+
+## Mitigation:
+That failure is intentional and surfaced by build_evidence() + the coverage test,
+forcing the table to stay complete and honest as the code grows.
+
+## Files Affected:
+scripts/generate_evidence_pack.py, tests/test_evidence_pack.py
+(output: reports/runtime/evidence_pack.md + .json — git-ignored runtime artifact)
+
+## Status:
+Accepted

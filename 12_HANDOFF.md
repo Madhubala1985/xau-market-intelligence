@@ -14,16 +14,17 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 12: Live Demo Readiness
 
 ## Current Task ID:
-LIVE-VERIFY-001
+WINMT5-001
 
 ## Current Task Goal:
-Generate a compact implementation evidence pack (implemented / tested / stubbed /
-live-proven / not-yet-live-proven modules) under reports/runtime/.
+Validate MT5 demo terminal connectivity and XAU/USD read-only data on the Windows
+MT5 host. No order_send. No credentials printed.
 
 ## Current Status:
 P0-P11 roadmap is complete. INT-001 DecisionPipeline is complete. RISK-001
-leverage-aware sizing and protected pyramiding is complete and tested. Next phase
-prepares the system for live shadow and supervised MT5 demo execution.
+leverage-aware sizing and protected pyramiding is complete and tested.
+LIVE-VERIFY-001 implementation evidence pack generator is complete and tested.
+Next gate is real MT5 demo connectivity validation on a Windows host.
 
 ---
 
@@ -31,38 +32,50 @@ prepares the system for live shadow and supervised MT5 demo execution.
 
 - P0-P11 roadmap completed and tested.
 - INT-001 completed: engines wired into DecisionPipeline.
-- RISK-001 completed:
-  - src/risk/leverage_sizing.py: LeverageAwareSizer with SymbolSpec (contract/tick),
-    DemoTierTable (NORMAL $40 / HIGH_CONFLUENCE $80 / ELITE $100), AccountSnapshot,
-    ConfidenceTier, TradingMode. Sizes from the dollar max-loss cap and the
-    structural stop; leverage only affects margin (never loss/lot); fixed lots
-    (0.01/0.05/0.10) assessed against the cap; real mode uses a conservative
-    balance-relative cap (no demo-tier inheritance).
-  - src/risk/pyramiding.py: PyramidingGuard + OpenTrade + PyramidLimits enforcing
-    protected pyramiding (add only into protected, non-losing winners with a fresh
-    setup, own risk plan, continuation support, and within the total-exposure cap).
-  - Tests: tests/test_leverage_sizing.py (19), tests/test_pyramiding.py (12).
-- Real-money execution remains forbidden. No orders placed in RISK-001.
+- RISK-001 completed: src/risk/leverage_sizing.py (LeverageAwareSizer, SymbolSpec,
+  DemoTierTable, AccountSnapshot, ConfidenceTier, TradingMode) and
+  src/risk/pyramiding.py (PyramidingGuard, OpenTrade, PyramidLimits), with
+  tests/test_leverage_sizing.py and tests/test_pyramiding.py.
+- LIVE-VERIFY-001 completed:
+  - scripts/generate_evidence_pack.py: read-only introspection generator (does not
+    import/run src; no order_send; no credentials). Classifies every src module
+    (implemented / tested / external-mock / live-proven / shadow-ready /
+    demo-order-ready / needs-Windows-MT5) and renders reports/runtime/
+    evidence_pack.md + .json. build_evidence() raises if any module is
+    unclassified, keeping the report honest.
+  - tests/test_evidence_pack.py: verifies full module coverage, live_proven == 0,
+    ready_for_demo_order == 0, MT5-boundary modules need Windows validation, and
+    all required markdown sections render.
+  - Evidence pack output lives under reports/runtime/ which is GIT-IGNORED
+    (runtime artifact). The committed deliverable is the generator + test + docs;
+    regenerate with `python scripts/generate_evidence_pack.py`.
+  - Findings: 34 modules, all implemented and tested; 5 MT5/order-boundary modules
+    (broker.errors, broker.mt5_settings, broker.mt5_data_adapter,
+    execution.gateway, execution.shadow) are external-mock and require WINMT5-001;
+    0 modules live-proven; 0 modules cleared for demo orders.
+- Real-money execution remains forbidden. No orders placed. No credentials printed.
 
 ---
 
 # Next Task
 
 ## Task:
-LIVE-VERIFY-001: Generate Implementation Evidence Pack
+WINMT5-001: Validate MT5 Demo Connectivity
 
 ## Goal:
-Create a compact report showing implemented modules, tested modules,
-stubbed/mocked modules, live-proven modules, and not-yet-live-proven modules.
+Validate MT5 demo terminal connectivity and XAU/USD read-only data: MT5 init/login,
+demo account verified, XAU/USD symbol detected, symbol info read, candles fetched,
+spread read, account info read safely.
 
 ## Rules:
-- No broad rewrite.
-- No strategy changes.
-- No order placement.
+- No orders. No order_send. No credentials printed.
+- If WSL cannot import MetaTrader5, create a Windows-side runner or safe bridge plan
+  (22_MT5_WINDOWS_VALIDATION.md). Do not fake live validation.
 
 ## Allowed Files:
-- reports/runtime/
-- scripts/ (read-only evidence generation, optional)
+- src/broker/
+- scripts/
+- tests/
 - CURRENT_STATE.md
 - 12_HANDOFF.md
 - 11_DECISION_LOG.md
@@ -70,11 +83,11 @@ stubbed/mocked modules, live-proven modules, and not-yet-live-proven modules.
 ## Forbidden Files:
 - .env
 - real-money configuration
-- uncontrolled execution code
+- src/execution/ order paths
 
 ## Stop Condition:
-- evidence report created under reports/runtime/,
-- commit LIVE-VERIFY-001.
+- validation report created,
+- commit WINMT5-001.
 
 ---
 
