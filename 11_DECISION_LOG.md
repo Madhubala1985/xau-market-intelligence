@@ -747,3 +747,55 @@ src/regime/htf_bias.py, src/regime/__init__.py, tests/test_htf_bias.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-11
+
+## Date:
+2026-06-09
+
+## Area:
+Strategy
+
+## Decision:
+The regime engine (P4-002) classifies a candle window into exactly one Regime via
+a priority-ordered decision: insufficient data -> NO_TRADE; external news_risk
+flag -> NEWS_RISK; structure direction flips >= 2 -> CHOPPY; events with no flips,
+>= 1 BOS and a directional final_bias -> TREND; volatility ratio (second-half /
+first-half avg candle range) >= 1.5 -> EXPANSION; <= 0.67 -> COMPRESSION; no
+structural breaks -> RANGE; otherwise NO_TRADE. Reuses P3-001 structure events.
+
+## Reason:
+Encodes 02_ARCHITECTURE.md section 10 mechanically and deterministically.
+Priority ordering guarantees a single regime per window. Reusing structure
+events keeps regime consistent with the rest of the analysis stack; volatility
+ratio captures compression/expansion. No look-ahead (prefix-stable structure;
+window-only volatility).
+
+## Evidence:
+tests/test_regime.py — 7 tests: uptrend -> TREND, alternating structure -> CHOPPY
+(>=2 flips), widening -> EXPANSION, contracting -> COMPRESSION, bounded/stable ->
+RANGE, news flag -> NEWS_RISK, too-few-candles -> NO_TRADE. All pass (181 total).
+
+## Alternatives Considered:
+- Multi-label regimes (e.g., trending + expanding): rejected for now — a single
+  priority-ordered label is simpler for downstream consumers; can be enriched
+  later via RegimeResult features.
+- Internal news detection: deferred — NEWS_RISK is an external flag until a
+  validated news module exists.
+
+## Risk:
+Thresholds (expansion/compression factors, choppy_flips, min_candles, swing
+strength) affect classification; volatility ratio is a coarse two-window measure.
+
+## Mitigation:
+All thresholds are configurable; RegimeResult exposes the underlying features
+(bos/choch counts, flips, volatility_ratio) for downstream scoring.
+
+## Files Affected:
+src/regime/regime_engine.py, src/regime/__init__.py, tests/test_regime.py
+
+## Status:
+Accepted

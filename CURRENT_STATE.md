@@ -6,11 +6,11 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 4: Regime and Bias
+Phase 5: Order-Flow Proxy and Futures Context
 
 ## Current Task
 
-P4-002: Regime Engine
+P5-001: Order-Flow Proxy Engine
 
 ## Last Completed Task
 
@@ -28,10 +28,11 @@ P3-003: Liquidity Sweep Engine
 P3-004: FVG / Order Block / Supply-Demand Engine
 P3-005: Premium/Discount Engine
 P4-001: Daily and 4H Bias Engine
+P4-002: Regime Engine
 
 ## Next Task
 
-P4-002: Regime Engine
+P5-001: Order-Flow Proxy Engine
 
 ## Current Execution Mode
 
@@ -58,11 +59,11 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P4-002:
-Implement the Regime Engine that classifies the current market condition as
-trend, range, compression, expansion, choppy, news-risk, or no-trade. Build on
-the Candle schema, the structure engine (src/structure/), and existing analysis;
-no look-ahead.
+Start P5-001:
+Implement the Order-Flow Proxy Engine that uses MT5 tick volume, spread behavior,
+tick movement, and an optional delta/CVD proxy cautiously. Proxy values must be
+calculated but must NOT produce a direct trade signal alone (INIT-005). Build on
+the Candle/Tick schemas (src/data/); no look-ahead.
 
 ## Safety Notes
 
@@ -71,4 +72,5 @@ no look-ahead.
 - Do not print credentials.
 - Do not place MT5 orders (data / analysis only).
 - MT5 adapter (src/broker/) is data-read only; order_send is never called.
-- Regime classification must not use future candles (no look-ahead).
+- Order-flow proxy is a proxy only (INIT-005): no direct trade signal from proxy
+  alone; no look-ahead.

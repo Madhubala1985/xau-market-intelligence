@@ -11,16 +11,16 @@ Claude must update this file before stopping, before token/session exhaustion, a
 # Current Project State
 
 ## Current Phase:
-Phase 4: Regime and Bias
+Phase 5: Order-Flow Proxy and Futures Context
 
 ## Current Task ID:
-P4-002
+P5-001
 
 ## Current Task Goal:
-Regime Engine — classify trend, range, compression, expansion, choppy, news-risk, no-trade.
+Order-Flow Proxy Engine — use MT5 tick volume, spread behavior, tick movement, and optional delta/CVD proxy cautiously.
 
 ## Current Status:
-P4-001 complete. Daily and 4H bias engine implemented and tested.
+P4-002 complete. Regime engine implemented and tested. Phase 4 finished.
 
 ---
 
@@ -41,27 +41,25 @@ P4-001 complete. Daily and 4H bias engine implemented and tested.
 - P3-004 completed: FVG / order block / supply-demand engine implemented and tested.
 - P3-005 completed: premium/discount engine implemented and tested.
 - P4-001 completed: daily and 4H bias engine implemented and tested.
+- P4-002 completed: regime engine implemented and tested.
 
-## P4-001 Details
+## P4-002 Details
 
 Files added/changed:
-- src/regime/htf_bias.py — HtfBiasEngine + BiasResult + HtfBias enum.
-- src/regime/__init__.py — package exports.
-- tests/test_htf_bias.py — 10 tests (bias cases).
+- src/regime/regime_engine.py — RegimeEngine + RegimeResult + Regime enum.
+- src/regime/__init__.py — export regime API.
+- tests/test_regime.py — 7 tests (regime cases).
 
 Design notes:
-- Each timeframe's directional bias = market-structure final_bias (P3-001, the trend after the latest BOS/CHOCH).
-- Daily is the primary authority; 4H confirms. Combination matrix:
-  - daily None (no data) -> NO_TRADE.
-  - daily NEUTRAL -> NEUTRAL.
-  - daily BULLISH: 4H BEARISH -> NO_TRADE (conflict); else BULLISH.
-  - daily BEARISH: 4H BULLISH -> NO_TRADE (conflict); else BEARISH.
-  - Missing 4H is treated as "not opposing" (daily leads).
-- Output enum HtfBias: BULLISH / BEARISH / NEUTRAL / NO_TRADE. BiasResult also carries daily_bias, h4_bias (Optional[Bias], None == insufficient), and a reason string.
-- No look-ahead: structure bias is prefix-stable.
+- Classifies a candle window into one Regime: TREND, RANGE, COMPRESSION, EXPANSION, CHOPPY, NEWS_RISK, NO_TRADE.
+- Reuses P3-001 structure events: bos_count, choch_count, and direction flips (consecutive event-bias changes). Volatility ratio = avg range of the second half / first half of the window.
+- Priority-ordered decision (one regime per window): data(<min_candles)->NO_TRADE; news_risk flag->NEWS_RISK; flips>=choppy_flips(2)->CHOPPY; events & flips==0 & bos>=1 & directional->TREND; ratio>=expansion_factor(1.5)->EXPANSION; ratio<=compression_factor(0.67)->COMPRESSION; no events->RANGE; else NO_TRADE.
+- NEWS_RISK is an external flag input (news module integration comes later); default off.
+- RegimeResult exposes final_bias, bos_count, choch_count, flips, volatility_ratio, reason.
+- No look-ahead: structure prefix-stable; volatility uses only the window.
 
 Tests run:
-- `.venv/bin/python -m pytest tests/ -q` → 174 passed (10 htf-bias + 11 premium/discount + 11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
+- `.venv/bin/python -m pytest tests/ -q` → 181 passed (7 regime + 10 htf-bias + 11 premium/discount + 11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
 
 Errors: none.
 
@@ -70,20 +68,22 @@ Errors: none.
 # Next Task
 
 ## Task:
-P4-002: Regime Engine
+P5-001: Order-Flow Proxy Engine
 
 ## Goal:
-Classify trend, range, compression, expansion, choppy, news-risk, no-trade.
+Use MT5 tick volume, spread behavior, tick movement, and an optional delta/CVD proxy cautiously.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- likely src/regime/ + src/utils/ + tests/. Reuse src/structure/ (structure events / swings) and src/data/. Do not touch src/execution|risk|strategy.
+- likely src/orderflow/ + src/utils/ + tests/ (src/orderflow/ exists). Reuse src/data/ schemas (Candle, Tick, SpreadSnapshot). Do not touch src/execution|risk|strategy.
 
 ## Tests:
-- regime cases.
+- proxy values calculated,
+- no direct trade signal from proxy alone.
 
-## Notes for P4-002:
-- Trend: clear directional structure (consistent BOS in one direction). Range: bounded between swing high/low, no BOS. Compression: contracting volatility/range (narrowing). Expansion: widening range / displacement. Choppy: frequent alternating CHOCH / conflicting structure. News-risk and no-trade may be flagged from external/uncertain conditions (news-risk likely needs a news input later; for now allow a no-trade/unclear default).
-- Reuse structure events (BOS/CHOCH counts), swing-range width, and candle range statistics. No look-ahead.
+## Notes for P5-001 (see 16_ORDERFLOW_PROXY_POLICY.md and INIT-005):
+- MT5 volume/CVD/delta are PROXIES, not guaranteed institutional order flow.
+- Compute proxy metrics (tick-volume trends, spread behavior, tick movement, optional delta/CVD proxy from candle direction * volume) but the engine must NOT emit a trade direction/signal by itself — only proxy values / confidence adjustments.
+- No look-ahead.
 
 ---
 
@@ -95,6 +95,7 @@ Classify trend, range, compression, expansion, choppy, news-risk, no-trade.
 - .env must remain local only.
 - MetaTrader5 cannot be imported on this Linux/WSL host; keep using dependency injection for tests.
 - Analysis engines must avoid look-ahead (only past/known candles); preserve prefix stability.
+- Order-flow proxy is a proxy only (INIT-005); it cannot trigger trades alone.
 - No live self-mutation is allowed.
 
 ---
@@ -103,7 +104,7 @@ Classify trend, range, compression, expansion, choppy, news-risk, no-trade.
 
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, and 10_TASK_QUEUE.md.
 
-Continue P4-002 only.
+Continue P5-001 only.
 
 Do not broaden scope.
 Do not trade real money.
