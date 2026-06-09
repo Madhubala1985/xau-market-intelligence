@@ -14,13 +14,13 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 10: Backtest and Validation
 
 ## Current Task ID:
-P10-001
+P10-002
 
 ## Current Task Goal:
-Backtesting Engine — backtest with spread, slippage, risk, stop logic, session logic.
+Walk-Forward Validation — validate on unseen periods (train/test split, no leakage).
 
 ## Current Status:
-P9-002 complete. Reflection engine implemented and tested. Phase 9 finished.
+P10-001 complete. Backtesting engine implemented and tested.
 
 ---
 
@@ -50,6 +50,27 @@ P9-002 complete. Reflection engine implemented and tested. Phase 9 finished.
 - P8-002 completed: trailing stop engine.
 - P9-001 completed: trade journal.
 - P9-002 completed: reflection engine.
+- P10-001 completed: backtesting engine.
+
+## P10-001 Details
+
+Files added/changed:
+- src/backtest/backtester.py — Backtester + BacktestConfig + BacktestResult.
+- src/backtest/__init__.py — export backtest API.
+- tests/test_backtester.py — 9 tests.
+
+Design notes:
+- Strategy contract: strategy(history) -> Optional[TradeDecision], where history = candles[:t+1] (causal slice; the engine guarantees no future bars are passed).
+- Decision at bar t fills at bar t+1 OPEN, with cost = spread + slippage applied adversely (LONG entry = open+cost, SHORT = open-cost). Exits apply slippage. Optional commission_per_lot.
+- Stops/TPs checked bar-by-bar from bar high/low; if a bar spans both, STOP is assumed first (conservative). Open position at end closes at final close (END_OF_DATA).
+- Lot sizing reuses PositionSizer (P7-002) unless BacktestConfig.fixed_lot is set; a sizing-blocked decision is skipped. pnl = points * lot * contract_size - commission.
+- BacktestResult: trades (TradeRecords), starting/ending balance, total_pnl, counts, win_rate. Never places real orders.
+
+Tests run:
+- `.venv/bin/python -m pytest tests/ -q` → 324 passed (9 backtester + 315 prior).
+- No-future-leakage proven two ways: a spy strategy sees exactly candles[:k+1] each call; appending future bars does not change past trades. Realistic fills proven: entry at next-bar open + spread + slippage; exits with slippage; stop-first.
+
+Errors: none.
 
 ## P9-002 Details
 

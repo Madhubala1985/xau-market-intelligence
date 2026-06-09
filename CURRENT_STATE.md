@@ -10,7 +10,7 @@ Phase 10: Backtest and Validation
 
 ## Current Task
 
-P10-001: Backtesting Engine
+P10-002: Walk-Forward Validation
 
 ## Last Completed Task
 
@@ -40,10 +40,11 @@ P8-001: Stop Placement Intelligence
 P8-002: Trailing Stop Engine
 P9-001: Trade Journal
 P9-002: Reflection Engine
+P10-001: Backtesting Engine
 
 ## Next Task
 
-P10-001: Backtesting Engine
+P10-002: Walk-Forward Validation
 
 ## Current Execution Mode
 
@@ -70,17 +71,17 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P10-001:
-Implement the Backtesting Engine that backtests with spread, slippage, risk, stop
-logic, and session logic. Tests: no future leakage, realistic fills. Build in
-src/backtest/; reuse the analysis/risk/sizing/stop/trailing engines and Candle.
-Strictly causal (decision at bar t uses only data up to t).
+Start P10-002:
+Implement Walk-Forward Validation that splits data into train/test windows and
+validates on unseen periods. Tests: train/test split, no leakage. Build in
+src/backtest/; reuse the Backtester. Strictly time-ordered splits (test always
+after train); the backtester remains strictly causal within each window.
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading; ALLOW_REAL_ORDERS must stay false.
 - Do not print credentials.
-- Do not place MT5 orders (simulation only; no order_send).
-- No future leakage: a decision at bar t may use only candles up to t; fills use
-  next-bar / realistic prices with spread and slippage.
+- Do not place MT5 orders (simulation/validation only; no order_send).
+- No leakage across folds: test windows must be strictly later than their train
+  windows; never fit on test data.

@@ -1385,3 +1385,58 @@ src/reflection/reflection.py, src/reflection/__init__.py, tests/test_reflection.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-23
+
+## Date:
+2026-06-09
+
+## Area:
+Testing
+
+## Decision:
+The backtesting engine (P10-001) is an event-driven, strictly causal simulator.
+The strategy is called with history = candles[:t+1] only (no future bars). A
+decision at bar t fills at bar t+1's OPEN with cost = spread + slippage applied
+adversely; exits apply slippage; commission_per_lot is optional. Stops/TPs are
+checked bar-by-bar from each bar's high/low, and if a bar spans both the STOP is
+assumed first (conservative). Lot sizing reuses the P7-002 PositionSizer unless
+BacktestConfig.fixed_lot is set; sizing-blocked decisions are skipped. The engine
+produces TradeRecords and a BacktestResult and never places real orders.
+
+## Reason:
+Implements 07_TEST_POLICY.md backtest requirements and the 06_DATA_POLICY.md
+look-ahead ban. Passing only causal slices makes future leakage structurally
+impossible; next-bar fills with spread/slippage and stop-first resolution avoid
+optimistic results.
+
+## Evidence:
+tests/test_backtester.py — 9 tests: next-bar entry with costs, target exit with
+slippage, stop-first when a bar spans both, pnl via lot*contract_size, spy
+strategy receives exactly candles[:k+1], appending future bars does not change
+past trades, end-of-data close, no-trade flat, and PositionSizer-based sizing.
+All pass (324 total).
+
+## Alternatives Considered:
+- Same-bar (close) fills: rejected — unrealistic and look-ahead-prone; next-bar
+  open is realistic.
+- Assuming target-first within a bar: rejected — optimistic; stop-first is the
+  conservative choice.
+
+## Risk:
+Intrabar path is unknown; stop-first is an approximation. Session rules and
+trailing are not yet wired into the loop.
+
+## Mitigation:
+Conservative stop-first avoids overstating results; the strategy callback can add
+session filtering; trailing/StopPlacement can be integrated in a later iteration
+without changing the causal/fill model.
+
+## Files Affected:
+src/backtest/backtester.py, src/backtest/__init__.py, tests/test_backtester.py
+
+## Status:
+Accepted
