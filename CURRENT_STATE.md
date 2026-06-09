@@ -10,24 +10,23 @@ Phase 12: Live Demo Readiness
 
 ## Current Task
 
-LIVE-001: Connect Live/Replay Data to DecisionPipeline and ShadowRunner
+WINMT5-LIVE-001: Execute Windows MT5 Demo Validation
 
 ## Last Completed Task
 
 P0-P11 roadmap completed.
 INT-001: DecisionPipeline integration completed.
-RISK-001: Leverage-aware sizing and protected pyramiding completed.
-LIVE-VERIFY-001: Implementation evidence pack generator completed.
-WINMT5-001: MT5 demo connectivity validator + Windows runner completed
-(tooling done; LIVE MT5 proof still PENDING the Windows host — see blocker below).
+RISK-001: Leverage-Aware Sizing and Protected Pyramiding completed.
+LIVE-VERIFY-001: Implementation Evidence Pack completed.
+WINMT5-001: MT5 validation tooling completed, but live Windows MT5 proof is still pending.
 
 ## Next Task
 
-LIVE-001 (may use replay data until the Windows MT5 live bridge is available)
+WINMT5-LIVE-001
 
 ## Current Execution Mode
 
-DEMO_CONFIGURED_BUT_NOT_YET_LIVE_VALIDATED
+DEMO_CONFIGURED_BUT_MT5_LIVE_PROOF_PENDING
 
 ## Real Trading
 
@@ -35,11 +34,11 @@ FORBIDDEN
 
 ## Demo Trading
 
-ALLOWED ONLY AFTER PHASE 12 GATES PASS
+READ-ONLY MT5 VALIDATION ONLY
 
 ## Paper / Shadow Trading
 
-ALLOWED
+PAUSED UNTIL MT5 DEMO VALIDATION IS PROVEN
 
 ## Environment Status
 
@@ -47,34 +46,28 @@ ALLOWED
 - .env is local only and ignored by git.
 - Demo MT5 credentials may be stored only in .env.
 - Real credentials are forbidden.
-- MT5 live validation is NOT yet proven: this WSL/Linux host cannot import
-  MetaTrader5 (ENVIRONMENT_ISSUE). The WINMT5-001 validator + runner are built
-  and tested; live checks 3-9 must be proven by running
-  `python scripts/winmt5_validate.py` on the Windows MT5 host.
-
-## WINMT5-001 Blocker (carry-forward)
-
-- The read-only connectivity validator (src/broker/connectivity.py) and runner
-  (scripts/winmt5_validate.py) are complete and tested; no order_send is ever
-  called and no credentials are printed.
-- On WSL the runner correctly reports outcome ENVIRONMENT_ISSUE (MetaTrader5 not
-  importable) and SKIPS live checks 3-9 instead of faking them.
-- LIVE MT5 demo proof (init/login/account/symbol/candles/spread) is still PENDING
-  a Windows host run. Re-run the runner there to obtain outcome VALIDATED.
+- WSL cannot import MetaTrader5 directly.
+- Windows MT5 validation must be run using Windows Python or a safe Windows-side runner.
 
 ## Next Exact Action
 
-Start LIVE-001:
-Feed real or REPLAYED XAU/USD data into DecisionPipeline and ShadowRunner. No
-orders; ExecutionGateway must not send. Replay data may be used until the Windows
-MT5 live bridge is available, so LIVE-001 is not blocked by the WINMT5-001 live
-proof. Regenerate the evidence pack with `python scripts/generate_evidence_pack.py`.
+Run the Windows-side MT5 validation script and prove:
+
+1. MT5 initializes.
+2. Exness demo login works.
+3. Account is not real-money.
+4. XAU/USD symbol is detected.
+5. symbol_info is read.
+6. candles are fetched.
+7. spread is read.
+8. no order_send is called.
+9. no credentials are printed.
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading.
 - Do not print credentials.
-- Do not place orders. Do not call order_send.
-- Do not start demo orders until WINMT5-001 (live proof), LIVE-001, LIVE-002, and
-  DEMO-001 pass.
+- Do not place demo orders.
+- Do not call order_send.
+- Do not continue LIVE-001 until MT5 demo validation is proven.
