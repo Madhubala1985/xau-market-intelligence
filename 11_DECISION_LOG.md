@@ -1119,3 +1119,62 @@ src/risk/position_sizing.py, src/risk/__init__.py, tests/test_position_sizing.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-18
+
+## Date:
+2026-06-09
+
+## Area:
+Execution
+
+## Decision:
+The MT5 demo execution gateway (P7-003) sends an order only after a layered gate:
+(1) hard real-money refusal (REAL_FORBIDDEN) if real is requested via
+ALLOW_REAL_ORDERS, REAL_TRADING_ENABLED, or TRADING_MODE != DEMO; (2) execution
+pre-checks (actionable, XAU symbol, stop-loss present, take-profit/exit present,
+broker connected, no duplicate); (3) Risk Governor approval (final authority);
+(4) a safe default that does nothing (DRY_RUN) unless demo_send_enabled
+(TRADING_MODE=DEMO, REAL_TRADING_ENABLED=false, ALLOW_DEMO_ORDERS=true,
+ALLOW_MT5_ORDER_SEND=true, ALLOW_REAL_ORDERS=false). Only then is order_send
+called on an injected MT5 client. The order lifecycle is logged in
+result.states; the gateway holds and logs no credentials.
+
+## Reason:
+Implements 05_EXECUTION_POLICY.md and the CLAUDE.md Trading Safety Rule. Default
+ExecutionFlags() send nothing, so accidental sends are impossible without explicit
+opt-in. Real money is refused before any work. Execution can never bypass the
+risk governor. Dependency injection keeps the gateway testable off-Windows and
+lets tests prove order_send is only called in the single allowed case.
+
+## Evidence:
+tests/test_execution_gateway.py — 14 tests: demo send when approved+enabled,
+state-logged lifecycle, rejected-order logging, default-flags never-send,
+real-orders/real-trading/non-demo refusal, wrong-symbol/no-SL/duplicate/risk
+blocks (order_send never called), blocked-state logged, and no credentials in
+request/result/flags loader. All pass (266 total). grep confirms a single gated
+order_send and no credential literals in src/execution.
+
+## Alternatives Considered:
+- Sending by default and blocking on flags: rejected — the safe default must be
+  no-send; sending requires explicit flags.
+- Letting the gateway run analysis/sizing: rejected — the execution layer does
+  not think; it validates and sends approved orders only.
+
+## Risk:
+Real MT5 retcodes/constants and symbol mapping must be confirmed on the Windows
+demo terminal; the fake client approximates them.
+
+## Mitigation:
+Constants are read from the injected client via getattr with fallbacks; the live
+adapter (src/broker) provides the real client; defaults remain no-send.
+
+## Files Affected:
+src/execution/gateway.py, src/execution/__init__.py,
+tests/test_execution_gateway.py
+
+## Status:
+Accepted

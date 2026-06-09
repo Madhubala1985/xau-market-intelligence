@@ -6,11 +6,11 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 7: Risk and Execution
+Phase 8: Trade Management
 
 ## Current Task
 
-P7-003: MT5 Demo Execution Gateway
+P8-001: Stop Placement Intelligence
 
 ## Last Completed Task
 
@@ -35,10 +35,11 @@ P6-001: Trade Hypothesis Engine
 P6-002: Confidence and Uncertainty Engine
 P7-001: Risk Governor
 P7-002: Position Sizing
+P7-003: MT5 Demo Execution Gateway
 
 ## Next Task
 
-P7-003: MT5 Demo Execution Gateway
+P8-001: Stop Placement Intelligence
 
 ## Current Execution Mode
 
@@ -65,19 +66,18 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P7-003:
-Implement the MT5 Demo Execution Gateway that places MT5 demo trades ONLY after
-risk-governor approval and only when all safety flags are enabled. Use an
-injected/mock MT5 client (Windows-only package). Tests: wrong symbol blocked, no
-SL blocked, duplicate blocked, order state logged, no credentials printed. Build
-in src/execution/; reuse RiskGovernor, TradeDecision, BrokerState.
+Start P8-001:
+Implement Stop Placement Intelligence that places the stop beyond the thesis
+invalidation using a volatility and liquidity buffer (not at obvious retail stop
+pools). Tests: obvious stop rejected, logical stop accepted. Build in
+src/trade_management/; reuse TradeDecision and structure/liquidity outputs. No
+order placement; no look-ahead.
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading; ALLOW_REAL_ORDERS must stay false.
 - Do not print credentials.
-- Demo order_send is gated behind risk approval AND the demo safety flags
-  (TRADING_MODE=DEMO, REAL_TRADING_ENABLED=false, ALLOW_DEMO_ORDERS=true,
-  ALLOW_MT5_ORDER_SEND=true). Default must never send; tests use a fake client.
-- Risk governor has final authority. Do not weaken/bypass risk checks or tests.
+- Do not place MT5 orders (stop logic only; the gateway/risk governor remain the
+  only execution path, both already gated).
+- Never widen a stop to avoid a loss; never place stops at obvious retail pools.

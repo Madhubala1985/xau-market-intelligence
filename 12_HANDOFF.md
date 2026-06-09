@@ -11,16 +11,16 @@ Claude must update this file before stopping, before token/session exhaustion, a
 # Current Project State
 
 ## Current Phase:
-Phase 7: Risk and Execution
+Phase 8: Trade Management
 
 ## Current Task ID:
-P7-003
+P8-001
 
 ## Current Task Goal:
-MT5 Demo Execution Gateway — place MT5 demo trades only after risk approval, with full safety checks.
+Stop Placement Intelligence — place stop beyond thesis invalidation using volatility and liquidity buffer.
 
 ## Current Status:
-P7-002 complete. Position sizing implemented and tested.
+P7-003 complete. MT5 demo execution gateway implemented and tested. Phase 7 finished.
 
 ---
 
@@ -45,6 +45,27 @@ P7-002 complete. Position sizing implemented and tested.
 - P6-002 completed: confidence and uncertainty engine.
 - P7-001 completed: risk governor.
 - P7-002 completed: position sizing.
+- P7-003 completed: MT5 demo execution gateway.
+
+## P7-003 Details
+
+Files added/changed:
+- src/execution/gateway.py — ExecutionGateway + ExecutionFlags + ExecutionResult + ExecutionStatus + OrderState + ExecutionCheck + load_execution_flags.
+- src/execution/__init__.py — export execution API.
+- tests/test_execution_gateway.py — 14 tests.
+
+Design / safety notes:
+- execute(decision, context) runs: hard real-money refusal -> pre-execution checks -> Risk Governor (final authority) -> safe-default dry-run -> demo order_send.
+- order_send is reached ONLY when ExecutionFlags.demo_send_enabled (TRADING_MODE=DEMO, REAL_TRADING_ENABLED=false, ALLOW_DEMO_ORDERS=true, ALLOW_MT5_ORDER_SEND=true, ALLOW_REAL_ORDERS=false) AND the governor approves AND all pre-checks pass. DEFAULT ExecutionFlags() sends nothing (DRY_RUN). Real requested (allow_real_orders / real_trading_enabled / non-DEMO mode) -> REAL_FORBIDDEN, never sends.
+- Pre-checks (ExecutionCheck): NOT_ACTIONABLE, WRONG_SYMBOL, NO_STOP_LOSS, NO_TAKE_PROFIT, BROKER_DISCONNECTED, DUPLICATE; plus RISK_BLOCKED from the governor. Any failure -> BLOCKED, no send.
+- Order lifecycle logged in result.states: SIGNAL_CREATED -> RISK_APPROVED -> ORDER_PREPARED -> ORDER_SENT -> ORDER_ACCEPTED/ORDER_REJECTED (or -> BLOCKED).
+- MT5 client is injected (Windows-only); tests use a FakeMT5 and assert order_send is only called in the allowed case. The gateway holds/logs NO credentials (order request contains only symbol/volume/type/price/sl/tp/deviation/magic/comment); verified by test and grep.
+- size_factor from a REDUCE verdict scales the sent volume.
+
+Tests run:
+- `.venv/bin/python -m pytest tests/ -q` → 266 passed (14 execution + 252 prior).
+
+Errors: none.
 
 ## P7-002 Details
 
@@ -94,26 +115,22 @@ Errors: none.
 # Next Task
 
 ## Task:
-P7-003: MT5 Demo Execution Gateway
+P8-001: Stop Placement Intelligence
 
 ## Goal:
-Place MT5 demo trades only after risk approval, with full execution safety checks.
+Place the stop beyond the thesis invalidation using a volatility and liquidity buffer (not at obvious retail stop pools).
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- src/execution/ + src/utils/ + tests/. Reuse RiskGovernor (src/risk/), TradeDecision/BrokerState (src/data/), and the MT5 client pattern from src/broker/ (injected/lazy MetaTrader5). Do not touch src/risk internals.
+- src/trade_management/ + src/utils/ + tests/. Reuse TradeDecision (src/data/), structure swings and liquidity levels (src/structure/, src/liquidity/). Do not touch src/execution|risk internals.
 
-## Tests (10_TASK_QUEUE.md P7-003):
-- wrong symbol blocked,
-- no SL blocked,
-- duplicate blocked,
-- order state logged,
-- no credentials printed.
+## Tests (10_TASK_QUEUE.md P8-001):
+- obvious stop rejected,
+- logical stop accepted.
 
-## Notes for P7-003 (CLAUDE.md Trading Safety Rule + 05_EXECUTION_POLICY.md):
-- The gateway places a demo order ONLY when: the Risk Governor APPROVES/REDUCES, AND all safety flags are on (TRADING_MODE=DEMO, REAL_TRADING_ENABLED=false, ALLOW_DEMO_ORDERS=true, ALLOW_MT5_ORDER_SEND=true, ALLOW_REAL_ORDERS=false).
-- DEFAULT must never send (dry-run/paper). Real orders are forbidden. order_send only ever reached for DEMO with all gates passed.
-- Use an injected/mock MT5 client (MetaTrader5 is Windows-only and not importable here). Tests inject a fake and assert order_send is called only in the allowed case, and never with real-order parameters.
-- Verify symbol, stop-loss present, no duplicate (open positions), lot/spread, broker connection; log order state; never print credentials.
+## Notes for P8-001 (17_STOP_AND_TRAILING_POLICY.md; read it first):
+- The stop must sit BEYOND the thesis invalidation level with a volatility (e.g., ATR-based) and liquidity buffer, so it is not parked exactly on an obvious swing/round level where retail stops cluster.
+- An "obvious" stop (right at the swing/level, no buffer) must be rejected; a logical stop (beyond invalidation + buffer, on the correct side of entry) accepted.
+- Never widen a stop to avoid a loss. No order placement. No look-ahead.
 
 ---
 
