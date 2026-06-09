@@ -697,3 +697,53 @@ tests/test_premium_discount.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-10
+
+## Date:
+2026-06-09
+
+## Area:
+Strategy
+
+## Decision:
+The Daily/4H bias engine (P4-001) derives each timeframe's directional bias from
+market-structure final_bias (P3-001) and combines them with Daily as the primary
+authority: Daily None -> NO_TRADE; Daily NEUTRAL -> NEUTRAL; Daily directional
+with an opposing 4H -> NO_TRADE (conflict); otherwise the Daily direction
+(4H confirming or merely not opposing). Output enum HtfBias =
+BULLISH/BEARISH/NEUTRAL/NO_TRADE. Lives in src/regime/htf_bias.py.
+
+## Reason:
+Encodes 02_ARCHITECTURE.md section 4. Reusing structure bias keeps HTF context
+consistent with lower-timeframe analysis and prefix-stable (no look-ahead).
+Treating conflict and missing-daily as NO_TRADE keeps the system safe when HTF
+context is ambiguous.
+
+## Evidence:
+tests/test_htf_bias.py — 10 tests covering component biases and the full matrix:
+aligned bull/bear, daily-leads-when-4H-neutral, both conflict cases -> NO_TRADE,
+daily-neutral -> NEUTRAL, missing daily -> NO_TRADE, missing 4H -> daily leads.
+All pass (174 total).
+
+## Alternatives Considered:
+- Folding premium/discount location into the bias: deferred — bias is structural
+  direction; premium/discount is for entry refinement (downstream).
+- Treating conflict as NEUTRAL: rejected — NO_TRADE is safer for ambiguous HTF
+  context.
+
+## Risk:
+Bias depends on swing strength and the structure model; only Daily+4H are used.
+
+## Mitigation:
+swing_strength is configurable; BiasResult exposes the component biases and a
+reason for downstream confidence scoring.
+
+## Files Affected:
+src/regime/htf_bias.py, src/regime/__init__.py, tests/test_htf_bias.py
+
+## Status:
+Accepted

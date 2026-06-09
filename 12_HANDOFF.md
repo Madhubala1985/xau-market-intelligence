@@ -14,13 +14,13 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 4: Regime and Bias
 
 ## Current Task ID:
-P4-001
+P4-002
 
 ## Current Task Goal:
-Daily and 4H Bias Engine — classify higher-timeframe bias as bullish, bearish, neutral, or no-trade.
+Regime Engine — classify trend, range, compression, expansion, choppy, news-risk, no-trade.
 
 ## Current Status:
-P3-005 complete. Premium/discount engine implemented and tested. Phase 3 finished.
+P4-001 complete. Daily and 4H bias engine implemented and tested.
 
 ---
 
@@ -40,22 +40,28 @@ P3-005 complete. Premium/discount engine implemented and tested. Phase 3 finishe
 - P3-003 completed: liquidity sweep engine implemented and tested.
 - P3-004 completed: FVG / order block / supply-demand engine implemented and tested.
 - P3-005 completed: premium/discount engine implemented and tested.
+- P4-001 completed: daily and 4H bias engine implemented and tested.
 
-## P3-005 Details
+## P4-001 Details
 
 Files added/changed:
-- src/structure/premium_discount.py — PremiumDiscountEngine + DealingRange, PremiumDiscountBand, PriceZone, DEFAULT_SEGMENTS.
-- src/structure/__init__.py — export premium/discount API.
-- tests/test_premium_discount.py — 11 tests (correct zone mapping).
+- src/regime/htf_bias.py — HtfBiasEngine + BiasResult + HtfBias enum.
+- src/regime/__init__.py — package exports.
+- tests/test_htf_bias.py — 10 tests (bias cases).
 
 Design notes:
-- DealingRange(high, low) with equilibrium = 50% midpoint; rejects degenerate (high <= low).
-- classify(range, price): discount below equilibrium, premium above, EQUILIBRIUM within a configurable band around 50% (default 0 -> exact midpoint). Prices outside the range still map (frac<0 discount, frac>1 premium).
-- segments(range): Gann-box-style bands at configurable fractions (default quartiles 0/25/50/75/100%), each labeled and classified premium/discount/equilibrium.
-- range_from_candles(candles): auto-selects the most recent confirmed swing high and swing low (reuses P3-001). Returns None if no swings or degenerate. No look-ahead (confirmed swings only).
+- Each timeframe's directional bias = market-structure final_bias (P3-001, the trend after the latest BOS/CHOCH).
+- Daily is the primary authority; 4H confirms. Combination matrix:
+  - daily None (no data) -> NO_TRADE.
+  - daily NEUTRAL -> NEUTRAL.
+  - daily BULLISH: 4H BEARISH -> NO_TRADE (conflict); else BULLISH.
+  - daily BEARISH: 4H BULLISH -> NO_TRADE (conflict); else BEARISH.
+  - Missing 4H is treated as "not opposing" (daily leads).
+- Output enum HtfBias: BULLISH / BEARISH / NEUTRAL / NO_TRADE. BiasResult also carries daily_bias, h4_bias (Optional[Bias], None == insufficient), and a reason string.
+- No look-ahead: structure bias is prefix-stable.
 
 Tests run:
-- `.venv/bin/python -m pytest tests/ -q` → 164 passed (11 premium/discount + 11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
+- `.venv/bin/python -m pytest tests/ -q` → 174 passed (10 htf-bias + 11 premium/discount + 11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
 
 Errors: none.
 
@@ -64,21 +70,20 @@ Errors: none.
 # Next Task
 
 ## Task:
-P4-001: Daily and 4H Bias Engine
+P4-002: Regime Engine
 
 ## Goal:
-Classify higher-timeframe bias as bullish, bearish, neutral, or no-trade.
+Classify trend, range, compression, expansion, choppy, news-risk, no-trade.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- likely src/regime/ + src/utils/ + tests/ (src/regime/ exists). Reuse src/structure/ (structure final_bias, premium/discount) and src/data/aggregation.py. Do not touch src/execution|risk|strategy.
+- likely src/regime/ + src/utils/ + tests/. Reuse src/structure/ (structure events / swings) and src/data/. Do not touch src/execution|risk|strategy.
 
 ## Tests:
-- bias cases (bullish / bearish / neutral / no-trade).
+- regime cases.
 
-## Notes for P4-001:
-- Derive HTF bias from market structure (P3-001 final_bias / BOS-CHOCH sequence) on Daily and 4H, optionally combined with premium/discount location.
-- Output one of: BULLISH, BEARISH, NEUTRAL, NO_TRADE. Consider a no-trade when structure is unclear / conflicting.
-- No look-ahead; reuse the existing Bias enum from src/structure/market_structure.py where possible.
+## Notes for P4-002:
+- Trend: clear directional structure (consistent BOS in one direction). Range: bounded between swing high/low, no BOS. Compression: contracting volatility/range (narrowing). Expansion: widening range / displacement. Choppy: frequent alternating CHOCH / conflicting structure. News-risk and no-trade may be flagged from external/uncertain conditions (news-risk likely needs a news input later; for now allow a no-trade/unclear default).
+- Reuse structure events (BOS/CHOCH counts), swing-range width, and candle range statistics. No look-ahead.
 
 ---
 
@@ -98,7 +103,7 @@ Classify higher-timeframe bias as bullish, bearish, neutral, or no-trade.
 
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, and 10_TASK_QUEUE.md.
 
-Continue P4-001 only.
+Continue P4-002 only.
 
 Do not broaden scope.
 Do not trade real money.

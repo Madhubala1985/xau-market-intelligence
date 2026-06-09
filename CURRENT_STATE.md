@@ -10,7 +10,7 @@ Phase 4: Regime and Bias
 
 ## Current Task
 
-P4-001: Daily and 4H Bias Engine
+P4-002: Regime Engine
 
 ## Last Completed Task
 
@@ -27,10 +27,11 @@ P3-002: Liquidity Map Engine
 P3-003: Liquidity Sweep Engine
 P3-004: FVG / Order Block / Supply-Demand Engine
 P3-005: Premium/Discount Engine
+P4-001: Daily and 4H Bias Engine
 
 ## Next Task
 
-P4-001: Daily and 4H Bias Engine
+P4-002: Regime Engine
 
 ## Current Execution Mode
 
@@ -57,10 +58,11 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P4-001:
-Implement the Daily and 4H Bias Engine that classifies higher-timeframe bias as
-bullish, bearish, neutral, or no-trade. Build on the structure engine
-(src/structure/) and aggregation (src/data/aggregation.py); no look-ahead.
+Start P4-002:
+Implement the Regime Engine that classifies the current market condition as
+trend, range, compression, expansion, choppy, news-risk, or no-trade. Build on
+the Candle schema, the structure engine (src/structure/), and existing analysis;
+no look-ahead.
 
 ## Safety Notes
 
@@ -69,4 +71,4 @@ bullish, bearish, neutral, or no-trade. Build on the structure engine
 - Do not print credentials.
 - Do not place MT5 orders (data / analysis only).
 - MT5 adapter (src/broker/) is data-read only; order_send is never called.
-- Bias classification must not use future candles (no look-ahead).
+- Regime classification must not use future candles (no look-ahead).
