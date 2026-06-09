@@ -182,11 +182,23 @@ class LeverageAwareSizer:
         mode: TradingMode = TradingMode.DEMO,
         spread_price: float = 0.0,
         slippage_price: float = 0.0,
+        hard_cap: Optional[float] = None,
     ) -> LeverageSizingResult:
-        """Compute the largest broker-valid lot whose loss stays within the cap."""
+        """Compute the largest broker-valid lot whose loss stays within the cap.
+
+        `hard_cap` (optional) is an additional dollar cap that can only TIGHTEN
+        the tier cap (the governing cap becomes min(tier cap, hard_cap)). It can
+        never enlarge the lot; passing a hard_cap above the tier cap is a no-op.
+        Used to keep tier sizing inside the Risk Governor's per-trade budget
+        when both policies apply (tightest rule wins).
+        """
         if tier is ConfidenceTier.NO_TRADE:
             return self._fail(
                 LeverageSizingStatus.NO_TRADE_TIER, "NO_TRADE tier -> risk 0", cap=0.0
+            )
+        if hard_cap is not None and hard_cap <= 0:
+            return self._fail(
+                LeverageSizingStatus.INVALID_INPUT, "hard_cap must be > 0 when given"
             )
 
         validated = self._validate(decision, spread_price, slippage_price)
@@ -195,6 +207,8 @@ class LeverageAwareSizer:
         entry, effective_stop = validated
 
         cap = self.max_loss_cap(mode, tier, account.balance)
+        if hard_cap is not None:
+            cap = min(cap, hard_cap)
         spec = self._spec
         loss_per_lot = spec.loss_per_lot(effective_stop)
 

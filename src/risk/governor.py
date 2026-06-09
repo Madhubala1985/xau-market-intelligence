@@ -85,6 +85,12 @@ class RiskContext:
     consecutive_losses: int = 0
     open_symbols: FrozenSet[str] = frozenset()
     size_factor_hint: float = 1.0  # from the confidence engine (P6-002)
+    # Set ONLY by the demo planner after PyramidingGuard explicitly ALLOWED a
+    # protected add-on (20_LEVERAGE_AND_PYRAMIDING_POLICY.md). Permits the
+    # duplicate-symbol check to pass for that one add-on, and only while the
+    # configured max_open_trades leaves room. Defaults to False: a plain
+    # duplicate same-symbol trade stays blocked.
+    protected_addon: bool = False
 
 
 @dataclass(frozen=True)
@@ -258,11 +264,22 @@ class RiskGovernor:
     def _check_duplicate(
         self, decision: TradeDecision, context: RiskContext, f: _Failures
     ) -> None:
-        if decision.symbol.strip().upper() in {s.strip().upper() for s in context.open_symbols}:
-            f.add(
-                RiskCheck.DUPLICATE_TRADE,
-                f"a position on {decision.symbol} is already open",
-            )
+        if decision.symbol.strip().upper() not in {
+            s.strip().upper() for s in context.open_symbols
+        }:
+            return
+        # A same-symbol position is open. The ONLY permitted case is a
+        # protected add-on (PyramidingGuard ALLOWED, flagged by the planner)
+        # while the open count is still below the configured max_open_trades.
+        if (
+            context.protected_addon
+            and context.broker.open_positions < self._limits.max_open_trades
+        ):
+            return
+        f.add(
+            RiskCheck.DUPLICATE_TRADE,
+            f"a position on {decision.symbol} is already open",
+        )
 
     @staticmethod
     def _aligned(value: float, step: float) -> bool:

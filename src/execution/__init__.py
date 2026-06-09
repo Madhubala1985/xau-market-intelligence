@@ -26,6 +26,16 @@ from src.execution.preflight import (
     GateStatus,
     PreflightReport,
 )
+from src.execution.positions import (
+    PositionReconciler,
+    ReconciliationReport,
+)
+from src.execution.demo_planner import (
+    DemoTradePlanner,
+    PlanCheck,
+    TradePlan,
+    confidence_tier,
+)
 
 __all__ = [
     "ExecutionGateway",
@@ -48,4 +58,11 @@ __all__ = [
     "PreflightReport",
     "GateResult",
     "GateStatus",
+    # Position safety + demo planning (DEMO-002 blockers F-3/F-4)
+    "PositionReconciler",
+    "ReconciliationReport",
+    "DemoTradePlanner",
+    "TradePlan",
+    "PlanCheck",
+    "confidence_tier",
 ]

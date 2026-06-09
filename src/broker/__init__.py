@@ -9,7 +9,7 @@ from src.broker.errors import (
     RealTradingForbiddenError,
     WrongSymbolError,
 )
-from src.broker.mt5_data_adapter import MT5DataAdapter
+from src.broker.mt5_data_adapter import BrokerPosition, MT5DataAdapter
 from src.broker.mt5_settings import (
     MT5Settings,
     load_dotenv_file,
@@ -37,6 +37,7 @@ __all__ = [
     "load_dotenv_file",
     # adapter
     "MT5DataAdapter",
+    "BrokerPosition",
     # connectivity (WINMT5-001)
     "MT5ConnectivityValidator",
     "ConnectivityReport",

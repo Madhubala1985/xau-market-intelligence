@@ -11,6 +11,7 @@ tests assert that no order function is ever invoked.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional
 
@@ -72,6 +73,25 @@ def _pos_int(value: Any) -> Optional[int]:
     except (TypeError, ValueError):
         return None
     return out if out > 0 else None
+
+
+@dataclass(frozen=True)
+class BrokerPosition:
+    """A read-only snapshot of one open MT5 position (no credentials).
+
+    direction is "LONG"/"SHORT" mapped from the MT5 position type
+    (POSITION_TYPE_BUY=0 / POSITION_TYPE_SELL=1).
+    """
+
+    ticket: int
+    symbol: str            # exact broker case as reported by the terminal
+    direction: str
+    lot_size: float
+    entry_price: float
+    stop_loss: Optional[float]
+    take_profit: Optional[float]
+    current_price: Optional[float]
+    profit: Optional[float]
 
 
 class MT5DataAdapter:
@@ -307,6 +327,47 @@ class MT5DataAdapter:
             open_positions=max(0, open_positions),
             trade_allowed=bool(_field(info, "trade_allowed", False)) and connected,
         )
+
+    def fetch_positions(self, symbol: Optional[str] = None) -> List[BrokerPosition]:
+        """Read open positions for the configured symbol (READ-ONLY).
+
+        Uses positions_get with the exact broker symbol case. Never modifies,
+        closes, or opens anything. Returns an empty list when the terminal
+        reports none.
+        """
+        if not self._connected:
+            raise BrokerConnectionError("adapter is not connected; call connect() first")
+        resolved_symbol = self._resolve_symbol(symbol)
+        mt5 = self._mt5
+        if not hasattr(mt5, "positions_get"):
+            raise DataFetchError("client does not expose positions_get")
+        raw = mt5.positions_get(symbol=resolved_symbol)
+        if raw is None:
+            return []
+
+        sell_type = getattr(mt5, "POSITION_TYPE_SELL", 1)
+        out: List[BrokerPosition] = []
+        for p in raw:
+            direction = "SHORT" if _field(p, "type") == sell_type else "LONG"
+            sl = _pos_float(_field(p, "sl"))
+            tp = _pos_float(_field(p, "tp"))
+            out.append(
+                BrokerPosition(
+                    ticket=int(_field(p, "ticket", 0) or 0),
+                    symbol=str(_field(p, "symbol", resolved_symbol)),
+                    direction=direction,
+                    lot_size=float(_field(p, "volume", 0.0) or 0.0),
+                    entry_price=float(_field(p, "price_open", 0.0) or 0.0),
+                    stop_loss=sl if sl else None,        # MT5 reports 0.0 for unset
+                    take_profit=tp if tp else None,
+                    current_price=_pos_float(_field(p, "price_current")),
+                    profit=(
+                        float(_field(p, "profit"))
+                        if _field(p, "profit") is not None else None
+                    ),
+                )
+            )
+        return out
 
     def _to_candle(self, row: Any, timeframe: Timeframe, symbol: str) -> Candle:
         """Convert a single MT5 rate row into a validated Candle."""

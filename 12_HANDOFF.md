@@ -12,34 +12,31 @@ This file allows Claude sessions to resume without losing direction.
 Phase 12: Live Demo Readiness
 
 ## Current Task ID:
-DEMO-002 (BLOCKED — see blockers)
+DEMO-002 (implementation of the supervised session loop)
 
 ## Current Task Goal:
-Supervised MT5 demo trading. NOT to be implemented/run until the recorded
-blockers clear and the user manually starts supervised demo mode.
+Build the supervised demo session loop that consumes DemoTradePlanner plans,
+applies stop proposals, and routes any order exclusively through the
+ExecutionGateway — then the user manually starts the supervised run.
 
 ## Current Status:
-LIVE-001, LIVE-002 (tooling) and DEMO-001 (preflight tooling) are complete and
-committed. WINMT5-LIVE-001 live proof passed on Windows PowerShell (VALIDATED,
-XAUUSDm, demo account, candles + spread read, no order_send).
+Windows proof CLEARED 2026-06-10: live_shadow_run --cycles 5 COMPLETED,
+live_shadow_session 5-minute run COMPLETED, demo_preflight Ready: True.
+Audit blockers F-3 (sizing/pyramiding wiring), F-4 (position reconciliation +
+protection proposals), F-5 (fail-closed news guard) are IMPLEMENTED and tested
+(commit DEMO-002-BLOCKERS). No orders are sent anywhere yet.
 
-## DEMO-002 Blockers (recorded 2026-06-10; full gate map in 24_INTELLIGENCE_AUDIT_ROADMAP.md):
-1. LIVE-002 supervised shadow session evidence not yet produced — user must run
-   on the Windows MT5 host:
-   `python scripts/live_shadow_run.py --duration-minutes 5 --poll-seconds 60 --report-name live_shadow_session`
-2. DEMO-001 preflight has not yet PASSED on the Windows MT5 host — user must run:
-   `python scripts/demo_preflight.py`
-   (On WSL the account/symbol gates are SKIPPED, which blocks readiness.)
-3. DEMO-002 requires the user to manually start supervised demo mode; Claude
-   must not start it.
-4. Audit F-3: LeverageAwareSizer + PyramidingGuard must be wired into the demo
-   execution path (confidence tier -> sizing -> pyramiding guard -> governor ->
-   gateway).
-5. Audit F-4: open-trade management loop (TrailingEngine wiring, break-even
-   protection, orphan-position reconciliation) must exist before any order.
-6. Audit F-5: news/volatility protection is unfed (news_risk always False);
-   minimal validated calendar module OR explicit operator-as-news-filter
-   runbook rule for supervised sessions.
+## Remaining before supervised demo order_send:
+1. Implement the DEMO-002 supervised session loop (planner -> gateway wiring,
+   stop-proposal application via gateway-gated calls, session report,
+   journaling with ticket=<n> notes so reconciliation can ticket-match).
+2. Operator: create configs/news_windows.json for the session week (even
+   {"windows": []} after reviewing the calendar) — unknown news state blocks
+   every plan by design. control/NEWS_BLOCK engages an immediate manual block.
+3. Operator: re-run `python scripts/demo_preflight.py` on the session day
+   (all 12 gates PASS) and verify control/KILL_SWITCH is absent.
+4. User manually starts the supervised demo session; Claude must not start it.
+5. Real trading remains forbidden throughout.
 
 ---
 

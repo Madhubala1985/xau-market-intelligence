@@ -2195,3 +2195,88 @@ tests/test_live_shadow.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-10-03
+
+## Date:
+2026-06-10
+
+## Area:
+Risk / Execution
+
+## Decision:
+(1) Windows validation proof recorded: live_shadow_run (5 cycles) COMPLETED,
+live_shadow_session (5 minutes) COMPLETED, demo_preflight Ready: True — run
+manually by the user in PowerShell on the Windows MT5 host. LIVE-001/LIVE-002/
+DEMO-001 Windows proof is cleared.
+(2) DEMO-002 blockers F-3/F-4/F-5 implemented as one demo execution path:
+DemoTradePlanner (tier -> LeverageAwareSizer -> PyramidingGuard ->
+RiskGovernor), PositionReconciler + PositionProtectionManager + read-only
+fetch_positions, and NewsRiskGuard (manual block file + static calendar,
+fail-closed on unknown).
+(3) Policy contradiction resolved tightest-rule-wins: 03_RISK_POLICY demo
+profile (0.50%/trade, max 1 open trade) vs 20_LEVERAGE_AND_PYRAMIDING_POLICY
+(tier caps $40/80/100, protected add-ons). The planner clamps the tier cap to
+the governor per-trade budget (cap = min(tier cap, balance * 0.005)) via a
+tightening-only hard_cap parameter on LeverageAwareSizer, and permits a second
+position ONLY as a PyramidingGuard-approved protected add-on through a new
+explicit RiskContext.protected_addon flag (default False) honored by the
+governor's duplicate check while open positions stay below max_open_trades
+(planner config: 2). A plain duplicate entry remains blocked; a third position
+is never planned. If the user wants tier caps to govern fully, 03 must be
+amended first — code will not weaken policy on its own.
+(4) News policy: no calendar feed exists and none is faked. NewsRiskGuard
+reports UNKNOWN without a source and the planner blocks; an empty calendar
+file is an explicit operator all-clear; a malformed calendar reads as unknown.
+
+## Reason:
+The governor's duplicate check unconditionally blocked any same-symbol second
+position, making protected pyramiding structurally impossible; the fix is an
+explicit, auditable permission (guard ALLOW + flag + open-count headroom), not
+a bypass. The 03-vs-20 contradiction would otherwise surface at runtime as
+either permanent blocks or silent policy violation.
+
+## Evidence:
+tests/test_demo_planner.py (21), tests/test_positions.py (15),
+tests/test_news_guard.py (11), extended governor/sizer behavior covered via
+planner tests: governor-clamped cap sizes 0.08 lot at $9.60 implied loss on
+$2000; tier cap binds on a $100k account; wide stop blocks instead of
+shrinking; margin blocks but never enlarges; add-on into protected winner
+allowed; unprotected/losing/no-fresh-setup add-ons blocked; third position
+never; duplicate without guard approval blocked by governor; orphans block;
+unknown/active news blocks; kill switch blocks an approved plan at the
+gateway; planner source never references order_send. Full suite: 510 passed.
+pre_demo_safety_check.sh passed.
+
+## Alternatives Considered:
+- Passing empty open_symbols to the governor for add-ons: rejected — lying to
+  the final authority is a bypass.
+- Letting tier caps govern outright: rejected — would weaken 03_RISK_POLICY
+  without user approval.
+- Skipping news handling until a feed exists: rejected — 14_SESSION policy
+  requires blocking news windows; fail-closed unknown is the honest minimum.
+
+## Risk:
+The protected_addon flag could be set by future code without a real guard
+approval.
+
+## Mitigation:
+The flag defaults False; the planner sets it only from a PyramidResult.allowed;
+governor tests pin the default-blocked behavior; DEMO-002 review must check
+any new setter of protected_addon.
+
+## Files Affected:
+src/execution/demo_planner.py, src/execution/positions.py,
+src/execution/__init__.py, src/risk/news_guard.py, src/risk/governor.py,
+src/risk/leverage_sizing.py, src/risk/__init__.py,
+src/trade_management/position_manager.py, src/trade_management/__init__.py,
+src/broker/mt5_data_adapter.py, src/broker/__init__.py,
+src/execution/live_shadow.py, scripts/generate_evidence_pack.py,
+24_INTELLIGENCE_AUDIT_ROADMAP.md, tests/test_demo_planner.py,
+tests/test_positions.py, tests/test_news_guard.py
+
+## Status:
+Accepted

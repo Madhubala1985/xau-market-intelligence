@@ -85,9 +85,33 @@ Observation / Market Artifact / Design Improvement.
 - `.gitignore` negation un-ignored all runtime journals — Proven Defect, fixed
   (DEMO-001).
 
-## 2.2 Open: must be fixed BEFORE demo trading (DEMO-002 blockers)
+## 2.2 DEMO-002 blockers — status update 2026-06-10 (second pass)
 
-### F-3. RISK-001 sizing/pyramiding engines are not wired into any decision path
+Windows proof received: live_shadow_run (5 cycles) COMPLETED, live_shadow_session
+(5 min) COMPLETED, demo_preflight Ready: True. F-3/F-4/F-5 below are now
+IMPLEMENTED (commit DEMO-002-BLOCKERS); what remains before order_send is the
+supervised demo session loop itself (DEMO-002) plus the operator steps listed
+in the gate map.
+
+- **F-3 RESOLVED:** DemoTradePlanner wires ConfidenceResult -> tier ->
+  LeverageAwareSizer (tier cap TIGHTENED by the governor per-trade budget;
+  margin can only block) -> PyramidingGuard (one base position + at most one
+  protected add-on) -> RiskGovernor (final authority; protected_addon flag in
+  RiskContext is the only — explicit, guard-gated — path past the duplicate
+  check). Policy contradiction 03-vs-20 resolved tightest-rule-wins; see
+  decision log 2026-06-10-03.
+- **F-4 RESOLVED (proposal layer):** MT5DataAdapter.fetch_positions (read-only);
+  PositionReconciler (ticket/attribute matching; ANY orphan -> planner blocks,
+  fail closed); PositionProtectionManager (BE/trailing STOP PROPOSALS via
+  TrailingStopEngine; never widens; flags missing stop-loss as a violation;
+  uses the journaled original stop for R math). Applying proposals to MT5 is
+  DEMO-002's gateway-gated job.
+- **F-5 RESOLVED (fail-closed):** NewsRiskGuard — manual block file
+  (control/NEWS_BLOCK) + optional static calendar (configs/news_windows.json).
+  No source -> state UNKNOWN -> DemoTradePlanner blocks. Malformed calendar
+  reads as unknown, never as "no news". No fake calendar feed is pretended.
+
+### F-3. RISK-001 sizing/pyramiding engines are not wired into any decision path (original finding)
 - **Class:** High-Confidence Defect (integration gap)
 - **Evidence:** `LeverageAwareSizer` and `PyramidingGuard` are implemented and
   tested but referenced nowhere outside their own modules. The pipeline sizes

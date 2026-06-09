@@ -219,6 +219,22 @@ _TABLE: Dict[str, dict] = {
         layer="risk",
         summary="journal-driven governor inputs: daily/weekly loss, streaks",
         test_file="test_risk_state_tracker.py", test_note="", **_PURE_SHADOW_READY),
+    "src.risk.news_guard": dict(
+        layer="risk",
+        summary="fail-closed news-risk guard: manual block + static calendar (F-5)",
+        test_file="test_news_guard.py", test_note="", **_PURE_SHADOW_READY),
+    "src.execution.positions": dict(
+        layer="execution",
+        summary="broker-vs-journal position reconciliation, orphan detection (F-4)",
+        test_file="test_positions.py", test_note="", **_MT5_BOUNDARY),
+    "src.execution.demo_planner": dict(
+        layer="execution",
+        summary="sized+guarded+governed demo trade plans; never sends (F-3)",
+        test_file="test_demo_planner.py", test_note="", **_MT5_BOUNDARY),
+    "src.trade_management.position_manager": dict(
+        layer="trade_management",
+        summary="BE/trailing stop proposals for open positions (F-4; no MT5 calls)",
+        test_file="test_positions.py", test_note="", **_PURE_SHADOW_READY),
     "src.execution.kill_switch": dict(
         layer="execution",
         summary="file-based manual halt honored by the gateway (DEMO-001)",

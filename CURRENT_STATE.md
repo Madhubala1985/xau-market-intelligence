@@ -44,13 +44,33 @@ governor in make_live_pipeline. DEMO-002 blockers recorded in the audit:
 RISK-001 sizing/pyramiding unwired (F-3), no open-trade management loop (F-4),
 news protection unfed (F-5).
 
+## Windows Validation Proof (2026-06-10)
+
+All three manual validations PASSED on the Windows MT5 host (PowerShell):
+1. live_shadow_run --cycles 5 -> COMPLETED (reports/runtime/live_shadow_run.*)
+2. live_shadow_run --duration-minutes 5 --report-name live_shadow_session
+   -> COMPLETED (reports/runtime/live_shadow_session.*)
+3. demo_preflight -> Ready: True (reports/runtime/demo_preflight.*)
+LIVE-001, LIVE-002, and DEMO-001 Windows proof is CLEARED.
+
+## DEMO-002 Blocker Implementation (2026-06-10)
+
+F-3/F-4/F-5 implemented (commit DEMO-002-BLOCKERS):
+- DemoTradePlanner: tier -> LeverageAwareSizer (cap = min(tier cap, governor
+  budget)) -> PyramidingGuard (protected add-ons only) -> RiskGovernor final.
+- Position safety: fetch_positions (read-only), PositionReconciler (orphans
+  fail-closed), PositionProtectionManager (BE/trailing stop proposals only).
+- NewsRiskGuard: manual block file + static calendar; UNKNOWN state blocks
+  order planning (fail-closed); wired into LiveShadowSession.
+
 ## Next Task
 
-1. User runs the LIVE-002 supervised session on the Windows MT5 host.
-2. User runs DEMO-001 preflight on the Windows MT5 host:
-   python scripts/demo_preflight.py
-   (Preflight passes only there; on WSL the MT5 gates are SKIPPED = NOT ready.)
-3. DEMO-002 only after both are clean and the user manually starts it.
+DEMO-002: implement the supervised demo session loop (planner -> gateway,
+proposal application, session report), then the user manually starts the
+supervised run. Before order_send the operator must also:
+- create configs/news_windows.json (even {"windows": []}) or engage
+  control/NEWS_BLOCK, because unknown news state blocks all plans,
+- re-run demo_preflight on the session day.
 
 ## Current Execution Mode
 

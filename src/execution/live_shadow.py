@@ -36,6 +36,7 @@ from src.execution.gateway import ExecutionGateway
 from src.execution.shadow import ShadowRunner
 from src.journal.journal import TradeJournal
 from src.risk.governor import RiskContext, RiskGovernor, RiskLimits
+from src.risk.news_guard import NewsRiskGuard
 from src.risk.state_tracker import RiskStateTracker
 from src.strategy.pipeline import (
     DecisionPipeline,
@@ -165,6 +166,7 @@ class LiveShadowSession:
         journal: TradeJournal,
         symbol: str,
         gateway: Optional[ExecutionGateway] = None,
+        news_guard: Optional[NewsRiskGuard] = None,
         exec_timeframe: Timeframe = Timeframe.M5,
         exec_count: int = 300,
         h4_count: int = 180,
@@ -187,6 +189,10 @@ class LiveShadowSession:
         # are derived from the journal so the governor sees real history
         # instead of permanent zeros (03_RISK_POLICY.md).
         self._risk_state = RiskStateTracker(journal)
+        # News risk (F-5): in shadow mode the flag is raised only when a real
+        # source says so (manual block or calendar window). The ORDER path
+        # (DemoTradePlanner) additionally fail-closes on an unknown state.
+        self._news_guard = news_guard
         self._gateway = gateway
         self._exec_tf = exec_timeframe
         self._exec_count = exec_count
@@ -209,6 +215,10 @@ class LiveShadowSession:
         spread_price = round(tick.spread, 6)
         broker = self._adapter.fetch_broker_state(now)
         risk_state = self._risk_state.snapshot(now, broker.balance)
+        news_risk = False
+        if self._news_guard is not None:
+            news_state = self._news_guard.assess(now)
+            news_risk = news_state.known and news_state.risky
 
         result = self._pipeline.decide(
             PipelineInput(
@@ -219,6 +229,7 @@ class LiveShadowSession:
                 broker=broker,
                 current_spread=spread_price,
                 risk_pct=self._risk_pct,
+                news_risk=news_risk,
                 daily_loss_pct=risk_state.daily_loss_pct,
                 weekly_loss_pct=risk_state.weekly_loss_pct,
                 trades_today=risk_state.trades_today,
