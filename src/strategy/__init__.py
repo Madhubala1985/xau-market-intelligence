@@ -10,6 +10,14 @@ from src.strategy.scoring import (
     ConfidenceResult,
     ScoreRecommendation,
 )
+from src.strategy.pipeline import (
+    DecisionPipeline,
+    PipelineContext,
+    PipelineEngines,
+    PipelineInput,
+    PipelineResult,
+    PipelineStage,
+)
 
 __all__ = [
     "TradeHypothesisEngine",
@@ -18,4 +26,10 @@ __all__ = [
     "ComponentScores",
     "ConfidenceResult",
     "ScoreRecommendation",
+    "DecisionPipeline",
+    "PipelineInput",
+    "PipelineResult",
+    "PipelineContext",
+    "PipelineEngines",
+    "PipelineStage",
 ]

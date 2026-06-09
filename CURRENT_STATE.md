@@ -10,7 +10,8 @@ Phase 11: Live Shadow and Real Readiness (COMPLETE)
 
 ## Current Task
 
-ALL QUEUED TASKS COMPLETE (P0-000 .. P11-002). Awaiting new direction.
+ALL QUEUED TASKS COMPLETE (P0-000 .. P11-002). Integration: DecisionPipeline wired
+(INT-001). Awaiting new direction.
 
 ## Last Completed Task
 
@@ -47,8 +48,9 @@ P11-002: Real-Mode Readiness Review
 
 ## Next Task
 
-None — the 10_TASK_QUEUE.md roadmap (P0 through P11) is fully implemented and tested.
-Awaiting new instructions / next-phase planning.
+None queued. INT-001 (DecisionPipeline) wired the engines into one flow. Possible
+next: a live data adapter feeding DecisionPipeline -> ShadowRunner; validate
+against a real MT5 demo terminal on Windows. Awaiting direction.
 
 ## Current Execution Mode
 

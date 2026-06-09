@@ -20,7 +20,26 @@ NONE — all queued tasks (P0-000 .. P11-002) complete.
 Roadmap complete. Awaiting new direction.
 
 ## Current Status:
-P11-002 complete. Real-mode readiness review implemented and tested. The entire 10_TASK_QUEUE.md roadmap is implemented and green (349 tests).
+Full P0..P11 roadmap green. INT-001 complete: engines wired into one DecisionPipeline (src/strategy/pipeline.py), 356 tests green. Orchestration only — produces a TradeDecision + RiskDecision; never executes orders.
+
+## INT-001 Details (engine integration, not a queued task)
+
+Files added/changed:
+- src/strategy/pipeline.py — DecisionPipeline + PipelineInput + PipelineResult + PipelineContext + PipelineEngines + PipelineStage.
+- src/strategy/__init__.py — export pipeline API.
+- tests/test_pipeline.py — 7 tests.
+
+Design notes:
+- Flow: data validation -> session/HTF bias/regime/structure/liquidity/sweeps -> order-flow proxy + futures -> setup (aligned TRUE_SWEEP gives thesis+invalidation) -> confidence scoring -> hypothesis (TradeDecision) -> stop placement -> position sizing -> Risk Governor.
+- All engines injected via PipelineEngines (defaults = real engines); tests stub htf_bias/regime/structure/sweep to drive the full APPROVE path deterministically.
+- PipelineStage: DATA_REJECTED, HYPOTHESIS (non-actionable), RISK_EVALUATED. PipelineResult carries decision, confidence, risk verdict, context, lot_size, approved.
+- Component scores are heuristic mappings (structure/liquidity/regime/volatility/session/execution-quality) in [0,1]; documented as such.
+- NEVER executes orders (no execute/order/send method — test-enforced). Sending remains the gated ExecutionGateway's job. A $2000 demo account legitimately cannot size a 0.5%-risk gold trade on a wide stop (STOP_TOO_WIDE) — the risk engine enforces this; the approve-path test uses a larger balance.
+
+Tests run:
+- `.venv/bin/python -m pytest tests/ -q` → 356 passed (7 pipeline + 349 prior).
+
+Errors: none.
 
 ---
 

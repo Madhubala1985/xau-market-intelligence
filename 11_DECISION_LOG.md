@@ -1598,3 +1598,56 @@ src/reflection/readiness.py, src/reflection/__init__.py, tests/test_readiness.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+INT-001
+
+## Date:
+2026-06-09
+
+## Area:
+Architecture
+
+## Decision:
+A DecisionPipeline (src/strategy/pipeline.py) wires the engines into one flow:
+data validation -> session / HTF bias / regime / structure / liquidity / sweeps ->
+order-flow proxy + futures -> setup (an aligned confirmed sweep yields thesis +
+invalidation) -> confidence scoring -> trade hypothesis -> stop placement ->
+position sizing -> Risk Governor. Engines are dependency-injected via
+PipelineEngines (defaults = real engines). The pipeline produces a TradeDecision
+and a RiskDecision and NEVER executes orders.
+
+## Reason:
+Turns the independently-built and tested engines into a usable end-to-end decision
+flow while preserving every safety boundary: the Risk Governor remains final
+authority, scoring cannot bypass risk, and execution stays the separately gated
+ExecutionGateway's job. DI keeps every stage testable/swappable. This is an
+integration milestone, not a queued task (roadmap P0..P11 already complete).
+
+## Evidence:
+tests/test_pipeline.py — 7 tests: data-rejected short-circuit, flat market ->
+non-actionable, full LONG setup approved (stub bias/regime/structure/sweep),
+disconnected broker blocks, news-risk blocks, no execution method, and
+high-risk-blocked-by-governor. All pass (356 total).
+
+## Alternatives Considered:
+- Hardcoding the real engines without injection: rejected — DI makes the full
+  approve path deterministically testable and lets the live runner swap stages.
+- Having the pipeline place orders: rejected — orchestration must not execute;
+  the gated ExecutionGateway / ShadowRunner own that.
+
+## Risk:
+Component-score mapping is heuristic; the setup finder currently keys off
+confirmed sweeps only; a live data adapter is still needed to feed it.
+
+## Mitigation:
+Heuristics are documented and isolated in _score_components; engines remain
+swappable; downstream still defers to the Risk Governor and the gated gateway.
+
+## Files Affected:
+src/strategy/pipeline.py, src/strategy/__init__.py, tests/test_pipeline.py
+
+## Status:
+Accepted
