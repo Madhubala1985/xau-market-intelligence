@@ -14,13 +14,13 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 7: Risk and Execution
 
 ## Current Task ID:
-P7-002
+P7-003
 
 ## Current Task Goal:
-Position Sizing — calculate lot size from risk, stop distance, broker contract rules, spread/slippage buffer.
+MT5 Demo Execution Gateway — place MT5 demo trades only after risk approval, with full safety checks.
 
 ## Current Status:
-P7-001 complete. Risk Governor implemented and tested (all 9 mandatory blocks proven).
+P7-002 complete. Position sizing implemented and tested.
 
 ---
 
@@ -44,6 +44,28 @@ P7-001 complete. Risk Governor implemented and tested (all 9 mandatory blocks pr
 - P6-001 completed: trade hypothesis engine (committed bb97d28).
 - P6-002 completed: confidence and uncertainty engine.
 - P7-001 completed: risk governor.
+- P7-002 completed: position sizing.
+
+## P7-002 Details
+
+Files added/changed:
+- src/risk/position_sizing.py — PositionSizer + SizingResult + SizingStatus.
+- src/risk/__init__.py — export sizing API.
+- tests/test_position_sizing.py — 10 tests.
+
+Design notes:
+- size(decision, balance, requested_risk_pct, spread_price=0, slippage_price=0) -> SizingResult.
+- lot = (balance * risk_pct) / (effective_stop * contract_size); effective_stop = |entry-stop| + spread_price + slippage_price (buffer WIDENS effective risk distance; the real stop is never shrunk). contract_size default 100 (XAU oz/lot).
+- Lot snapped DOWN to lot_step, clamped to max_lot, so realized risk never exceeds target.
+- STOP_TOO_WIDE: if snapped lot < min_lot -> block (skip), never shrink the stop.
+- RISK_TOO_HIGH: requested_risk_pct > max_risk_per_trade -> block (excessive risk not silently capped).
+- INVALID_INPUT: bad balance/risk/stop/buffers.
+- SizingResult feeds RiskGovernor (lot_size + risk_pct); integration test confirms an APPROVE. No order placement.
+
+Tests run:
+- `.venv/bin/python -m pytest tests/ -q` → 252 passed (10 position-sizing + 19 risk-governor + ... prior).
+
+Errors: none.
 
 ## P7-001 Details
 
@@ -72,23 +94,26 @@ Errors: none.
 # Next Task
 
 ## Task:
-P7-002: Position Sizing
+P7-003: MT5 Demo Execution Gateway
 
 ## Goal:
-Calculate lot size from risk, stop distance, broker contract rules, spread/slippage buffer.
+Place MT5 demo trades only after risk approval, with full execution safety checks.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- src/risk/ + src/utils/ + tests/. Reuse TradeDecision and RiskLimits. Do not touch src/execution.
+- src/execution/ + src/utils/ + tests/. Reuse RiskGovernor (src/risk/), TradeDecision/BrokerState (src/data/), and the MT5 client pattern from src/broker/ (injected/lazy MetaTrader5). Do not touch src/risk internals.
 
-## Tests:
-- correct lot calculation,
-- excessive risk blocked.
+## Tests (10_TASK_QUEUE.md P7-003):
+- wrong symbol blocked,
+- no SL blocked,
+- duplicate blocked,
+- order state logged,
+- no credentials printed.
 
-## Notes for P7-002 (03_RISK_POLICY.md Position Sizing Rule):
-- lot = (account_balance * risk_pct) / (stop_distance_in_price * contract_value_per_price_unit), then snap DOWN to lot_step and clamp to [min_lot, max_lot]. Include a spread/slippage buffer in the effective stop distance.
-- NEVER reduce stop distance to increase size. If the logical stop is too wide (computed lot < min_lot), reduce size or skip (return a no-trade/blocked sizing result), do not shrink the stop.
-- Excessive resulting risk (e.g., min_lot still exceeds max_risk_per_trade) must be blocked.
-- Output feeds the Risk Governor's lot_size / intended_risk_pct. No order placement.
+## Notes for P7-003 (CLAUDE.md Trading Safety Rule + 05_EXECUTION_POLICY.md):
+- The gateway places a demo order ONLY when: the Risk Governor APPROVES/REDUCES, AND all safety flags are on (TRADING_MODE=DEMO, REAL_TRADING_ENABLED=false, ALLOW_DEMO_ORDERS=true, ALLOW_MT5_ORDER_SEND=true, ALLOW_REAL_ORDERS=false).
+- DEFAULT must never send (dry-run/paper). Real orders are forbidden. order_send only ever reached for DEMO with all gates passed.
+- Use an injected/mock MT5 client (MetaTrader5 is Windows-only and not importable here). Tests inject a fake and assert order_send is called only in the allowed case, and never with real-order parameters.
+- Verify symbol, stop-loss present, no duplicate (open positions), lot/spread, broker connection; log order state; never print credentials.
 
 ---
 

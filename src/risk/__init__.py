@@ -8,6 +8,11 @@ from src.risk.governor import (
     RiskGovernor,
     RiskLimits,
 )
+from src.risk.position_sizing import (
+    PositionSizer,
+    SizingResult,
+    SizingStatus,
+)
 
 __all__ = [
     "RiskGovernor",
@@ -16,4 +21,7 @@ __all__ = [
     "RiskDecision",
     "RiskAction",
     "RiskCheck",
+    "PositionSizer",
+    "SizingResult",
+    "SizingStatus",
 ]

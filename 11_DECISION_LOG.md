@@ -1066,3 +1066,56 @@ src/risk/governor.py, src/risk/__init__.py, tests/test_risk_governor.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-17
+
+## Date:
+2026-06-09
+
+## Area:
+Risk
+
+## Decision:
+Position sizing (P7-002) computes lot = (balance * risk_pct) / (effective_stop *
+contract_size), where effective_stop = |entry-stop| + spread + slippage buffer.
+The lot is snapped DOWN to lot_step and clamped to max_lot so realized risk never
+exceeds target. If the snapped lot is below min_lot the sizer BLOCKS
+(STOP_TOO_WIDE) rather than shrinking the stop; a requested risk above the
+per-trade limit BLOCKS (RISK_TOO_HIGH). contract_size defaults to 100 (XAU
+oz/lot). The sizer never places orders; its lot_size/risk_pct feed the Risk
+Governor.
+
+## Reason:
+Implements 03_RISK_POLICY.md Position Sizing Rule: size from balance/risk/stop/
+contract/buffer, never reduce the stop to grow size, reduce-or-skip when the stop
+is too wide. Snapping down and clamping guarantee realized risk <= target.
+
+## Evidence:
+tests/test_position_sizing.py — 10 tests: correct lot (0.02 @ 0.5% of 2000, stop
+5), snap-down, buffer reduces lot, clamp to max_lot, excessive risk blocked,
+stop-too-wide blocked (stop never shrunk), wider-stop-never-increases-lot,
+invalid inputs, and a governor-integration APPROVE. All pass (252 total).
+
+## Alternatives Considered:
+- Silently capping a too-large requested risk: rejected — blocking is safer and
+  explicit (RISK_TOO_HIGH).
+- Rounding lot to nearest step: rejected — always floor so realized risk cannot
+  exceed the target.
+
+## Risk:
+contract_size is broker/symbol dependent; pip/contract specifics for the live
+demo symbol must be confirmed against MT5 symbol_info at runtime.
+
+## Mitigation:
+contract_size and all lot rules are configurable; the execution gateway (P7-003)
+and live adapter can supply broker-accurate values; the Risk Governor re-validates
+risk and lot independently.
+
+## Files Affected:
+src/risk/position_sizing.py, src/risk/__init__.py, tests/test_position_sizing.py
+
+## Status:
+Accepted

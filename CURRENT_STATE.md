@@ -10,7 +10,7 @@ Phase 7: Risk and Execution
 
 ## Current Task
 
-P7-002: Position Sizing
+P7-003: MT5 Demo Execution Gateway
 
 ## Last Completed Task
 
@@ -34,10 +34,11 @@ P5-002: Gold Futures Confirmation Layer
 P6-001: Trade Hypothesis Engine
 P6-002: Confidence and Uncertainty Engine
 P7-001: Risk Governor
+P7-002: Position Sizing
 
 ## Next Task
 
-P7-002: Position Sizing
+P7-003: MT5 Demo Execution Gateway
 
 ## Current Execution Mode
 
@@ -64,18 +65,19 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P7-002:
-Implement Position Sizing that calculates lot size from risk %, stop distance,
-broker contract rules, and a spread/slippage buffer. Per 03_RISK_POLICY.md: never
-reduce stop distance to grow size; if the logical stop is too wide, reduce size or
-skip. Excessive risk must be blocked. Build in src/risk/; reuse TradeDecision and
-RiskLimits. Feeds the Risk Governor's lot_size/risk inputs. No order placement.
+Start P7-003:
+Implement the MT5 Demo Execution Gateway that places MT5 demo trades ONLY after
+risk-governor approval and only when all safety flags are enabled. Use an
+injected/mock MT5 client (Windows-only package). Tests: wrong symbol blocked, no
+SL blocked, duplicate blocked, order state logged, no credentials printed. Build
+in src/execution/; reuse RiskGovernor, TradeDecision, BrokerState.
 
 ## Safety Notes
 
 - Do not commit .env.
-- Do not enable real trading.
+- Do not enable real trading; ALLOW_REAL_ORDERS must stay false.
 - Do not print credentials.
-- Do not place MT5 orders (sizing calculation only; no order_send).
-- Never reduce stop distance to increase size; excessive risk must be blocked.
+- Demo order_send is gated behind risk approval AND the demo safety flags
+  (TRADING_MODE=DEMO, REAL_TRADING_ENABLED=false, ALLOW_DEMO_ORDERS=true,
+  ALLOW_MT5_ORDER_SEND=true). Default must never send; tests use a fake client.
 - Risk governor has final authority. Do not weaken/bypass risk checks or tests.
