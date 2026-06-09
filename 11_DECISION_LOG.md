@@ -960,3 +960,56 @@ src/strategy/hypothesis.py, src/strategy/__init__.py, tests/test_hypothesis.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-15
+
+## Date:
+2026-06-09
+
+## Area:
+Strategy
+
+## Decision:
+The confidence/uncertainty engine (P6-002) aggregates six component scores
+(structure, liquidity, regime, volatility, session, execution_quality, each in
+[0,1]) into confidence = clamp(mean + proxy/futures confidence adjustments) and
+uncertainty = clamp((1-mean)*0.5 + component-spread*0.5 + proxy/futures
+uncertainty adjustments). It recommends BLOCK (uncertainty >= 0.7 or confidence <
+0.3), REDUCE (uncertainty >= 0.4), else ALLOW, with a size_factor. The result
+always carries authorizes_trade=False and risk_governor_required=True.
+
+## Reason:
+Implements 02_ARCHITECTURE.md section 12 and the P6-002 rules: high uncertainty
+blocks/reduces; confidence alone cannot bypass risk. Component disagreement
+(spread) raises uncertainty so conflicting evidence cannot be masked by a high
+mean. Reuses the P5-001/P5-002 adjustment outputs. The engine is eligibility-only
+and defers to the Risk Governor (P7) — enforced structurally and by tests.
+
+## Evidence:
+tests/test_scoring.py — 10 tests: strong-aligned ALLOW, clamping, out-of-range
+rejection, disagreement -> BLOCK via uncertainty, elevated uncertainty -> REDUCE,
+proxy+futures conflict raises uncertainty/lowers confidence, low confidence ->
+BLOCK, max confidence still requires risk governor, no authorization field, no
+authorization method. All pass (223 total).
+
+## Alternatives Considered:
+- uncertainty = 1 - confidence: rejected — too coupled; would let a high mean hide
+  conflict. Using component spread keeps uncertainty independent and meaningful.
+- Letting high confidence override uncertainty/risk: rejected — violates the risk
+  policy; scoring never authorizes a trade.
+
+## Risk:
+Equal component weights and fixed thresholds are simplifications.
+
+## Mitigation:
+Thresholds and reduce_factor are configurable; ConfidenceResult exposes
+confidence/uncertainty/size_factor for the risk governor (P7) to use.
+
+## Files Affected:
+src/strategy/scoring.py, src/strategy/__init__.py, tests/test_scoring.py
+
+## Status:
+Accepted

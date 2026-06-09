@@ -6,11 +6,11 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 6: Trade Hypothesis and Scoring
+Phase 7: Risk and Execution
 
 ## Current Task
 
-P6-002: Confidence and Uncertainty Engine
+P7-001: Risk Governor
 
 ## Last Completed Task
 
@@ -32,10 +32,11 @@ P4-002: Regime Engine
 P5-001: Order-Flow Proxy Engine
 P5-002: Gold Futures Confirmation Layer
 P6-001: Trade Hypothesis Engine
+P6-002: Confidence and Uncertainty Engine
 
 ## Next Task
 
-P6-002: Confidence and Uncertainty Engine
+P7-001: Risk Governor
 
 ## Current Execution Mode
 
@@ -62,19 +63,19 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P6-002:
-Implement the Confidence and Uncertainty Engine that scores structure, liquidity,
-regime, volatility, session, order-flow proxy, futures confirmation, and execution
-quality. Enforce: high uncertainty blocks/reduces a trade; confidence alone cannot
-bypass risk. Build on the analysis engines and TradeDecision (src/data/); reuse
-the proxy/futures confidence-adjustment outputs; no look-ahead.
+Start P7-001:
+Implement the Risk Governor with full risk checks. It has FINAL authority over
+execution (INIT-003). Per 03_RISK_POLICY.md / 07_TEST_POLICY.md it must block:
+no stop-loss, too much risk, daily loss reached, weekly loss reached, spread too
+high, invalid lot size, broker state unknown, duplicate trade, wrong symbol.
+Build in src/risk/; reuse TradeDecision/BrokerState (src/data/). Approve/reduce/
+block only — never place orders.
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading.
 - Do not print credentials.
-- Do not place MT5 orders (data / analysis only).
-- MT5 adapter (src/broker/) is data-read only; order_send is never called.
-- Confidence alone cannot bypass risk; high uncertainty must block/reduce. The
-  risk governor (P7) still has final authority. No look-ahead.
+- Do not place MT5 orders (risk decisioning only; no order_send).
+- Risk governor has final authority; confidence/hypothesis cannot bypass it.
+- Do not weaken risk checks; do not delete/bypass risk tests.

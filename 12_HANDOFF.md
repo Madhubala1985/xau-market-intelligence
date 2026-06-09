@@ -11,16 +11,16 @@ Claude must update this file before stopping, before token/session exhaustion, a
 # Current Project State
 
 ## Current Phase:
-Phase 6: Trade Hypothesis and Scoring
+Phase 7: Risk and Execution
 
 ## Current Task ID:
-P6-002
+P7-001
 
 ## Current Task Goal:
-Confidence and Uncertainty Engine — score structure, liquidity, regime, volatility, session, order-flow proxy, futures confirmation, execution quality.
+Risk Governor — full risk checks; final authority over execution.
 
 ## Current Status:
-P6-001 complete. Trade hypothesis engine implemented and tested.
+P6-002 complete. Confidence/uncertainty engine implemented and tested. Phase 6 finished.
 
 ---
 
@@ -42,49 +42,58 @@ P6-001 complete. Trade hypothesis engine implemented and tested.
 - P5-001 completed: order-flow proxy engine.
 - P5-002 completed: gold futures confirmation layer.
 - P6-001 completed: trade hypothesis engine.
+- P6-002 completed: confidence and uncertainty engine.
 
-## P6-001 Details
+## P6-002 Details
 
 Files added/changed:
-- src/strategy/hypothesis.py — TradeHypothesisEngine + HypothesisInput.
-- src/strategy/__init__.py — package exports.
-- tests/test_hypothesis.py — 11 tests.
+- src/strategy/scoring.py — ConfidenceEngine + ComponentScores + ConfidenceResult + ScoreRecommendation.
+- src/strategy/__init__.py — export scoring API.
+- tests/test_scoring.py — 10 tests.
 
 Design notes:
-- Composes analysis context (HypothesisInput: symbol, time, current_price, htf_bias, regime, thesis_reason, invalidation_price, entry_price, target_price, setup_type, confidence, uncertainty) into a TradeDecision (status PROPOSED).
-- Gates (return WAIT/NO_TRADE, never an invalid actionable): htf_bias NO_TRADE -> NO_TRADE; regime in {NO_TRADE, NEWS_RISK, CHOPPY} -> NO_TRADE; htf_bias NEUTRAL -> WAIT.
-- Direction from bias: BULLISH->LONG, BEARISH->SHORT.
-- HARD RULES: no thesis (empty thesis_reason) -> NO_TRADE; no invalidation_price -> NO_TRADE; invalidation on wrong side of entry -> NO_TRADE. These are also enforced structurally by the TradeDecision schema.
-- Target logic: explicit target_price if it sits in the trade direction, else a default risk-reward target (default_rr=2.0) from entry/invalidation. Stop placed at the invalidation level.
-- Hypotheses are proposals only (PROPOSED); risk governor (P7) decides permission. No look-ahead (composition only).
-- NOTE: src/strategy/ was "forbidden" only in earlier data/analysis tasks; it is the working area for P6-001+.
+- ComponentScores: structure, liquidity, regime, volatility, session, execution_quality, each validated in [0,1].
+- confidence = clamp(mean(components) + proxy.confidence_adjustment + futures.confidence_adjustment, 0, 1).
+- uncertainty = clamp((1-mean)*0.5 + spread*0.5 + proxy.uncertainty_adjustment + futures.uncertainty_adjustment, 0, 1); spread = max-min component (disagreement raises uncertainty).
+- Reuses P5-001 OrderFlowProxy and P5-002 FuturesConfirmation adjustment outputs (optional args).
+- Recommendation: uncertainty >= block_uncertainty(0.7) OR confidence < min_confidence(0.3) -> BLOCK (size 0); uncertainty >= reduce_uncertainty(0.4) -> REDUCE (size 0.5); else ALLOW (size 1).
+- HARD RULE: confidence alone cannot bypass risk. ConfidenceResult always has authorizes_trade=False and risk_governor_required=True; no approval/authorization field; engine has no approve/authorize/execute method (test-enforced). Recommendation is eligibility only; risk governor (P7) has final authority. No look-ahead.
 
 Tests run:
-- `.venv/bin/python -m pytest tests/ -q` → 213 passed (11 hypothesis + 11 futures + 10 orderflow + 7 regime + 10 htf-bias + 11 premium/discount + 11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
+- `.venv/bin/python -m pytest tests/ -q` → 223 passed (10 scoring + 11 hypothesis + 11 futures + 10 orderflow + 7 regime + 10 htf-bias + 11 premium/discount + 11 zones + 8 sweep + 9 liquidity + 8 structure + 27 sessions + 22 aggregation + 17 validation + 21 adapter + 29 schema + 1 structure-dirs).
 
 Errors: none.
+
+P6-001 was committed in this session as bb97d28 (its closeout commit had been missed before the resume).
 
 ---
 
 # Next Task
 
 ## Task:
-P6-002: Confidence and Uncertainty Engine
+P7-001: Risk Governor
 
 ## Goal:
-Score structure, liquidity, regime, volatility, session, order-flow proxy, futures confirmation, execution quality.
+Implement full risk checks; the risk governor has final authority over execution (INIT-003).
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- likely src/strategy/ + src/utils/ + tests/. Reuse src/orderflow/ (proxy + futures confidence/uncertainty adjustments), src/regime/, src/structure/, and TradeDecision. Do not touch src/execution|risk.
+- src/risk/ + src/utils/ + tests/. Reuse TradeDecision, BrokerState (src/data/) and risk settings. Do not touch src/execution (P7-003) or src/strategy.
 
-## Tests:
-- high uncertainty blocks/reduces trade,
-- confidence alone cannot bypass risk.
+## Tests (07_TEST_POLICY.md Risk Tests — must all be proven):
+- no stop-loss = blocked,
+- too much risk = blocked,
+- daily loss reached = blocked,
+- weekly loss reached = blocked,
+- spread too high = blocked,
+- invalid lot size = blocked,
+- broker state unknown = blocked,
+- duplicate trade = blocked,
+- wrong symbol = blocked.
 
-## Notes for P6-002:
-- Aggregate component scores (structure, liquidity, regime, volatility, session, order-flow proxy, futures confirmation, execution quality) into an overall confidence in [0,1] and uncertainty in [0,1].
-- Reuse the confidence_adjustment / uncertainty_adjustment outputs from the order-flow proxy (P5-001) and futures (P5-002).
-- Enforce: when uncertainty exceeds a threshold, the trade is blocked or reduced (size factor); confidence alone must NOT bypass risk — output a recommendation that still defers to the risk governor (P7). No look-ahead.
+## Notes for P7-001 (03_RISK_POLICY.md):
+- The governor APPROVES / REDUCES / BLOCKS a TradeDecision against account/broker state and risk limits. It must NEVER place orders (that is P7-003 execution gateway).
+- Do NOT weaken risk checks; do NOT delete/bypass risk tests (07_TEST_POLICY.md, 08_ERROR_POLICY.md).
+- Read 03_RISK_POLICY.md and INIT-007 (demo risk: 0.50%/trade, 2% daily, 5% weekly, 3 trades/day, 1 open) before implementing.
 
 ---
 
