@@ -852,3 +852,56 @@ src/orderflow/proxy.py, src/orderflow/__init__.py, tests/test_orderflow_proxy.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-13
+
+## Date:
+2026-06-09
+
+## Area:
+Futures Confirmation
+
+## Decision:
+The gold futures confirmation layer (P5-002) derives futures directional bias
+from futures candles via the P3-001 structure engine and compares it to the spot
+thesis bias: ALIGNED -> confidence up; CONFLICT -> confidence down + uncertainty
+up; NEUTRAL (either side neutral) -> no change; UNAVAILABLE (missing or
+< min_candles) -> zero adjustment + note. By construction futures never triggers
+a trade: FuturesConfirmation.is_trade_signal is always False, with no
+direction/signal/order field and no decision method.
+
+## Reason:
+Enforces INIT-006 and 19_GOLD_FUTURES_CONFIRMATION_POLICY.md: spot is the
+execution instrument; futures is context/confidence only and cannot trigger
+trades; missing futures data must not crash the core. Reusing the structure
+engine keeps the futures read consistent and prefix-stable (no look-ahead).
+
+## Evidence:
+tests/test_futures_confirmation.py — 11 tests: aligned (bull/bear) boosts,
+conflict reduces + raises uncertainty, neutral futures / neutral spot no change,
+missing (None/empty/too-short) -> UNAVAILABLE without crash, and three
+no-trade-signal guards. All pass (202 total).
+
+## Alternatives Considered:
+- Price-momentum-only futures direction: rejected in favor of the same
+  structure-based bias used elsewhere (consistency).
+- COT / open-interest inputs: deferred — require dated external releases (COT
+  look-ahead ban); can be added later as additional context.
+
+## Risk:
+Futures bias depends on swing strength and the structure model; only directional
+alignment is used (not magnitude or divergence depth).
+
+## Mitigation:
+swing_strength and adjustment caps are configurable; FuturesConfirmation exposes
+the component biases and a note for downstream scoring.
+
+## Files Affected:
+src/orderflow/futures_confirmation.py, src/orderflow/__init__.py,
+tests/test_futures_confirmation.py
+
+## Status:
+Accepted

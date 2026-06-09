@@ -6,11 +6,11 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 5: Order-Flow Proxy and Futures Context
+Phase 6: Trade Hypothesis and Scoring
 
 ## Current Task
 
-P5-002: Gold Futures Confirmation Layer
+P6-001: Trade Hypothesis Engine
 
 ## Last Completed Task
 
@@ -30,10 +30,11 @@ P3-005: Premium/Discount Engine
 P4-001: Daily and 4H Bias Engine
 P4-002: Regime Engine
 P5-001: Order-Flow Proxy Engine
+P5-002: Gold Futures Confirmation Layer
 
 ## Next Task
 
-P5-002: Gold Futures Confirmation Layer
+P6-001: Trade Hypothesis Engine
 
 ## Current Execution Mode
 
@@ -60,11 +61,11 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P5-002:
-Implement the Gold Futures Confirmation Layer that adds optional gold futures
-confirmation context. Futures confirms confidence only and cannot trigger trades
-alone (INIT-006); missing futures data must not break the core system; no
-look-ahead bias. Build on the Candle schema (src/data/); reuse structure bias.
+Start P6-001:
+Implement the Trade Hypothesis Engine that generates LONG, SHORT, WAIT, NO_TRADE
+hypotheses with thesis, invalidation, and target logic. Enforce: no thesis = no
+trade; no invalidation = no trade. Build on the analysis engines (structure,
+liquidity, regime, bias) and the TradeDecision schema (src/data/); no look-ahead.
 
 ## Safety Notes
 
@@ -73,5 +74,5 @@ look-ahead bias. Build on the Candle schema (src/data/); reuse structure bias.
 - Do not print credentials.
 - Do not place MT5 orders (data / analysis only).
 - MT5 adapter (src/broker/) is data-read only; order_send is never called.
-- Futures is confirmation/confidence only (INIT-006): cannot trigger trades
-  alone; missing futures data must degrade gracefully; no look-ahead.
+- Hypotheses are proposals only; the risk governor (later) has final authority.
+  No thesis = no trade; no invalidation = no trade. No look-ahead.
