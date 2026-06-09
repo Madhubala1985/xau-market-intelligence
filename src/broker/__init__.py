@@ -15,6 +15,12 @@ from src.broker.mt5_settings import (
     load_dotenv_file,
     load_mt5_settings,
 )
+from src.broker.connectivity import (
+    CheckStatus,
+    ConnectivityCheck,
+    ConnectivityReport,
+    MT5ConnectivityValidator,
+)
 
 __all__ = [
     # errors
@@ -31,4 +37,9 @@ __all__ = [
     "load_dotenv_file",
     # adapter
     "MT5DataAdapter",
+    # connectivity (WINMT5-001)
+    "MT5ConnectivityValidator",
+    "ConnectivityReport",
+    "ConnectivityCheck",
+    "CheckStatus",
 ]

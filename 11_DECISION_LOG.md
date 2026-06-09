@@ -1818,3 +1818,76 @@ scripts/generate_evidence_pack.py, tests/test_evidence_pack.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+WINMT5-001
+
+## Date:
+2026-06-09
+
+## Area:
+Broker / Execution
+
+## Decision:
+MT5 demo connectivity validation (WINMT5-001) is split into (a) a reusable,
+read-only validator src/broker/connectivity.py (MT5ConnectivityValidator) that
+runs the 10 required proofs against an INJECTED MT5 client, and (b) a Windows-side
+runner scripts/winmt5_validate.py that loads .env safely, classifies the host
+environment, and either runs the validator (MetaTrader5 available) or writes an
+honest ENVIRONMENT_ISSUE report (MetaTrader5 not importable, e.g. WSL/Linux). The
+validator reuses the existing read-only MT5DataAdapter for init/login/candles,
+verifies the account is demo/contest (REAL is refused), reads symbol_info and
+spread, and NEVER references any trade function (no order_send). It records only
+non-secret facts; the account login number is never written to the report. The
+runner loads .env via python-dotenv if present else a builtin KEY=VALUE parser,
+never printing any value, and reports missing variables by NAME only. Output goes
+to reports/runtime/winmt5_validation.md + .json (git-ignored). On this WSL host the
+runner produced outcome ENVIRONMENT_ISSUE; the LIVE proof (checks 3-9) remains
+PENDING a Windows MT5 host and is NOT marked complete (22_MT5_WINDOWS_VALIDATION.md
+"validation is not complete until real demo terminal data is proven").
+
+## Reason:
+MetaTrader5 is Windows-only; dependency injection keeps the validator testable on
+Linux and lets tests prove no order function is ever called, while the runner
+honestly classifies the environment instead of faking live results (the explicit
+ban in 22_MT5_WINDOWS_VALIDATION.md). Reusing MT5DataAdapter avoids duplicating
+connection logic and inherits its no-order guarantee. Splitting validator (src)
+from runner/IO (scripts) keeps the proof logic unit-testable and the IO thin.
+
+## Evidence:
+tests/test_winmt5_connectivity.py — 13 tests: full validation PASS (all 10
+checks), order_send/order_check never called, REAL account refused, CONTEST
+accepted, missing symbol -> FAIL + symbol_info SKIPPED, connect failure skips
+dependent checks, report contains no password and no login number, and runner
+environment classification (ENVIRONMENT_ISSUE on a no-MT5 host, honest skips of
+checks 3-9, missing-credential names, markdown sections, no order_send in source).
+Full suite: 408 passed. Live runner output on WSL: outcome ENVIRONMENT_ISSUE.
+
+## Alternatives Considered:
+- Hard-importing MetaTrader5 in the validator: rejected — breaks import/tests off
+  Windows; injection + lazy import in the runner is testable and safe.
+- Marking WINMT5-001 live-proven from the WSL run: rejected — would fake live
+  validation; the WSL outcome is explicitly ENVIRONMENT_ISSUE, live proof pending.
+- Putting the runner's IO logic in src: rejected — src stays pure/testable; the
+  thin IO + env classification lives in scripts/.
+
+## Risk:
+The validator's account/symbol field reads assume MT5 named-tuple shapes; real
+terminal field names/retcodes are only confirmed on the Windows host. Live proof
+is still outstanding.
+
+## Mitigation:
+Field access is defensive (attr-or-mapping with fallbacks); the runner records the
+real environment outcome and a bridge plan; the live proof is tracked as a
+carry-forward blocker in CURRENT_STATE.md / 12_HANDOFF.md until run on Windows.
+
+## Files Affected:
+src/broker/connectivity.py, src/broker/__init__.py, scripts/winmt5_validate.py,
+scripts/winmt5_runner_README.md, tests/test_winmt5_connectivity.py,
+scripts/generate_evidence_pack.py (classify the new module)
+(output: reports/runtime/winmt5_validation.md + .json — git-ignored runtime artifact)
+
+## Status:
+Accepted

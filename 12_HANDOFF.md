@@ -14,17 +14,18 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 12: Live Demo Readiness
 
 ## Current Task ID:
-WINMT5-001
+LIVE-001
 
 ## Current Task Goal:
-Validate MT5 demo terminal connectivity and XAU/USD read-only data on the Windows
-MT5 host. No order_send. No credentials printed.
+Feed real or REPLAYED XAU/USD data into DecisionPipeline and ShadowRunner. No
+orders; ExecutionGateway must not send.
 
 ## Current Status:
-P0-P11 roadmap is complete. INT-001 DecisionPipeline is complete. RISK-001
-leverage-aware sizing and protected pyramiding is complete and tested.
-LIVE-VERIFY-001 implementation evidence pack generator is complete and tested.
-Next gate is real MT5 demo connectivity validation on a Windows host.
+P0-P11 roadmap is complete. INT-001 DecisionPipeline is complete. RISK-001 and
+LIVE-VERIFY-001 are complete and tested. WINMT5-001 tooling (read-only
+connectivity validator + Windows runner + bridge plan) is complete and tested;
+the LIVE MT5 demo proof (checks 3-9) is PENDING a Windows host because this
+WSL/Linux host cannot import MetaTrader5 (ENVIRONMENT_ISSUE, not faked).
 
 ---
 
@@ -53,6 +54,24 @@ Next gate is real MT5 demo connectivity validation on a Windows host.
     (broker.errors, broker.mt5_settings, broker.mt5_data_adapter,
     execution.gateway, execution.shadow) are external-mock and require WINMT5-001;
     0 modules live-proven; 0 modules cleared for demo orders.
+- WINMT5-001 completed (tooling; live proof pending Windows host):
+  - src/broker/connectivity.py: MT5ConnectivityValidator runs 10 read-only proofs
+    against an injected client (init/login via the existing read-only adapter,
+    demo-account verification rejecting REAL, XAU/USD symbol + symbol_info,
+    candle fetch, spread). Never calls order_send; never writes credential values
+    (login number is excluded from the report; only non-secret facts recorded).
+  - scripts/winmt5_validate.py: Windows-side runner. Loads .env safely (python-
+    dotenv if present, else a builtin KEY=VALUE parser; no value printed),
+    classifies the environment, and on a host without MetaTrader5 writes an honest
+    ENVIRONMENT_ISSUE report (checks 1-2 + 10 resolved, 3 ENVIRONMENT_ISSUE, 4-9
+    SKIPPED) plus a WSL->Windows bridge plan. Does NOT fake live validation.
+  - scripts/winmt5_runner_README.md: Windows run instructions + bridge plan.
+  - tests/test_winmt5_connectivity.py (13): full-validation PASS, order_send never
+    called, REAL account refused, CONTEST accepted, missing symbol fails,
+    connect-failure skips dependents, no credentials in the report, and runner
+    environment classification (ENVIRONMENT_ISSUE, honest skips, missing-var names).
+  - Report artifact: reports/runtime/winmt5_validation.md + .json (git-ignored).
+    On this WSL host the runner produced outcome ENVIRONMENT_ISSUE.
 - Real-money execution remains forbidden. No orders placed. No credentials printed.
 
 ---
@@ -60,34 +79,29 @@ Next gate is real MT5 demo connectivity validation on a Windows host.
 # Next Task
 
 ## Task:
-WINMT5-001: Validate MT5 Demo Connectivity
+LIVE-001: Connect Live/Replay Data to DecisionPipeline and ShadowRunner
 
 ## Goal:
-Validate MT5 demo terminal connectivity and XAU/USD read-only data: MT5 init/login,
-demo account verified, XAU/USD symbol detected, symbol info read, candles fetched,
-spread read, account info read safely.
+Feed real or replayed XAU/USD data into DecisionPipeline and ShadowRunner so an
+end-to-end shadow run works. Pipeline may generate decisions; ShadowRunner may log
+would-trade decisions; ExecutionGateway must NOT send orders.
 
 ## Rules:
-- No orders. No order_send. No credentials printed.
-- If WSL cannot import MetaTrader5, create a Windows-side runner or safe bridge plan
-  (22_MT5_WINDOWS_VALIDATION.md). Do not fake live validation.
+- No orders. No order_send.
+- Replay data may be used until the Windows MT5 live bridge is available, so
+  LIVE-001 is not blocked by the pending WINMT5-001 live proof.
 
-## Allowed Files:
-- src/broker/
-- scripts/
-- tests/
-- CURRENT_STATE.md
-- 12_HANDOFF.md
-- 11_DECISION_LOG.md
+## Allowed Files (expected):
+- src/broker/, src/data/, src/execution/ (shadow wiring only, no sending), scripts/,
+  tests/, reports/runtime/, CURRENT_STATE.md, 12_HANDOFF.md, 11_DECISION_LOG.md
 
 ## Forbidden Files:
 - .env
 - real-money configuration
-- src/execution/ order paths
+- any ExecutionGateway order-send path
 
 ## Stop Condition:
-- validation report created,
-- commit WINMT5-001.
+- end-to-end shadow run works on replay/live data, tests pass, commit LIVE-001.
 
 ---
 
@@ -95,6 +109,8 @@ spread read, account info read safely.
 
 - Real-money trading is forbidden.
 - Demo order execution must wait for Phase 12 gates.
+- WINMT5-001 LIVE proof is still pending a Windows MT5 host (WSL cannot import
+  MetaTrader5); re-run scripts/winmt5_validate.py there to reach outcome VALIDATED.
 - Exness/MT5 credentials must not be committed.
 - .env must remain local only.
 - MT5 live terminal validation is not yet proven.

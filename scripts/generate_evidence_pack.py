@@ -201,6 +201,9 @@ _TABLE: Dict[str, dict] = {
     "src.broker.mt5_data_adapter": dict(
         layer="broker", summary="read-only MT5 demo data adapter (no order_send)",
         test_file="test_mt5_data_adapter.py", test_note="", **_MT5_BOUNDARY),
+    "src.broker.connectivity": dict(
+        layer="broker", summary="read-only MT5 demo connectivity validator (WINMT5-001)",
+        test_file="test_winmt5_connectivity.py", test_note="", **_MT5_BOUNDARY),
     # execution (order boundary)
     "src.execution.gateway": dict(
         layer="execution", summary="execution gateway (gated; default no-send)",
