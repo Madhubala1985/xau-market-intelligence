@@ -1651,3 +1651,102 @@ src/strategy/pipeline.py, src/strategy/__init__.py, tests/test_pipeline.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+PHASE12-001
+
+## Date:
+2026-06-09
+
+## Area:
+Live Demo Readiness / Risk / Execution
+
+## Decision:
+After P0-P11 and INT-001, the next phase is Phase 12: Live Demo Readiness.
+
+## Reason:
+The architecture and pipeline are implemented, but real MT5 demo connectivity, live shadow behavior, leverage-aware sizing, protected pyramiding, and supervised demo execution still require controlled validation.
+
+## Risk:
+Starting demo trading without these gates could create unsafe order behavior, over-risking, credential exposure, or false confidence.
+
+## Mitigation:
+Use staged gates: RISK-001, LIVE-VERIFY-001, WINMT5-001, LIVE-001, LIVE-002, DEMO-001, DEMO-002.
+
+## Status:
+Accepted
+
+---
+
+## Decision ID:
+RISK-001
+
+## Date:
+2026-06-09
+
+## Area:
+Risk
+
+## Decision:
+Leverage-aware, confidence-tiered sizing (src/risk/leverage_sizing.py) and a
+protected-pyramiding guard (src/risk/pyramiding.py) are added as NEW modules
+alongside the stable P7-002 PositionSizer and P7-001 RiskGovernor (no rewrite of
+those files). LeverageAwareSizer derives the lot from a dollar MAX-LOSS cap and
+the STRUCTURAL stop distance (loss_per_lot = stop/tick_size * tick_value).
+Leverage changes only margin_required, never the loss at stop, so leverage/margin
+can only BLOCK (insufficient margin) and never enlarge the lot. Demo caps come
+from a confidence tier table (NORMAL $40 / HIGH_CONFLUENCE $80 / ELITE $100);
+real mode never inherits demo tiers (cap = balance * real_risk_pct, default
+0.5%). Fixed lots (0.01/0.05/0.10) are assessed against the same cap and blocked
+if their implied loss exceeds it. PyramidingGuard permits a same-direction add-on
+only when every existing same-direction position is protected at break-even or
+locked profit AND not in loss, the add-on carries its own thesis/invalidation/
+stop/entry, a fresh setup and continuation are confirmed, and total combined
+lots/dollar-risk stay within PyramidLimits. Neither component places orders; both
+defer to the Risk Governor.
+
+## Reason:
+Implements 20_LEVERAGE_AND_PYRAMIDING_POLICY.md and the RISK-001 required
+behavior: stop from structure, lot from allowed risk, fixed lots never bypass
+the cap, leverage/margin never bypass max-loss, add to winners only, never to
+losers, total exposure capped, real risk conservative. Building new modules keeps
+the proven P7 sizing/governor untouched (Scope Rule) while the orchestrator can
+adopt the leverage-aware path for demo.
+
+## Evidence:
+tests/test_leverage_sizing.py (19) — 0.01/0.05/0.10 lot scenarios, tier scaling,
+snap-down within cap, stop-too-wide block, leverage does not increase lot/loss,
+insufficient-margin block without resize, fixed-lot within/over cap, fixed-lot
+leverage-cannot-bypass, real-mode conservative cap, and no order method.
+tests/test_pyramiding.py (12) — allow into protected winner, block when not
+protected, block adding to a loser (long & short), fresh-setup / continuation /
+existing-trade / direction-mismatch / missing-risk-plan guards, total lot and
+dollar exposure caps, BE zero-open-risk allow, and no order method. Full suite:
+387 passed.
+
+## Alternatives Considered:
+- Extending PositionSizer/RiskGovernor in place: rejected — would rewrite stable,
+  fully-tested files without need (Scope Rule); new modules are additive.
+- Sizing from free margin / leverage headroom: rejected — violates the core rule;
+  margin is a feasibility check only and can never grow the lot.
+- Letting real mode reuse demo tier caps: rejected — real risk must stay
+  conservative and tier-independent (INIT-008 / policy "Real Risk Separation").
+
+## Risk:
+SymbolSpec defaults (contract 100, tick 0.01 = $1) and PyramidLimits caps are
+broker/account dependent; the open-risk proxy uses contract_size on OpenTrade.
+
+## Mitigation:
+SymbolSpec, DemoTierTable, real_risk_pct, and PyramidLimits are all configurable;
+runtime values are confirmed against MT5 symbol_info (WINMT5-001) before any demo
+order; the Risk Governor re-validates risk/lot independently and keeps final
+authority; no orders are placed by these modules.
+
+## Files Affected:
+src/risk/leverage_sizing.py, src/risk/pyramiding.py, src/risk/__init__.py,
+tests/test_leverage_sizing.py, tests/test_pyramiding.py
+
+## Status:
+Accepted
