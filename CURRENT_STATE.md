@@ -10,7 +10,7 @@ Phase 9: Journal and Reflection
 
 ## Current Task
 
-P9-001: Trade Journal
+P9-002: Reflection Engine
 
 ## Last Completed Task
 
@@ -38,10 +38,11 @@ P7-002: Position Sizing
 P7-003: MT5 Demo Execution Gateway
 P8-001: Stop Placement Intelligence
 P8-002: Trailing Stop Engine
+P9-001: Trade Journal
 
 ## Next Task
 
-P9-001: Trade Journal
+P9-002: Reflection Engine
 
 ## Current Execution Mode
 
@@ -68,16 +69,16 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P9-001:
-Implement the Trade Journal that logs every trade and no-trade decision, and is
-restart-safe (persisted and reloadable). Tests: decisions persisted, restart-safe.
-Build in src/journal/; reuse TradeDecision/TradeRecord (src/data/). Persist under
-the runtime data/ or logs/ area; never write credentials.
+Start P9-002:
+Implement the Reflection Engine that classifies mistakes and generates a daily
+review from the trade journal. Tests: mistake categories assigned. Build in
+src/reflection/; reuse TradeRecord/TradeDecision (src/data/) and the journal
+(src/journal/). No order placement; never write credentials.
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading; ALLOW_REAL_ORDERS must stay false.
-- Do not print credentials; never write credentials into the journal.
-- Do not place MT5 orders (logging only).
-- Journal must be restart-safe (reload persisted decisions); do not log secrets.
+- Do not print credentials; never write credentials into reflection reports.
+- Do not place MT5 orders (analysis/reporting only).
+- Reflection is offline review; it cannot change live policy (no self-mutation).

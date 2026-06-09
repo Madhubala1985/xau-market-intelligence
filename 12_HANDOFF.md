@@ -14,13 +14,13 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 9: Journal and Reflection
 
 ## Current Task ID:
-P9-001
+P9-002
 
 ## Current Task Goal:
-Trade Journal — log every trade and no-trade decision; restart-safe.
+Reflection Engine — classify mistakes and generate daily review.
 
 ## Current Status:
-P8-002 complete. Trailing stop engine implemented and tested. Phase 8 finished.
+P9-001 complete. Trade journal implemented and tested.
 
 ---
 
@@ -48,6 +48,25 @@ P8-002 complete. Trailing stop engine implemented and tested. Phase 8 finished.
 - P7-003 completed: MT5 demo execution gateway.
 - P8-001 completed: stop placement intelligence.
 - P8-002 completed: trailing stop engine.
+- P9-001 completed: trade journal.
+
+## P9-001 Details
+
+Files added/changed:
+- src/journal/journal.py — TradeJournal + JournalEntry + EntryKind + DEFAULT_JOURNAL_PATH.
+- src/journal/__init__.py — export journal API.
+- tests/test_journal.py — 8 tests.
+
+Design notes:
+- Append-only JSON Lines store; each line wraps a TradeDecision or TradeRecord (via model_dump(mode="json")) plus logged_at_utc. Restart-safe: a fresh TradeJournal on the same path reloads all entries (entries()/decisions()/records()).
+- log_decision logs trades AND no-trade decisions; log_record logs outcomes. Round-trip equality holds (frozen pydantic models compare by value).
+- Only credential-free schemas are written; test asserts no credential tokens in the file.
+- DEFAULT_JOURNAL_PATH = logs/trade_journal.jsonl (logs/ is gitignored); tests use tmp_path.
+
+Tests run:
+- `.venv/bin/python -m pytest tests/ -q` → 302 passed (8 journal + 294 prior).
+
+Errors: none.
 
 ## P8-002 Details
 
@@ -155,22 +174,21 @@ Errors: none.
 # Next Task
 
 ## Task:
-P9-001: Trade Journal
+P9-002: Reflection Engine
 
 ## Goal:
-Log every trade and no-trade decision; restart-safe persistence.
+Classify mistakes and generate a daily review from journaled trades/decisions.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- src/journal/ + src/utils/ + tests/. Reuse TradeDecision/TradeRecord (src/data/). Persist to a path under data/ or logs/ (gitignored). Do not touch src/execution|risk internals.
+- src/reflection/ + src/utils/ + tests/. Reuse TradeRecord/TradeDecision (src/data/) and the journal (src/journal/). Do not touch src/execution|risk internals.
 
-## Tests (10_TASK_QUEUE.md P9-001):
-- decisions persisted,
-- restart-safe.
+## Tests (10_TASK_QUEUE.md P9-002):
+- mistake categories assigned.
 
-## Notes for P9-001 (06_DATA_POLICY.md storage; 05_EXECUTION_POLICY.md TRADE_LOGGED):
-- Append every decision (trade AND no-trade) to a durable store (e.g., JSON Lines file); a new journal instance pointed at the same path reloads prior entries (restart-safe).
-- Use the existing TradeRecord schema (and/or TradeDecision) for entries; serialize via pydantic model_dump_json.
-- Never write credentials. Tests should use a tmp_path file. Default persistence path should sit under the gitignored runtime area (data/ or logs/), not committed.
+## Notes for P9-002 (09? see 01_SYSTEM_MINDSET.md / 04_ADAPTATION_POLICY.md; 02_ARCHITECTURE.md section 18):
+- Classify mistakes mechanically from TradeRecords: e.g., overconfidence (high confidence + loss), revenge/overtrading (many trades/day), poor timing, chasing (no thesis), ignored uncertainty (high uncertainty + loss), no-stop/early-exit, missed opportunity.
+- Generate a daily review summary (counts, win/loss, pnl, mistake categories) over a set of records (optionally pulled from the journal).
+- Offline only: reflection produces a report; it must NOT change live policy (no self-mutation, INIT-004). Never write credentials.
 
 ---
 

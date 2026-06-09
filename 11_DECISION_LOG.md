@@ -1286,3 +1286,51 @@ tests/test_trailing.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-21
+
+## Date:
+2026-06-09
+
+## Area:
+Data
+
+## Decision:
+The trade journal (P9-001) is an append-only JSON Lines store. Each line wraps a
+TradeDecision or TradeRecord (serialized via pydantic model_dump(mode="json"))
+with a logged_at_utc timestamp and a kind tag. It logs both trades and no-trade
+decisions and is restart-safe: a fresh TradeJournal on the same path reloads all
+entries (entries / decisions / records). Only the credential-free schemas are
+written. Default path is logs/trade_journal.jsonl (gitignored).
+
+## Reason:
+Implements 06_DATA_POLICY.md storage and 05_EXECUTION_POLICY.md TRADE_LOGGED.
+JSONL is simple, append-friendly, and restart-safe. Reusing the existing schemas
+guarantees round-trip fidelity and that no credentials are ever written.
+
+## Evidence:
+tests/test_journal.py — 8 tests: decisions persisted (trade + no-trade),
+no-trade logged, record logged, round-trip equality, restart-safe reload, append
+across instances, empty-when-absent, and no credentials in the file. All pass
+(302 total).
+
+## Alternatives Considered:
+- SQLite/database: rejected for now — JSONL meets the restart-safe requirement
+  with zero dependencies and is easy to inspect; can migrate later.
+- Holding entries only in memory: rejected — not restart-safe.
+
+## Risk:
+Concurrent writers could interleave lines; large files reparse on each read.
+
+## Mitigation:
+Single-process append is sufficient for demo; a read cache / rotation can be
+added later without changing the entry format.
+
+## Files Affected:
+src/journal/journal.py, src/journal/__init__.py, tests/test_journal.py
+
+## Status:
+Accepted
