@@ -5,9 +5,19 @@ from src.backtest.backtester import (
     BacktestConfig,
     BacktestResult,
 )
+from src.backtest.walk_forward import (
+    Fold,
+    FoldResult,
+    WalkForwardResult,
+    WalkForwardValidator,
+)
 
 __all__ = [
     "Backtester",
     "BacktestConfig",
     "BacktestResult",
+    "WalkForwardValidator",
+    "WalkForwardResult",
+    "Fold",
+    "FoldResult",
 ]

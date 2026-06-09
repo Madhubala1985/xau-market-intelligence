@@ -11,16 +11,16 @@ Claude must update this file before stopping, before token/session exhaustion, a
 # Current Project State
 
 ## Current Phase:
-Phase 10: Backtest and Validation
+Phase 11: Live Shadow and Real Readiness
 
 ## Current Task ID:
-P10-002
+P11-001
 
 ## Current Task Goal:
-Walk-Forward Validation — validate on unseen periods (train/test split, no leakage).
+Live Shadow Mode — run live analysis and log decisions without sending real-money orders.
 
 ## Current Status:
-P10-001 complete. Backtesting engine implemented and tested.
+P10-002 complete. Walk-forward validation implemented and tested. Phase 10 finished.
 
 ---
 
@@ -51,6 +51,26 @@ P10-001 complete. Backtesting engine implemented and tested.
 - P9-001 completed: trade journal.
 - P9-002 completed: reflection engine.
 - P10-001 completed: backtesting engine.
+- P10-002 completed: walk-forward validation.
+
+## P10-002 Details
+
+Files added/changed:
+- src/backtest/walk_forward.py — WalkForwardValidator + Fold + FoldResult + WalkForwardResult.
+- src/backtest/__init__.py — export walk-forward API.
+- tests/test_walk_forward.py — 9 tests.
+
+Design notes:
+- split(candles, train_size, test_size, step=test_size, anchored=False) -> ordered Folds. Rolling: train slides; anchored: train starts at 0 and grows. test_start == train_end always, so test is strictly later than train (no overlap/leakage).
+- run(candles, strategy, ..., optimizer=None): per fold, optimizer(fold.train) (train data ONLY) returns the strategy to evaluate; backtest runs on fold.test only (unseen), using the P10-001 Backtester (strictly causal within the window). Aggregates per-fold BacktestResults.
+- WalkForwardResult: folds, num_folds, total_trades, total_pnl, wins, losses, win_rate.
+- No order placement.
+
+Tests run:
+- `.venv/bin/python -m pytest tests/ -q` → 333 passed (9 walk-forward + 324 prior).
+- No-leakage proven: test strictly after train; optimizer sees only train (ends before test); fold backtest equals a standalone run on the test window.
+
+Errors: none.
 
 ## P10-001 Details
 
@@ -214,22 +234,21 @@ Errors: none.
 # Next Task
 
 ## Task:
-P10-001: Backtesting Engine
+P11-001: Live Shadow Mode
 
 ## Goal:
-Backtest with spread, slippage, commission (if applicable), realistic stop-loss, realistic lot sizing, session rules, data-availability rules, no future leakage.
+Run live market analysis without sending real-money orders; log every live decision.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- src/backtest/ + src/utils/ + tests/. Reuse Candle (src/data/), the analysis engines, RiskGovernor/PositionSizer (src/risk/), StopPlacement/Trailing (src/trade_management/). Do not call the live execution gateway (simulation only).
+- likely src/execution/ (a ShadowRunner) + src/utils/ + tests/. Reuse the decision pipeline (strategy/TradeDecision), TradeJournal (src/journal/), RiskGovernor, and the gated ExecutionGateway in DRY_RUN/demo. Inject the MT5 client (fake in tests).
 
-## Tests (10_TASK_QUEUE.md P10-001 / 07_TEST_POLICY.md):
-- no future leakage,
-- realistic fills.
+## Tests (10_TASK_QUEUE.md P11-001):
+- live decisions logged,
+- real orders not sent.
 
-## Notes for P10-001 (07_TEST_POLICY.md Backtest Requirements; 06_DATA_POLICY.md look-ahead ban):
-- Strictly causal: a decision at bar t may use only candles[:t+1]; fills happen at the next bar's open (or with realistic price) including spread and slippage; commission optional.
-- Apply realistic lot sizing (PositionSizer) and stop logic; respect session rules; manage stops/trailing bar-by-bar.
-- Prove no future leakage (e.g., injecting future bars must not change a past decision/fill) and realistic fills (entry includes spread/slippage). No order placement.
+## Notes for P11-001 (05_EXECUTION_POLICY.md live shadow mode; CLAUDE.md Trading Safety Rule):
+- Shadow mode consumes live (or replayed) candles, produces decisions, logs them to the journal, and must NEVER send real orders. At most it routes to the ExecutionGateway with safe default flags (DRY_RUN) — assert the injected MT5 client's order_send is never called with real-order params; real orders forbidden.
+- Prove: decisions are journaled (restart-safe count) and order_send is never called (or only the demo dry-run path, never real). No credentials printed.
 
 ---
 
@@ -250,7 +269,7 @@ Backtest with spread, slippage, commission (if applicable), realistic stop-loss,
 
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, and 10_TASK_QUEUE.md.
 
-Continue P6-002 only.
+Continue P10-002 only.
 
 Do not broaden scope.
 Do not trade real money.

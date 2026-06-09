@@ -1440,3 +1440,54 @@ src/backtest/backtester.py, src/backtest/__init__.py, tests/test_backtester.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-24
+
+## Date:
+2026-06-09
+
+## Area:
+Testing
+
+## Decision:
+Walk-forward validation (P10-002) splits a candle series into ordered folds where
+each test window immediately follows its train window (test_start == train_end),
+in rolling (sliding train) or anchored (growing train) mode. run() evaluates the
+strategy on each unseen test window via the P10-001 Backtester; an optional
+optimizer is given the train candles ONLY and returns the strategy for that fold.
+Results are aggregated across folds. No order placement.
+
+## Reason:
+Implements 07_TEST_POLICY.md walk-forward validation and the 06_DATA_POLICY.md
+look-ahead ban: test is always strictly later than train, the optimizer never
+sees test data, and the per-fold backtest is causal, so out-of-sample evaluation
+has no leakage.
+
+## Evidence:
+tests/test_walk_forward.py — 9 tests: rolling and anchored split shapes, custom
+step, size validation, test-strictly-after-train, optimizer-sees-only-train,
+fold-backtest-equals-standalone-on-test-window, aggregation, and too-short series.
+All pass (333 total).
+
+## Alternatives Considered:
+- Re-running the backtest over train+test and slicing results: rejected — risks
+  leakage and double-counting; backtesting only the test window is cleaner.
+- k-fold shuffling: rejected — time series must preserve order; only forward
+  splits are valid.
+
+## Risk:
+The optimizer hook is a placeholder (real parameter fitting is future work);
+fixed window sizes may not suit all regimes.
+
+## Mitigation:
+train/test/step and anchored mode are configurable; the optimizer contract
+already restricts inputs to train data, ready for a real fitter later.
+
+## Files Affected:
+src/backtest/walk_forward.py, src/backtest/__init__.py, tests/test_walk_forward.py
+
+## Status:
+Accepted

@@ -6,11 +6,11 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 10: Backtest and Validation
+Phase 11: Live Shadow and Real Readiness
 
 ## Current Task
 
-P10-002: Walk-Forward Validation
+P11-001: Live Shadow Mode
 
 ## Last Completed Task
 
@@ -41,10 +41,11 @@ P8-002: Trailing Stop Engine
 P9-001: Trade Journal
 P9-002: Reflection Engine
 P10-001: Backtesting Engine
+P10-002: Walk-Forward Validation
 
 ## Next Task
 
-P10-002: Walk-Forward Validation
+P11-001: Live Shadow Mode
 
 ## Current Execution Mode
 
@@ -71,17 +72,18 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P10-002:
-Implement Walk-Forward Validation that splits data into train/test windows and
-validates on unseen periods. Tests: train/test split, no leakage. Build in
-src/backtest/; reuse the Backtester. Strictly time-ordered splits (test always
-after train); the backtester remains strictly causal within each window.
+Start P11-001:
+Implement Live Shadow Mode that runs live market analysis and logs decisions
+WITHOUT sending real-money orders. Tests: live decisions logged, real orders not
+sent. Build in a suitable module (e.g., src/execution/ shadow runner or a new
+shadow module); reuse the strategy/decision pipeline, journal, and the gated
+ExecutionGateway in dry-run/demo. No real orders ever.
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading; ALLOW_REAL_ORDERS must stay false.
 - Do not print credentials.
-- Do not place MT5 orders (simulation/validation only; no order_send).
-- No leakage across folds: test windows must be strictly later than their train
-  windows; never fit on test data.
+- Shadow mode must NEVER send real orders; decisions are analyzed and logged
+  only (and at most routed to the gated demo gateway in dry-run).
+- Real orders not sent must be proven by tests.
