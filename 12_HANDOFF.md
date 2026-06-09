@@ -12,16 +12,19 @@ This file allows Claude sessions to resume without losing direction.
 Phase 12: Live Demo Readiness
 
 ## Current Task ID:
-LIVE-002
+DEMO-001
 
 ## Current Task Goal:
-Run a short supervised live shadow validation session on the Windows MT5 host
-and record the report, then proceed to DEMO-001 (demo execution preflight).
+Implement the demo execution preflight: verify every demo order gate
+(env flags, demo account, XAUUSDm symbol, risk governor, mandatory stop-loss,
+journal/state health, kill switch) WITHOUT placing any order.
 
 ## Current Status:
-LIVE-001 is complete and committed. WINMT5-LIVE-001 live proof passed on
-Windows PowerShell (VALIDATED, XAUUSDm, demo account, candles + spread read,
-no order_send). The live shadow runner exists and is safe by construction.
+LIVE-001 and LIVE-002 tooling are complete and committed. WINMT5-LIVE-001 live
+proof passed on Windows PowerShell (VALIDATED, XAUUSDm, demo account, candles +
+spread read, no order_send). The supervised LIVE-002 session itself must be run
+manually by the user on the Windows MT5 host:
+`python scripts/live_shadow_run.py --duration-minutes 5 --poll-seconds 60 --report-name live_shadow_session`
 
 ---
 
@@ -41,6 +44,9 @@ no order_send). The live shadow runner exists and is safe by construction.
     reports/runtime/live_shadow_run.md/.json, journal at logs/live_shadow_journal.jsonl.
   - Tests: tests/test_live_shadow.py + adapter tests (no order_send, no credentials,
     exact XAUUSDm case in every MT5 call, stale data -> NO_TRADE journaled).
+- LIVE-002 committed: cycle results and session report now carry confidence,
+  uncertainty, and the Risk Governor action/reasons; --report-name lets the
+  supervised session write reports/runtime/live_shadow_session.md/.json.
 
 ---
 

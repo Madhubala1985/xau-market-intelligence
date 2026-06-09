@@ -81,7 +81,12 @@ def make_live_pipeline(
 
 @dataclass(frozen=True)
 class LiveCycleResult:
-    """Outcome of one decision cycle (credential-free)."""
+    """Outcome of one decision cycle (credential-free).
+
+    Carries the supervised-session evidence required by LIVE-002: the decision,
+    its no-trade reason, confidence/uncertainty scores, and the Risk Governor's
+    verdict (action + reasons).
+    """
 
     time_utc: datetime
     stage: str
@@ -91,6 +96,10 @@ class LiveCycleResult:
     decision_id: str
     spread_price: float
     lot_size: float
+    confidence: Optional[float] = None
+    uncertainty: Optional[float] = None
+    risk_action: Optional[str] = None
+    risk_reasons: Tuple[str, ...] = ()
     sent: bool = False  # must always be False in shadow mode
 
     def to_dict(self) -> dict:
@@ -103,6 +112,10 @@ class LiveCycleResult:
             "decision_id": self.decision_id,
             "spread_price": self.spread_price,
             "lot_size": self.lot_size,
+            "confidence": self.confidence,
+            "uncertainty": self.uncertainty,
+            "risk_action": self.risk_action,
+            "risk_reasons": list(self.risk_reasons),
             "sent": self.sent,
         }
 
@@ -227,6 +240,18 @@ class LiveShadowSession:
             decision_id=decision.decision_id,
             spread_price=spread_price,
             lot_size=result.lot_size,
+            confidence=(
+                result.confidence.confidence if result.confidence is not None else None
+            ),
+            uncertainty=(
+                result.confidence.uncertainty if result.confidence is not None else None
+            ),
+            risk_action=(
+                result.risk.action.value if result.risk is not None else None
+            ),
+            risk_reasons=(
+                tuple(result.risk.reasons) if result.risk is not None else ()
+            ),
             sent=False,
         )
 

@@ -214,6 +214,41 @@ def test_cycle_result_reads_live_spread(adapter, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# LIVE-002: supervised session evidence (confidence / uncertainty / risk)
+# ---------------------------------------------------------------------------
+
+def test_cycle_records_confidence_and_uncertainty(adapter, tmp_path):
+    session = make_session(adapter, TradeJournal(tmp_path / "live.jsonl"))
+    result = session.decide_once()
+    # Any cycle that passes the data gate carries the scoring evidence.
+    assert result.stage != PipelineStage.DATA_REJECTED.value
+    assert result.confidence is not None and 0.0 <= result.confidence <= 1.0
+    assert result.uncertainty is not None and 0.0 <= result.uncertainty <= 1.0
+
+
+def test_data_rejected_cycle_has_no_scores_but_a_reason(adapter, tmp_path):
+    session = make_session(
+        adapter,
+        TradeJournal(tmp_path / "live.jsonl"),
+        now=lambda: BASE_DT + timedelta(hours=2),  # stale feed
+    )
+    result = session.decide_once()
+    assert result.stage == PipelineStage.DATA_REJECTED.value
+    assert result.confidence is None
+    assert result.risk_action is None
+    assert result.reason  # the no-trade reason is always recorded
+
+
+def test_report_dict_includes_session_evidence_fields(adapter, tmp_path):
+    session = make_session(adapter, TradeJournal(tmp_path / "live.jsonl"))
+    report = session.run(poll_seconds=1.0, max_cycles=2)
+    for r in report.to_dict()["results"]:
+        for key in ("confidence", "uncertainty", "risk_action", "risk_reasons",
+                    "reason", "direction", "approved"):
+            assert key in r
+
+
+# ---------------------------------------------------------------------------
 # No orders, ever
 # ---------------------------------------------------------------------------
 

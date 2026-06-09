@@ -2016,3 +2016,51 @@ tests/test_mt5_data_adapter.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-03
+
+## Date:
+2026-06-09
+
+## Area:
+Execution
+
+## Decision:
+LIVE-002 supervised live shadow sessions reuse the LIVE-001 runner rather than
+a second script. LiveCycleResult now carries confidence, uncertainty, and the
+Risk Governor's action + reasons, so the journal AND the session report record
+the full decision evidence. The supervised session writes its own artifact via
+--report-name live_shadow_session. The session itself is run manually by the
+user on the Windows MT5 host; Claude does not run live sessions.
+
+## Reason:
+LIVE-002 requires logging decisions, no-trade reasons, confidence, uncertainty,
+and risk decisions. The cycle results previously dropped the scoring and risk
+verdicts. One runner with a report-name parameter avoids duplicated safety
+logic (demo-account verification, stop conditions, no-send guards).
+
+## Evidence:
+tests/test_live_shadow.py — cycles carry confidence/uncertainty in [0,1];
+DATA_REJECTED cycles have no scores but always a reason; report dict includes
+all evidence fields; full suite 434 passed; pre_demo_safety_check.sh passed.
+
+## Alternatives Considered:
+- A separate LIVE-002 script: rejected — duplicates safety gates.
+- Logging evidence only in the journal: rejected — the session report is the
+  reviewable artifact for the supervised run.
+
+## Risk:
+None new; the report stays credential-free (tested).
+
+## Mitigation:
+Credential-scan tests cover report payload and journal content.
+
+## Files Affected:
+src/execution/live_shadow.py, scripts/live_shadow_run.py,
+tests/test_live_shadow.py
+
+## Status:
+Accepted

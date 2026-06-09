@@ -137,23 +137,30 @@ def render_markdown(payload: Dict[str, object]) -> str:
         lines.append("")
         lines.append("## Decision cycles")
         lines.append("")
-        lines.append("| # | time (UTC) | stage | direction | approved | spread | lot | reason |")
-        lines.append("|---|---|---|---|---|---|---|---|")
+        lines.append(
+            "| # | time (UTC) | stage | direction | approved | spread | lot "
+            "| conf | uncert | risk | reason |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
         for i, r in enumerate(report.get("results", []), start=1):
+            risk = r.get("risk_action") or "-"
+            risk_reasons = "; ".join(r.get("risk_reasons", []))
+            reason = r["reason"] or risk_reasons
             lines.append(
                 f"| {i} | {r['time_utc']} | {r['stage']} | {r['direction']} | "
                 f"{r['approved']} | {r['spread_price']} | {r['lot_size']} | "
-                f"{r['reason']} |"
+                f"{r.get('confidence', '-')} | {r.get('uncertainty', '-')} | "
+                f"{risk} | {reason} |"
             )
         lines.append("")
     return "\n".join(lines)
 
 
-def write_report(payload: Dict[str, object]) -> Dict[str, Path]:
+def write_report(payload: Dict[str, object], report_name: str = "live_shadow_run") -> Dict[str, Path]:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     payload["generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    md_path = OUT_DIR / "live_shadow_run.md"
-    json_path = OUT_DIR / "live_shadow_run.json"
+    md_path = OUT_DIR / f"{report_name}.md"
+    json_path = OUT_DIR / f"{report_name}.json"
     md_path.write_text(render_markdown(payload), encoding="utf-8")
     json_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return {"markdown": md_path, "json": json_path}
@@ -167,6 +174,9 @@ def main() -> int:
                        help="run for N minutes (polling between cycles)")
     parser.add_argument("--poll-seconds", type=float, default=60.0,
                         help="seconds between decision cycles (default 60)")
+    parser.add_argument("--report-name", default="live_shadow_run",
+                        help="report basename under reports/runtime/ "
+                             "(use live_shadow_session for LIVE-002 evidence)")
     parser.add_argument("--stdout", action="store_true", help="also print markdown")
     args = parser.parse_args()
 
@@ -184,7 +194,7 @@ def main() -> int:
             "detail": f"{import_reason}; run on the Windows MT5 host "
                       "(see scripts/winmt5_runner_README.md)",
         })
-        paths = write_report(payload)
+        paths = write_report(payload, args.report_name)
         print(f"Outcome: {payload['outcome']} ({import_reason})")
         print(f"Wrote {paths['markdown'].relative_to(REPO_ROOT)}")
         return 2
@@ -196,7 +206,7 @@ def main() -> int:
             "outcome": "CONFIG_INCOMPLETE",
             "detail": "missing environment variables: " + ", ".join(exc.missing),
         })
-        write_report(payload)
+        write_report(payload, args.report_name)
         print(f"Outcome: CONFIG_INCOMPLETE (missing: {', '.join(exc.missing)})")
         return 2
 
@@ -232,7 +242,7 @@ def main() -> int:
     finally:
         adapter.shutdown()
 
-    paths = write_report(payload)
+    paths = write_report(payload, args.report_name)
     print(f"Outcome: {payload['outcome']}")
     print(f"Wrote {paths['markdown'].relative_to(REPO_ROOT)}")
     print(f"Wrote {paths['json'].relative_to(REPO_ROOT)}")
