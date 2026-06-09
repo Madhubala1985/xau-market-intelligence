@@ -6,11 +6,11 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 9: Journal and Reflection
+Phase 10: Backtest and Validation
 
 ## Current Task
 
-P9-002: Reflection Engine
+P10-001: Backtesting Engine
 
 ## Last Completed Task
 
@@ -39,10 +39,11 @@ P7-003: MT5 Demo Execution Gateway
 P8-001: Stop Placement Intelligence
 P8-002: Trailing Stop Engine
 P9-001: Trade Journal
+P9-002: Reflection Engine
 
 ## Next Task
 
-P9-002: Reflection Engine
+P10-001: Backtesting Engine
 
 ## Current Execution Mode
 
@@ -69,16 +70,17 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P9-002:
-Implement the Reflection Engine that classifies mistakes and generates a daily
-review from the trade journal. Tests: mistake categories assigned. Build in
-src/reflection/; reuse TradeRecord/TradeDecision (src/data/) and the journal
-(src/journal/). No order placement; never write credentials.
+Start P10-001:
+Implement the Backtesting Engine that backtests with spread, slippage, risk, stop
+logic, and session logic. Tests: no future leakage, realistic fills. Build in
+src/backtest/; reuse the analysis/risk/sizing/stop/trailing engines and Candle.
+Strictly causal (decision at bar t uses only data up to t).
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading; ALLOW_REAL_ORDERS must stay false.
-- Do not print credentials; never write credentials into reflection reports.
-- Do not place MT5 orders (analysis/reporting only).
-- Reflection is offline review; it cannot change live policy (no self-mutation).
+- Do not print credentials.
+- Do not place MT5 orders (simulation only; no order_send).
+- No future leakage: a decision at bar t may use only candles up to t; fills use
+  next-bar / realistic prices with spread and slippage.

@@ -1334,3 +1334,54 @@ src/journal/journal.py, src/journal/__init__.py, tests/test_journal.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-22
+
+## Date:
+2026-06-09
+
+## Area:
+Adaptation
+
+## Decision:
+The reflection engine (P9-002) classifies mistakes mechanically per TradeRecord
+(NO_STOP_LOSS, NO_THESIS for executed trades; OVERCONFIDENCE for confidence>=0.7
+on a loss; IGNORED_UNCERTAINTY for uncertainty>=0.5 on a loss) and builds a
+DailyReview (counts, pnl, win rate, OVERTRADING when executed > max_trades_per_day,
+aggregated mistakes, per-record breakdown, summary). NO_TRADE/CANCELLED records
+carry no execution mistakes. It is offline only and exposes no
+apply/update/mutate/adapt/execute methods.
+
+## Reason:
+Implements 02_ARCHITECTURE.md section 18 and the 04_ADAPTATION_POLICY.md
+reflection step while honoring INIT-004 (live self-mutation forbidden): reflection
+produces a report and never changes policy. Mechanical thresholds keep mistake
+labels deterministic and testable.
+
+## Evidence:
+tests/test_reflection.py — 13 tests: clean winner, overconfidence, ignored
+uncertainty, no-stop, no-thesis, no-trade has none, multi-category, daily review
+counts/pnl/win-rate, overtrading flagged / within-limit, summary text, empty
+review, and no-mutation-method guard. All pass (315 total).
+
+## Alternatives Considered:
+- Auto-adjusting parameters from reflection: rejected — forbidden live
+  self-mutation; controlled offline updates are a later, evidence-gated step.
+- Detecting missed opportunities / revenge from records alone: deferred — needs
+  signal/timing context beyond a single TradeRecord.
+
+## Risk:
+Thresholds (overconfidence/uncertainty/max trades) are heuristics.
+
+## Mitigation:
+All thresholds are configurable; reflection output is advisory only and never
+feeds back into live policy automatically.
+
+## Files Affected:
+src/reflection/reflection.py, src/reflection/__init__.py, tests/test_reflection.py
+
+## Status:
+Accepted

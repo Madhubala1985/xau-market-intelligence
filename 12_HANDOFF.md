@@ -11,16 +11,16 @@ Claude must update this file before stopping, before token/session exhaustion, a
 # Current Project State
 
 ## Current Phase:
-Phase 9: Journal and Reflection
+Phase 10: Backtest and Validation
 
 ## Current Task ID:
-P9-002
+P10-001
 
 ## Current Task Goal:
-Reflection Engine — classify mistakes and generate daily review.
+Backtesting Engine — backtest with spread, slippage, risk, stop logic, session logic.
 
 ## Current Status:
-P9-001 complete. Trade journal implemented and tested.
+P9-002 complete. Reflection engine implemented and tested. Phase 9 finished.
 
 ---
 
@@ -49,6 +49,25 @@ P9-001 complete. Trade journal implemented and tested.
 - P8-001 completed: stop placement intelligence.
 - P8-002 completed: trailing stop engine.
 - P9-001 completed: trade journal.
+- P9-002 completed: reflection engine.
+
+## P9-002 Details
+
+Files added/changed:
+- src/reflection/reflection.py — ReflectionEngine + MistakeCategory + RecordMistakes + DailyReview.
+- src/reflection/__init__.py — export reflection API.
+- tests/test_reflection.py — 13 tests.
+
+Design notes:
+- classify(record) -> mistake categories (mechanical, per TradeRecord): NO_STOP_LOSS, NO_THESIS (executed trade missing them), OVERCONFIDENCE (confidence >= 0.7 + LOSS), IGNORED_UNCERTAINTY (uncertainty >= 0.5 + LOSS). NO_TRADE/CANCELLED records have no execution mistakes.
+- review(records) -> DailyReview: counts (executed/no_trades/wins/losses/breakeven/open), total_pnl, win_rate, overtrading (executed > max_trades_per_day adds OVERTRADING count = excess), aggregated mistakes, per_record breakdown, and a summary string.
+- review_journal(records) convenience for journal.records().
+- Offline only: no apply/update_policy/mutate/adapt/execute methods (test-enforced); never writes credentials. Thresholds configurable.
+
+Tests run:
+- `.venv/bin/python -m pytest tests/ -q` → 315 passed (13 reflection + 302 prior).
+
+Errors: none.
 
 ## P9-001 Details
 
@@ -174,21 +193,22 @@ Errors: none.
 # Next Task
 
 ## Task:
-P9-002: Reflection Engine
+P10-001: Backtesting Engine
 
 ## Goal:
-Classify mistakes and generate a daily review from journaled trades/decisions.
+Backtest with spread, slippage, commission (if applicable), realistic stop-loss, realistic lot sizing, session rules, data-availability rules, no future leakage.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- src/reflection/ + src/utils/ + tests/. Reuse TradeRecord/TradeDecision (src/data/) and the journal (src/journal/). Do not touch src/execution|risk internals.
+- src/backtest/ + src/utils/ + tests/. Reuse Candle (src/data/), the analysis engines, RiskGovernor/PositionSizer (src/risk/), StopPlacement/Trailing (src/trade_management/). Do not call the live execution gateway (simulation only).
 
-## Tests (10_TASK_QUEUE.md P9-002):
-- mistake categories assigned.
+## Tests (10_TASK_QUEUE.md P10-001 / 07_TEST_POLICY.md):
+- no future leakage,
+- realistic fills.
 
-## Notes for P9-002 (09? see 01_SYSTEM_MINDSET.md / 04_ADAPTATION_POLICY.md; 02_ARCHITECTURE.md section 18):
-- Classify mistakes mechanically from TradeRecords: e.g., overconfidence (high confidence + loss), revenge/overtrading (many trades/day), poor timing, chasing (no thesis), ignored uncertainty (high uncertainty + loss), no-stop/early-exit, missed opportunity.
-- Generate a daily review summary (counts, win/loss, pnl, mistake categories) over a set of records (optionally pulled from the journal).
-- Offline only: reflection produces a report; it must NOT change live policy (no self-mutation, INIT-004). Never write credentials.
+## Notes for P10-001 (07_TEST_POLICY.md Backtest Requirements; 06_DATA_POLICY.md look-ahead ban):
+- Strictly causal: a decision at bar t may use only candles[:t+1]; fills happen at the next bar's open (or with realistic price) including spread and slippage; commission optional.
+- Apply realistic lot sizing (PositionSizer) and stop logic; respect session rules; manage stops/trailing bar-by-bar.
+- Prove no future leakage (e.g., injecting future bars must not change a past decision/fill) and realistic fills (entry includes spread/slippage). No order placement.
 
 ---
 
