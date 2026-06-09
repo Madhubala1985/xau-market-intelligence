@@ -10,7 +10,7 @@ Phase 11: Live Shadow and Real Readiness
 
 ## Current Task
 
-P11-001: Live Shadow Mode
+P11-002: Real-Mode Readiness Review
 
 ## Last Completed Task
 
@@ -42,10 +42,11 @@ P9-001: Trade Journal
 P9-002: Reflection Engine
 P10-001: Backtesting Engine
 P10-002: Walk-Forward Validation
+P11-001: Live Shadow Mode
 
 ## Next Task
 
-P11-001: Live Shadow Mode
+P11-002: Real-Mode Readiness Review
 
 ## Current Execution Mode
 
@@ -72,18 +73,18 @@ ALLOWED
 
 ## Next Exact Action
 
-Start P11-001:
-Implement Live Shadow Mode that runs live market analysis and logs decisions
-WITHOUT sending real-money orders. Tests: live decisions logged, real orders not
-sent. Build in a suitable module (e.g., src/execution/ shadow runner or a new
-shadow module); reuse the strategy/decision pipeline, journal, and the gated
-ExecutionGateway in dry-run/demo. No real orders ever.
+Start P11-002:
+Implement the Real-Mode Readiness Review that verifies ALL gates before real
+money. Stop condition: readiness report only (no real execution; no real
+execution without manual approval). Produce a report enumerating each gate
+(tests passing, risk governor, execution gating, shadow validated, etc.) and an
+overall not-ready-by-default verdict. Build in src/backtest/ or src/reflection/
+or a new readiness module; reporting only.
 
 ## Safety Notes
 
 - Do not commit .env.
 - Do not enable real trading; ALLOW_REAL_ORDERS must stay false.
 - Do not print credentials.
-- Shadow mode must NEVER send real orders; decisions are analyzed and logged
-  only (and at most routed to the gated demo gateway in dry-run).
-- Real orders not sent must be proven by tests.
+- P11-002 is a readiness REPORT only — no real execution, no order sending.
+- Real-money mode requires explicit manual approval; default verdict is NOT READY.

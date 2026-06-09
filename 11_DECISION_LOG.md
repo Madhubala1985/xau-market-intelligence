@@ -1491,3 +1491,57 @@ src/backtest/walk_forward.py, src/backtest/__init__.py, tests/test_walk_forward.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-09-25
+
+## Date:
+2026-06-09
+
+## Area:
+Execution
+
+## Decision:
+Live shadow mode (P11-001) is implemented by ShadowRunner: it consumes
+live/replayed candles, calls the strategy with causal slices (candles[:t+1]),
+journals every returned decision (including NO_TRADE), and NEVER sends orders. In
+pure mode it holds no MT5 client. If an ExecutionGateway is provided it must have
+demo_send_enabled == False (the runner raises otherwise) plus a context_builder,
+and the gateway is used only to record a dry-run outcome; if any routed result
+reported sent=True the runner raises. A read-only `flags` property was added to
+ExecutionGateway so the runner can verify sending is disabled.
+
+## Reason:
+Implements 05_EXECUTION_POLICY.md live shadow mode and the CLAUDE.md Trading
+Safety Rule: live analysis and logging with provably no real (or demo) order
+sending. Refusing a sending-enabled gateway makes "no orders sent" a structural
+guarantee, not just a convention.
+
+## Evidence:
+tests/test_shadow.py — 7 tests: decisions logged (incl. NO_TRADE) and restart-safe,
+pure shadow sends nothing, routed gateway never calls order_send (fake client) and
+all executions sent=False, runner refuses a sending-enabled gateway, gateway
+requires a context_builder. All pass (340 total).
+
+## Alternatives Considered:
+- Routing through a demo-sending gateway: rejected — shadow must not send even
+  demo orders; only dry-run evaluation is allowed.
+- A standalone shadow without the gateway: kept as the default (pure) mode; the
+  gateway hook is optional for dry-run records.
+
+## Risk:
+A live data source/clock and real strategy wiring are still needed for true live
+operation (this provides the safe runner + logging).
+
+## Mitigation:
+The runner is data-source agnostic (takes candles); live adapters feed it later;
+sending remains impossible by construction.
+
+## Files Affected:
+src/execution/shadow.py, src/execution/gateway.py, src/execution/__init__.py,
+tests/test_shadow.py
+
+## Status:
+Accepted

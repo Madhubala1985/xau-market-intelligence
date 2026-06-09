@@ -9,6 +9,10 @@ from src.execution.gateway import (
     OrderState,
     load_execution_flags,
 )
+from src.execution.shadow import (
+    ShadowReport,
+    ShadowRunner,
+)
 
 __all__ = [
     "ExecutionGateway",
@@ -18,4 +22,6 @@ __all__ = [
     "OrderState",
     "ExecutionCheck",
     "load_execution_flags",
+    "ShadowRunner",
+    "ShadowReport",
 ]

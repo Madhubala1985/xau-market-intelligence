@@ -154,6 +154,11 @@ class ExecutionGateway:
         self._magic = magic
         self._deviation = deviation
 
+    @property
+    def flags(self) -> ExecutionFlags:
+        """Read-only view of the execution permission flags."""
+        return self._flags
+
     def execute(self, decision: TradeDecision, context: RiskContext) -> ExecutionResult:
         log = _Log()
         log.state(OrderState.SIGNAL_CREATED)

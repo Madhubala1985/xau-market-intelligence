@@ -14,13 +14,13 @@ Claude must update this file before stopping, before token/session exhaustion, a
 Phase 11: Live Shadow and Real Readiness
 
 ## Current Task ID:
-P11-001
+P11-002
 
 ## Current Task Goal:
-Live Shadow Mode — run live analysis and log decisions without sending real-money orders.
+Real-Mode Readiness Review — verify all gates before real money; readiness report only.
 
 ## Current Status:
-P10-002 complete. Walk-forward validation implemented and tested. Phase 10 finished.
+P11-001 complete. Live shadow mode implemented and tested.
 
 ---
 
@@ -52,6 +52,25 @@ P10-002 complete. Walk-forward validation implemented and tested. Phase 10 finis
 - P9-002 completed: reflection engine.
 - P10-001 completed: backtesting engine.
 - P10-002 completed: walk-forward validation.
+- P11-001 completed: live shadow mode.
+
+## P11-001 Details
+
+Files added/changed:
+- src/execution/shadow.py — ShadowRunner + ShadowReport.
+- src/execution/gateway.py — added read-only `flags` property to ExecutionGateway.
+- src/execution/__init__.py — export shadow API.
+- tests/test_shadow.py — 7 tests.
+
+Design / safety notes:
+- ShadowRunner.run(candles): for each bar, calls strategy(candles[:t+1]) (causal), journals every returned decision (incl. NO_TRADE), and returns a ShadowReport (decisions_logged, decisions, executions, orders_sent=0).
+- It NEVER sends orders. Pure mode (no gateway) holds no MT5 client. If a gateway is provided it must have demo_send_enabled == False (runner raises otherwise) and a context_builder; the gateway is used only for a dry-run record. If any routed result.sent were True the runner raises (defensive; never happens).
+- Tests prove: decisions logged + restart-safe; NO_TRADE logged; pure shadow sends nothing; routed gateway never calls order_send (fake client) and all executions sent=False; runner refuses a sending-enabled gateway; gateway requires a context_builder.
+
+Tests run:
+- `.venv/bin/python -m pytest tests/ -q` → 340 passed (7 shadow + 333 prior).
+
+Errors: none.
 
 ## P10-002 Details
 
@@ -234,21 +253,21 @@ Errors: none.
 # Next Task
 
 ## Task:
-P11-001: Live Shadow Mode
+P11-002: Real-Mode Readiness Review
 
 ## Goal:
-Run live market analysis without sending real-money orders; log every live decision.
+Verify all gates before real money. Stop condition: readiness REPORT only.
 
 ## Allowed Files (confirm against 10_TASK_QUEUE.md before starting):
-- likely src/execution/ (a ShadowRunner) + src/utils/ + tests/. Reuse the decision pipeline (strategy/TradeDecision), TradeJournal (src/journal/), RiskGovernor, and the gated ExecutionGateway in DRY_RUN/demo. Inject the MT5 client (fake in tests).
+- a readiness module (e.g., src/reflection/ or src/backtest/ or a new src/readiness/ if structure allows) + src/utils/ + tests/. Reporting only; reuse ExecutionFlags / RiskLimits / journal as inputs. Do NOT enable real execution.
 
-## Tests (10_TASK_QUEUE.md P11-001):
-- live decisions logged,
-- real orders not sent.
+## Tests (10_TASK_QUEUE.md P11-002):
+- readiness report only (no real execution).
+- Suggested: report enumerates each gate with pass/fail; verdict NOT_READY by default; real flags (ALLOW_REAL_ORDERS / REAL_TRADING_ENABLED) -> still NOT_READY without explicit manual approval input.
 
-## Notes for P11-001 (05_EXECUTION_POLICY.md live shadow mode; CLAUDE.md Trading Safety Rule):
-- Shadow mode consumes live (or replayed) candles, produces decisions, logs them to the journal, and must NEVER send real orders. At most it routes to the ExecutionGateway with safe default flags (DRY_RUN) — assert the injected MT5 client's order_send is never called with real-order params; real orders forbidden.
-- Prove: decisions are journaled (restart-safe count) and order_send is never called (or only the demo dry-run path, never real). No credentials printed.
+## Notes for P11-002 (03_RISK_POLICY.md, 05_EXECUTION_POLICY.md, CLAUDE.md):
+- This is the FINAL queue task and is a report generator, not an executor. Real-money execution remains forbidden without manual approval.
+- Enumerate gates: full test suite green, risk governor present, execution gating (default no-send), shadow mode validated, journal restart-safe, demo-only flags, etc. Default overall verdict must be NOT READY; only an explicit manual_approval input may flip an otherwise-all-gates-pass to READY (and even then it must not place orders).
 
 ---
 
