@@ -215,6 +215,10 @@ _TABLE: Dict[str, dict] = {
         layer="execution",
         summary="live MT5 data -> pipeline -> shadow journal (LIVE-001; never sends)",
         test_file="test_live_shadow.py", test_note="", **_MT5_BOUNDARY),
+    "src.risk.state_tracker": dict(
+        layer="risk",
+        summary="journal-driven governor inputs: daily/weekly loss, streaks",
+        test_file="test_risk_state_tracker.py", test_note="", **_PURE_SHADOW_READY),
     "src.execution.kill_switch": dict(
         layer="execution",
         summary="file-based manual halt honored by the gateway (DEMO-001)",

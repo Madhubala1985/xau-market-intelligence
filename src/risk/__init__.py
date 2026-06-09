@@ -31,6 +31,10 @@ from src.risk.pyramiding import (
     PyramidResult,
     PyramidingGuard,
 )
+from src.risk.state_tracker import (
+    RiskStateSnapshot,
+    RiskStateTracker,
+)
 
 __all__ = [
     "RiskGovernor",
@@ -58,4 +62,7 @@ __all__ = [
     "PyramidAction",
     "PyramidCheck",
     "OpenTrade",
+    # Journal-driven enforcement inputs (03_RISK_POLICY.md)
+    "RiskStateTracker",
+    "RiskStateSnapshot",
 ]

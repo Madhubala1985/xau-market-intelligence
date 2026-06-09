@@ -23,7 +23,7 @@ LIVE-001, LIVE-002 (tooling) and DEMO-001 (preflight tooling) are complete and
 committed. WINMT5-LIVE-001 live proof passed on Windows PowerShell (VALIDATED,
 XAUUSDm, demo account, candles + spread read, no order_send).
 
-## DEMO-002 Blockers (recorded 2026-06-10):
+## DEMO-002 Blockers (recorded 2026-06-10; full gate map in 24_INTELLIGENCE_AUDIT_ROADMAP.md):
 1. LIVE-002 supervised shadow session evidence not yet produced — user must run
    on the Windows MT5 host:
    `python scripts/live_shadow_run.py --duration-minutes 5 --poll-seconds 60 --report-name live_shadow_session`
@@ -32,9 +32,14 @@ XAUUSDm, demo account, candles + spread read, no order_send).
    (On WSL the account/symbol gates are SKIPPED, which blocks readiness.)
 3. DEMO-002 requires the user to manually start supervised demo mode; Claude
    must not start it.
-4. The demo order path itself (gateway wiring of live sizing + protected
-   pyramiding into a supervised session loop) is intentionally NOT implemented
-   until blockers 1-2 clear.
+4. Audit F-3: LeverageAwareSizer + PyramidingGuard must be wired into the demo
+   execution path (confidence tier -> sizing -> pyramiding guard -> governor ->
+   gateway).
+5. Audit F-4: open-trade management loop (TrailingEngine wiring, break-even
+   protection, orphan-position reconciliation) must exist before any order.
+6. Audit F-5: news/volatility protection is unfed (news_risk always False);
+   minimal validated calendar module OR explicit operator-as-news-filter
+   runbook rule for supervised sessions.
 
 ---
 
@@ -63,6 +68,11 @@ XAUUSDm, demo account, candles + spread read, no order_send).
   (honest SKIPPED gates off-Windows -> NOT ready, exit 2). .gitignore defect
   fixed (!logs/ was un-ignoring runtime journals; now logs/* + !logs/.gitkeep;
   control/ ignored).
+- AUDIT-001 committed: 24_INTELLIGENCE_AUDIT_ROADMAP.md (full audit, gate map,
+  classified findings). Fixed: RiskStateTracker feeds real daily/weekly loss,
+  trades/day, loss streak, open symbols from the journal into every live cycle;
+  DecisionPipeline max_spread aligns execution-quality scoring with the
+  governor's price-unit spread limit in the live config.
 
 ---
 

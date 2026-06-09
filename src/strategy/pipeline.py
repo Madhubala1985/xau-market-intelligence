@@ -141,10 +141,23 @@ class PipelineEngines:
 
 
 class DecisionPipeline:
-    """Composes the engines into one decision flow. Never executes orders."""
+    """Composes the engines into one decision flow. Never executes orders.
 
-    def __init__(self, engines: Optional[PipelineEngines] = None) -> None:
+    `max_spread` sets the spread scale for execution-quality scoring and must
+    use the SAME unit as PipelineInput.current_spread (points by default;
+    price units for the live configuration — see make_live_pipeline).
+    """
+
+    def __init__(
+        self,
+        engines: Optional[PipelineEngines] = None,
+        *,
+        max_spread: float = 50.0,
+    ) -> None:
+        if max_spread <= 0:
+            raise ValueError("max_spread must be > 0")
         self._e = engines or PipelineEngines()
+        self._max_spread = max_spread
 
     def decide(self, inp: PipelineInput) -> PipelineResult:
         e = self._e
@@ -299,8 +312,9 @@ class DecisionPipeline:
             session_score = 0.5
         else:
             session_score = 0.0
-        # Execution quality degrades as spread approaches the governor's max (50).
-        execution_quality = max(0.0, min(1.0, 1.0 - spread / 50.0))
+        # Execution quality degrades as spread approaches the configured max
+        # (same unit as the spread fed into the pipeline).
+        execution_quality = max(0.0, min(1.0, 1.0 - spread / self._max_spread))
         return ComponentScores(
             structure=structure_score, liquidity=liquidity_score, regime=regime_score,
             volatility=volatility_score, session=session_score,

@@ -249,6 +249,40 @@ def test_report_dict_includes_session_evidence_fields(adapter, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Risk enforcement inputs are fed from the journal (03_RISK_POLICY.md)
+# ---------------------------------------------------------------------------
+
+def test_journaled_losses_feed_the_pipeline_risk_inputs(adapter, tmp_path):
+    from src.data.enums import TradeOutcome
+    from src.data.schemas import TradeRecord
+
+    journal = TradeJournal(tmp_path / "live.jsonl")
+    closed = BASE_DT - timedelta(hours=3)
+    for i in range(2):
+        journal.log_record(TradeRecord(
+            record_id=f"L{i}", created_at_utc=closed, symbol="XAUUSDM",
+            direction=Direction.LONG, outcome=TradeOutcome.LOSS, pnl=-20.0,
+            opened_at_utc=closed, closed_at_utc=closed + timedelta(hours=i),
+        ))
+
+    captured = {}
+
+    class SpyPipeline:
+        def decide(self, inp):
+            captured["input"] = inp
+            return make_live_pipeline("XAUUSDM").decide(inp)
+
+    session = make_session(adapter, journal, pipeline=SpyPipeline())
+    session.decide_once()
+    inp = captured["input"]
+    # Balance is 2000.0 (FakeMT5): two -20 losses today = 2% daily/weekly loss.
+    assert inp.daily_loss_pct == pytest.approx(0.02)
+    assert inp.weekly_loss_pct == pytest.approx(0.02)
+    assert inp.trades_today == 2
+    assert inp.consecutive_losses == 2
+
+
+# ---------------------------------------------------------------------------
 # No orders, ever
 # ---------------------------------------------------------------------------
 
@@ -339,3 +373,37 @@ def test_runner_markdown_has_no_credentials_and_forbidden_banner():
     assert "XAUUSDm" in md
     assert SECRET_PASSWORD not in md
     assert LOGIN_VALUE not in md
+
+
+# ---------------------------------------------------------------------------
+# Execution-quality spread scale matches the live (price-unit) configuration
+# ---------------------------------------------------------------------------
+
+def test_live_pipeline_execution_quality_uses_price_unit_scale():
+    from src.strategy import DecisionPipeline
+
+    # Default (points) scale: a 0.5 spread is negligible (~0.99 quality).
+    default_pipeline = DecisionPipeline()
+    # Live (price-unit) scale: a 0.5 USD spread on gold is HALF the allowed max.
+    live_pipeline = make_live_pipeline("XAUUSDM", max_spread_price=1.0)
+
+    from src.regime.htf_bias import HtfBias
+    from src.regime.regime_engine import Regime
+    from src.data.sessions import SessionType as _ST
+
+    def quality(pipeline, spread):
+        scores = pipeline._score_components(
+            HtfBias.BULLISH, None, Regime.TREND, _ST.LONDON, None, spread
+        )
+        return scores.execution_quality
+
+    assert quality(default_pipeline, 0.5) == pytest.approx(0.99)
+    assert quality(live_pipeline, 0.5) == pytest.approx(0.5)
+    assert quality(live_pipeline, 1.2) == 0.0  # above max -> zero quality
+
+
+def test_pipeline_rejects_non_positive_max_spread():
+    from src.strategy import DecisionPipeline
+
+    with pytest.raises(ValueError):
+        DecisionPipeline(max_spread=0.0)

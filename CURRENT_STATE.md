@@ -34,6 +34,15 @@ DEMO-001: demo execution preflight implemented (scripts/demo_preflight.py).
 gateway stop-loss mandatory, journal writable, state persistence, manual kill
 switch (control/KILL_SWITCH, honored by ExecutionGateway). No orders placed.
 Also fixed a .gitignore defect: !logs/ negation was un-ignoring runtime logs.
+AUDIT-001: intelligence audit completed (24_INTELLIGENCE_AUDIT_ROADMAP.md).
+Fixed two High-Confidence Defects: (1) governor loss-limit inputs were
+permanently zero in the live loop — added RiskStateTracker (journal-driven
+daily/weekly loss, trades/day, loss streak, open symbols) wired into
+LiveShadowSession; (2) execution-quality scoring used a points spread scale on
+price-unit live data — DecisionPipeline now takes max_spread, aligned with the
+governor in make_live_pipeline. DEMO-002 blockers recorded in the audit:
+RISK-001 sizing/pyramiding unwired (F-3), no open-trade management loop (F-4),
+news protection unfed (F-5).
 
 ## Next Task
 

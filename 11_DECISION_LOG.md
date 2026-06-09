@@ -2132,3 +2132,66 @@ tests/test_demo_preflight.py, .gitignore
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-10-02
+
+## Date:
+2026-06-10
+
+## Area:
+Risk / Strategy / Architecture
+
+## Decision:
+AUDIT-001: full intelligence audit recorded in 24_INTELLIGENCE_AUDIT_ROADMAP.md
+with classified findings and a DEMO-002 / real-money gate map. Two
+High-Confidence Defects fixed immediately: (1) the Risk Governor's loss-limit
+inputs (daily/weekly loss, trades today, consecutive losses, open symbols)
+were permanently zero in the live loop — a new journal-driven RiskStateTracker
+now computes them from TradeRecords and LiveShadowSession feeds them into
+every PipelineInput; (2) execution-quality scoring divided spread by a
+hard-coded 50 (points scale) while the live loop supplies price-unit spread —
+DecisionPipeline now takes max_spread (default 50 preserves existing
+behavior) and make_live_pipeline passes its price-unit governor limit (1.0).
+
+## Reason:
+03_RISK_POLICY mandates trading stops at daily/weekly/consecutive-loss limits;
+checks existed but their inputs were never computed, so the rules were dead in
+the live/demo path. The spread unit mismatch made execution quality a constant
+~0.996 live, silencing a gold-critical confidence input (spread widening at
+rollover/news). Both fixes tighten behavior; neither can loosen any limit.
+
+## Evidence:
+tests/test_risk_state_tracker.py — 9 tests (daily/weekly windows, win does not
+offset losses, streak break/reset, open symbols, unknown-balance safety,
+restart-safe from disk, naive-now rejected). test_live_shadow.py — journaled
+losses flow into PipelineInput (2 x -20 on $2000 -> 2% daily/weekly, streak 2);
+price-unit quality scale (0.5 spread -> 0.5 quality live vs 0.99 default).
+Full suite: 463 passed. pre_demo_safety_check.sh passed.
+
+## Alternatives Considered:
+- Computing loss state inside the governor: rejected — the governor is a pure
+  evaluator; history derivation belongs to a tracker over the journal.
+- Tracking net P&L (wins offsetting losses) for the daily cap: rejected — the
+  policy caps LOSS, and netting would let a streak ride behind early wins.
+- Converting live spread to points to fit the old scale: rejected — price
+  units are the native unit of the live loop and the governor limit.
+
+## Risk:
+The tracker reads the same journal the session writes; a corrupted journal
+line would raise during snapshot and halt the cycle.
+
+## Mitigation:
+Halting on corrupted state is the intended fail-closed behavior
+(08_ERROR_POLICY); journal entries are schema-validated on read.
+
+## Files Affected:
+24_INTELLIGENCE_AUDIT_ROADMAP.md, src/risk/state_tracker.py,
+src/risk/__init__.py, src/execution/live_shadow.py, src/strategy/pipeline.py,
+scripts/generate_evidence_pack.py, tests/test_risk_state_tracker.py,
+tests/test_live_shadow.py
+
+## Status:
+Accepted
