@@ -158,3 +158,25 @@ def test_every_decision_explains_itself():
     assert "contraction" in blob
     d = decision.to_dict()
     assert d["risk_pct"] <= POLICY_RISK_CAP
+
+# -- INTELLIGENCE-002: adaptive demo risk policy (per-phase ceilings) -----------
+
+def test_phase_ceilings_bound_elite_risk():
+    ceilings = {2_000: 0.010, 12_000: 0.008, 20_000: 0.006, 30_000: 0.005}
+    for equity, ceiling in ceilings.items():
+        decision = ENGINE.decide(elite(equity=equity))
+        assert decision.risk_pct <= ceiling, (equity, decision.risk_pct)
+
+
+def test_growth_phase_elite_risk_exceeds_the_old_flat_half_percent():
+    """The Adaptive Demo Risk Policy: 0.5% is no longer the universal demo
+    ceiling — Phase 1 elite evidence may run up to 0.8% (2x the 0.4% base),
+    inside the 1.0% phase ceiling and the unchanged 2% daily stop."""
+    decision = ENGINE.decide(elite(equity=2_000))
+    assert decision.risk_pct > 0.005
+    assert decision.risk_pct <= 0.010
+
+
+def test_ordinary_evidence_stays_at_phase_base_not_ceiling():
+    decision = ENGINE.decide(inputs(equity=2_000))
+    assert decision.risk_pct < 0.005  # base 0.4%, nowhere near the ceiling

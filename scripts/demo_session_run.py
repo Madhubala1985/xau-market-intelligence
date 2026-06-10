@@ -314,6 +314,7 @@ def main() -> int:
             kill_switch=kill_switch,
             max_orders=profile.max_orders,
             profile_name=profile.name,
+            risk_pct=limits.max_risk_per_trade,
         )
         report = session.run(
             duration_seconds=profile.duration_minutes * 60.0,

@@ -30,6 +30,7 @@ from typing import Optional, Sequence
 from src.data.aggregation import AggregationError, aggregate
 from src.data.enums import Direction, Timeframe
 from src.data.schemas import BrokerState, Candle, TradeDecision
+from src.data.session_levels import AsianRangeContext, AsianRangeEngine
 from src.data.validation import DataValidator, ValidationStatus
 from src.data.sessions import SessionEngine, SessionType
 from src.liquidity.liquidity_map import LiquidityMapEngine, LiquiditySide
@@ -39,6 +40,10 @@ from src.orderflow.proxy import OrderFlowProxyEngine
 from src.regime.chop_classifier import ChopAssessment, ChopClassifier
 from src.regime.htf_bias import HtfBias, HtfBiasEngine
 from src.regime.regime_engine import Regime, RegimeEngine, RegimeResult
+from src.regime.volatility_classifier import (
+    VolatilityAssessment,
+    VolatilityClassifier,
+)
 from src.risk.adaptive_risk import (
     AdaptiveRiskDecision,
     AdaptiveRiskEngine,
@@ -103,6 +108,12 @@ class PipelineInput:
     broker: BrokerState
     current_spread: float = 0.0
     futures_candles: Optional[Sequence[Candle]] = None
+    # INTELLIGENCE-002: TRUE multi-timeframe candles fetched from MT5. When
+    # absent the pipeline degrades honestly (M15/H1 aggregated from the exec
+    # feed and labelled so; M1 simply unavailable).
+    m15_candles: Optional[Sequence[Candle]] = None
+    h1_candles: Optional[Sequence[Candle]] = None
+    m1_candles: Optional[Sequence[Candle]] = None
     news_risk: bool = False
     risk_pct: float = 0.005
     daily_loss_pct: float = 0.0
@@ -129,6 +140,8 @@ class PipelineContext:
     price_zone: Optional[PriceZone] = None
     displacement_ratio: float = 0.0
     setup_kind: str = ""  # "sweep_reclaim" | "bos_continuation" | ""
+    volatility: Optional[VolatilityAssessment] = None
+    asian: Optional[AsianRangeContext] = None
 
 
 @dataclass(frozen=True)
@@ -180,6 +193,9 @@ class PipelineEngines:
     mtf: MtfAlignmentEngine = field(default_factory=MtfAlignmentEngine)
     confluence: ConfluenceEngine = field(default_factory=ConfluenceEngine)
     adaptive_risk: AdaptiveRiskEngine = field(default_factory=AdaptiveRiskEngine)
+    # INTELLIGENCE-002: gold session levels + volatility safety layer.
+    asian: AsianRangeEngine = field(default_factory=AsianRangeEngine)
+    volatility: VolatilityClassifier = field(default_factory=VolatilityClassifier)
 
 
 class DecisionPipeline:
@@ -198,6 +214,7 @@ class DecisionPipeline:
         regime_window: int = 60,
         chop_override_confluence: float = 0.65,
         continuation_confluence: float = 0.60,
+        continuation_displacement: float = 1.5,
     ) -> None:
         if max_spread <= 0:
             raise ValueError("max_spread must be > 0")
@@ -211,6 +228,7 @@ class DecisionPipeline:
         self._regime_window = regime_window
         self._chop_override_confluence = chop_override_confluence
         self._continuation_confluence = continuation_confluence
+        self._continuation_displacement = continuation_displacement
 
     def decide(self, inp: PipelineInput) -> PipelineResult:
         e = self._e
@@ -251,12 +269,23 @@ class DecisionPipeline:
         displacement_ratio = self._displacement_ratio(inp.exec_candles)
         spread_ratio = max(0.0, inp.current_spread / self._max_spread)
 
-        # Multi-timeframe alignment: H1 + M15 are honest aggregations of the
-        # M5 exec feed; D1/H4 come in as real fetched series.
-        m15, h1 = self._intraday_frames(inp.exec_candles)
+        # Volatility safety layer (INTELLIGENCE-002): dangerous states block.
+        volatility = e.volatility.classify(
+            inp.exec_candles, spread_ratio=spread_ratio
+        )
+        # Asian range / London-NY expansion context (honest: unknown when the
+        # feed lacks today's Asian session).
+        asian = e.asian.analyze(inp.exec_candles, time_utc)
+
+        # Multi-timeframe alignment (INTELLIGENCE-002): TRUE MT5 candles per
+        # timeframe when supplied; otherwise honest aggregation of the exec
+        # feed, labelled as such in `sources` — never pretended to be native.
+        m15, h1, mtf_sources = self._mtf_frames(inp)
         mtf = e.mtf.align(
             daily=inp.daily_candles, h4=inp.h4_candles, h1=h1, m15=m15,
             m5_bias=None if structure_bias is Bias.NEUTRAL else structure_bias,
+            m1_state=self._m1_state(inp.m1_candles),
+            sources=mtf_sources,
         )
 
         # Chop decomposition + graded confluence for the candidate direction.
@@ -277,6 +306,7 @@ class DecisionPipeline:
             spread_ratio=spread_ratio,
             orderflow=orderflow,
             total_candles=len(inp.exec_candles),
+            asian=asian,
         )
 
         # Graded regime gate: CHOPPY may be overridden ONLY by a tradeable
@@ -296,7 +326,20 @@ class DecisionPipeline:
             chop=chop, mtf=mtf, confluence=confluence, price_zone=price_zone,
             displacement_ratio=displacement_ratio,
             setup_kind=setup.kind if setup else "",
+            volatility=volatility, asian=asian,
         )
+
+        # Hard volatility gate: dangerous states refuse new entries outright.
+        # EXPANSION never blocks by itself (03_RISK_POLICY volatility rule).
+        if volatility.dangerous:
+            return PipelineResult(
+                stage=PipelineStage.HYPOTHESIS, approved=False,
+                reason=(
+                    f"dangerous volatility {volatility.state.value}: "
+                    f"{volatility.reason}"
+                ),
+                context=context,
+            )
 
         # 3) Scoring (confidence / uncertainty), graded by chop/confluence.
         components = self._score_components(
@@ -441,21 +484,45 @@ class DecisionPipeline:
         )
 
     @staticmethod
-    def _intraday_frames(
-        exec_candles: Sequence[Candle],
-    ) -> tuple[list, list]:
-        """Aggregate the exec feed into M15 and H1 (honest; [] on failure)."""
-        m15: list = []
-        h1: list = []
-        try:
-            m15 = aggregate(exec_candles, Timeframe.M15)
-        except (AggregationError, ValueError):
-            pass
-        try:
-            h1 = aggregate(exec_candles, Timeframe.H1)
-        except (AggregationError, ValueError):
-            pass
-        return m15, h1
+    def _mtf_frames(inp: PipelineInput) -> tuple[list, list, dict]:
+        """M15/H1 series + an honest per-timeframe source map.
+
+        Preference order per timeframe: TRUE MT5 candles supplied by the
+        caller -> aggregation of the exec feed (labelled) -> missing.
+        D1/H4 are always caller-supplied MT5 fetches in the live path.
+        """
+        sources = {"d1": "MT5", "h4": "MT5"}
+
+        def frame(native, target: Timeframe, key: str) -> list:
+            if native:
+                sources[key] = "MT5"
+                return list(native)
+            try:
+                out = aggregate(inp.exec_candles, target)
+            except (AggregationError, ValueError):
+                out = []
+            sources[key] = "aggregated(M5)" if out else "missing"
+            return out
+
+        m15 = frame(inp.m15_candles, Timeframe.M15, "m15")
+        h1 = frame(inp.h1_candles, Timeframe.H1, "h1")
+        sources["m5"] = "MT5"
+        sources["m1"] = "MT5" if inp.m1_candles else "missing"
+        return m15, h1, sources
+
+    @staticmethod
+    def _m1_state(m1_candles: Optional[Sequence[Candle]]) -> Optional[str]:
+        """M1 trigger state (display/refinement only; carries no weight)."""
+        if not m1_candles or len(m1_candles) < 3:
+            return None
+        last = list(m1_candles)[-3:]
+        net = last[-1].close - last[0].open
+        threshold = 0.1 * sum(c.high - c.low for c in last) / 3
+        if net > threshold:
+            return "BULLISH"
+        if net < -threshold:
+            return "BEARISH"
+        return "FLAT"
 
     @staticmethod
     def _displacement_ratio(candles: Sequence[Candle], window: int = 20) -> float:
@@ -513,7 +580,7 @@ class DecisionPipeline:
         """
         if confluence.score < self._continuation_confluence:
             return None
-        if displacement_ratio < 1.5:
+        if displacement_ratio < self._continuation_displacement:
             return None
         events = list(structure.events)
         if not events:

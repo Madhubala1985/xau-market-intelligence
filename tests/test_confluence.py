@@ -219,3 +219,32 @@ def test_report_serializes_with_statuses_and_missing():
     assert d["direction"] == "SHORT"
     assert "statuses" in d and "missing" in d
     assert 0.0 <= d["score"] <= 1.0
+
+
+def test_mixed_alignment_reports_an_explicit_conflict():
+    engine = MtfAlignmentEngine(swing_strength=1, min_direction_score=0.7)
+    out = engine.align(
+        daily=bullish_series(timedelta(days=1)),
+        h4=bearish_series(timedelta(hours=4)),
+        h1=bullish_series(timedelta(hours=1)),
+        m15=bearish_series(timedelta(minutes=15)),
+        m5_bias=None,
+    )
+    assert out.direction is None
+    assert out.conflict.startswith("mixed alignment:")
+    assert "d1=BULLISH" in out.conflict and "h4=BEARISH" in out.conflict
+
+
+def test_asian_sweep_supports_the_trap_direction():
+    from src.data.session_levels import AsianRangeContext
+
+    swept_high = AsianRangeContext(known=True, high=105.0, low=100.0,
+                                   position="INSIDE", swept="HIGH",
+                                   expansion_ratio=1.3, expanding=True,
+                                   reason="t")
+    baseline = assess()
+    with_sweep = assess(asian=swept_high)
+    assert with_sweep.score > baseline.score  # buy-side taken supports SHORT
+    assert "swept=HIGH" in with_sweep.statuses["asian_range"]
+    unknown = assess(asian=AsianRangeContext(known=False, reason="t"))
+    assert unknown.statuses["asian_range"] == "UNKNOWN"

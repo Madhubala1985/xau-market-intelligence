@@ -81,6 +81,7 @@ from src.execution.trading_service import (  # noqa: E402
     mask_login,
 )
 from src.journal.journal import TradeJournal  # noqa: E402
+from src.orderflow.macro_context import NullMacroProvider  # noqa: E402
 from src.risk.governor import RiskGovernor  # noqa: E402
 from src.risk.news_guard import NewsRiskGuard  # noqa: E402
 
@@ -212,6 +213,10 @@ def main() -> int:
             kill_switch=kill_switch,
             max_orders=profile.max_orders,
             profile_name=profile.name,
+            # Adaptive Demo Risk Policy: this is the STATIC ceiling the
+            # pipeline/governor enforce; the AdaptiveRiskEngine's per-phase
+            # ceilings and evidence budget decide the actual risk below it.
+            risk_pct=limits.max_risk_per_trade,
         )
 
         now = datetime.now(timezone.utc)
@@ -245,6 +250,7 @@ def main() -> int:
             ),
             journal_path=str(JOURNAL_PATH.relative_to(REPO_ROOT)),
             report_dir=str(OUT_DIR.relative_to(REPO_ROOT)),
+            macro_status=NullMacroProvider().assess(now).summary(),
         )
 
         def tick_age(now_utc: datetime):

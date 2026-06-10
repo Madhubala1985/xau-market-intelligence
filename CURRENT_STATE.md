@@ -10,9 +10,10 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-INTELLIGENCE-001: IMPLEMENTED — graded confluence, MTF alignment, and
-adaptive risk are wired into the live decision path; restart the continuous
-service and collect evidence (user-started)
+INTELLIGENCE-002: IMPLEMENTED — wiring verified (25_WIRING_MATRIX.md), true
+MT5 MTF fetching, Asian/London/NY session logic, dangerous-volatility
+classifier, Adaptive Demo Risk Policy; restart the continuous service and
+collect evidence (user-started)
 
 ## Last Completed Task
 
@@ -79,7 +80,34 @@ of 170+ no-trade CHOPPY cycles found and fixed the root causes:
 - Opportunity audit: after 60 active-session cycles without an entry, a
   classified report (NO_TRADE_CORRECT / POSSIBLY_TOO_STRICT / MIXED) is
   written to reports/runtime/opportunity_audit_*.md/json.
-- 634 tests pass; pre_demo_safety_check.sh passes.
+
+INTELLIGENCE-002 (2026-06-10, decision 2026-06-10-08):
+- WIRING MATRIX (25_WIRING_MATRIX.md): all 20 intelligence layers audited
+  with evidence — 17 LIVE; news PARTIAL (manual/static fail-closed,
+  NEWS-001); futures/macro PLACEHOLDER (honest MacroProvider interface,
+  NullMacroProvider cannot fabricate; FUTURES-001/MACRO-001).
+- TRUE MTF: the live cycle fetches M15/H1/M1 from MT5 (M5/H4/D1 already
+  real); pipeline prefers native candles, degrades honestly to labelled
+  "aggregated(M5)"/"missing" (sources printed when degraded); explicit
+  conflict string on mixed alignment; M1 trigger state is display-only.
+- Asian range + London/NY expansion (src/data/session_levels.py): Asian
+  high/low, price position, sweep of Asian liquidity, expansion ratio —
+  a confluence component (asian_range) and a terminal line; UNKNOWN when
+  the feed lacks today's Asian session (never fabricated).
+- Dangerous-volatility classifier (src/regime/volatility_classifier.py):
+  DANGEROUS_SPIKE / NEWS_LIKE_SHOCK / SPREAD_MISMATCH / UNSTABLE_STOPS
+  hard-gate the pipeline before hypothesis; EXPANSION never blocks alone.
+- ADAPTIVE DEMO RISK POLICY (03_RISK_POLICY updated, owner-directed): flat
+  0.5% demo cap replaced by per-phase evidence-gated bounds — P1 base
+  0.40% ceiling 1.00%, P2 0.35%/0.80%, P3 0.30%/0.60%, P4 0.20%/0.50%;
+  expansion x1.4 strong / x2.0 elite; daily 2% / weekly 5% / 3 trades/day
+  UNCHANGED; real-money policy UNCHANGED; no martingale structurally.
+- Opportunity-audit verdicts extended: MISSED_SWEEP_REVERSAL,
+  MISSED_CONTINUATION, DATA_INSUFFICIENT.
+- BACKTEST-001 readiness: src/backtest/calibration.py +
+  scripts/calibration_replay.py (threshold variants scored in R on real
+  history; recommendation only — never mutates live config).
+- 668 tests pass; pre_demo_safety_check.sh passes.
 
 ## Next Task
 
@@ -89,13 +117,18 @@ User restarts the continuous service on the Windows MT5 host (PowerShell):
 2. py -3.12 scripts\trading_service.py --profile continuous --stdout-progress
    (or --dry-run first to watch the new reasoning without orders)
 3. Collect evidence over full London+NY sessions:
-   - per-cycle MTF/intel/confluence/risk lines (regimes should now vary,
-     conf/unc should move, chop subtypes visible),
+   - MTF row shows all six frames + sources (no "degraded" lines expected on
+     the Windows host), vol=/asian= lines, conflict lines when mixed,
+   - adaptive risk lines show phase-based budgets (0.10%-0.80% typical),
    - any ORDER SENT tickets vs MT5 Toolbox/Trade tab,
-   - reports/runtime/opportunity_audit_*.md if long no-trade stretches recur,
+   - opportunity_audit_* verdicts on no-trade stretches,
    - daily service_eval_* / service_reflection_* reports.
-4. Next implementation candidates: BACKTEST-001 (calibrate the 0.65/0.60/
-   1.5x thresholds on historical XAUUSDm data), NEWS-001 (real macro feed).
+4. Run the calibration replay on real history (Windows):
+   py -3.12 scripts\calibration_replay.py --fetch --count 4000
+   Review reports/runtime/calibration.md; threshold changes only via a
+   reviewed task with walk-forward (BACKTEST-001).
+5. Honest backlog: NEWS-001 (real calendar), MACRO-001 (DXY/yields),
+   FUTURES-001 (gold futures feed).
 
 ## Current Execution Mode
 

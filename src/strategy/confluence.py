@@ -27,6 +27,7 @@ from typing import Dict, Optional, Sequence, Tuple
 
 from src.data.enums import Direction, SessionType
 from src.data.schemas import Candle
+from src.data.session_levels import AsianRangeContext
 from src.liquidity.sweep import SweepEvent, SweepStatus
 from src.orderflow.proxy import OrderFlowProxy, ProxyPressure
 from src.structure.market_structure import (
@@ -45,15 +46,16 @@ _KILL_ZONES = {
 # Component weights (sum == 1.0). MTF + sweep dominate; micro-evidence refines.
 _WEIGHTS: Dict[str, float] = {
     "mtf": 0.20,
-    "sweep": 0.18,
+    "sweep": 0.16,
     "bos_choch": 0.12,
     "premium_discount": 0.10,
     "displacement": 0.10,
     "fvg": 0.08,
     "order_block": 0.08,
-    "session": 0.06,
-    "spread": 0.04,
-    "orderflow": 0.04,
+    "asian_range": 0.05,   # Asian liquidity / London-NY expansion context
+    "session": 0.05,
+    "spread": 0.03,
+    "orderflow": 0.03,
 }
 
 
@@ -73,6 +75,13 @@ class MtfAlignment:
     direction: Optional[Direction]   # supported direction, or None
     score: float                      # weighted agreement in [0, 1]
     reason: str
+    # INTELLIGENCE-002: optional M1 trigger state (display/refinement only —
+    # it carries no alignment weight), per-timeframe data sources (true MT5
+    # fetch vs honest aggregation vs missing), and an explicit conflict
+    # explanation when alignment is mixed.
+    m1: Optional[str] = None
+    sources: Dict[str, str] = field(default_factory=dict)
+    conflict: str = ""
 
     def to_dict(self) -> dict:
         as_str = lambda b: b.value if b is not None else None  # noqa: E731
@@ -82,9 +91,12 @@ class MtfAlignment:
             "h1": as_str(self.h1),
             "m15": as_str(self.m15),
             "m5": as_str(self.m5),
+            "m1": self.m1,
             "direction": self.direction.value if self.direction else None,
             "score": round(self.score, 4),
             "reason": self.reason,
+            "sources": dict(self.sources),
+            "conflict": self.conflict,
         }
 
 
@@ -107,6 +119,8 @@ class MtfAlignmentEngine:
         h1: Sequence[Candle],
         m15: Sequence[Candle],
         m5_bias: Optional[Bias],
+        m1_state: Optional[str] = None,
+        sources: Optional[Dict[str, str]] = None,
     ) -> MtfAlignment:
         biases = {
             "d1": self._bias(daily),
@@ -115,6 +129,7 @@ class MtfAlignmentEngine:
             "m15": self._bias(m15),
             "m5": m5_bias,
         }
+        sources = dict(sources or {})
         scores = {Bias.BULLISH: 0.0, Bias.BEARISH: 0.0}
         available = 0.0
         for name, weight in self._TF_WEIGHTS:
@@ -128,6 +143,8 @@ class MtfAlignmentEngine:
             return MtfAlignment(
                 **biases, direction=None, score=0.0,
                 reason="no timeframe data available",
+                m1=m1_state, sources=sources,
+                conflict="no timeframe data",
             )
         bull = scores[Bias.BULLISH] / available
         bear = scores[Bias.BEARISH] / available
@@ -141,8 +158,16 @@ class MtfAlignmentEngine:
             f"bullish weight {bull:.2f} vs bearish {bear:.2f} "
             f"over {available:.2f} available"
         )
+        conflict = ""
+        if direction is None:
+            parts = [
+                f"{name}={biases[name].value}"
+                for name, _ in self._TF_WEIGHTS if biases[name] is not None
+            ]
+            conflict = "mixed alignment: " + (", ".join(parts) or "no data")
         return MtfAlignment(**biases, direction=direction, score=score,
-                            reason=reason)
+                            reason=reason, m1=m1_state, sources=sources,
+                            conflict=conflict)
 
     def _bias(self, candles: Sequence[Candle]) -> Optional[Bias]:
         if len(candles) < 5:
@@ -193,6 +218,7 @@ class ConfluenceEngine:
         spread_ratio: float,          # current spread / allowed max
         orderflow: Optional[OrderFlowProxy],
         total_candles: int,
+        asian: Optional[AsianRangeContext] = None,
     ) -> ConfluenceReport:
         if direction not in (Direction.LONG, Direction.SHORT):
             return ConfluenceReport(
@@ -215,6 +241,7 @@ class ConfluenceEngine:
                 zones, want, total_candles, statuses
             ),
             "premium_discount": self._pd_score(price_zone, direction, statuses),
+            "asian_range": self._asian_score(asian, direction, statuses),
             "displacement": min(1.0, max(0.0, (displacement_ratio - 1.0) / 1.5)),
             "session": (1.0 if session in _KILL_ZONES
                         else 0.5 if session is SessionType.ASIAN else 0.2),
@@ -314,6 +341,40 @@ class ConfluenceEngine:
                     PriceZone.DISCOUNT: 0.2}[zone]
         return {PriceZone.DISCOUNT: 1.0, PriceZone.EQUILIBRIUM: 0.5,
                 PriceZone.PREMIUM: 0.2}[zone]
+
+    @staticmethod
+    def _asian_score(
+        asian: Optional[AsianRangeContext], direction: Direction,
+        statuses: Dict[str, str],
+    ) -> float:
+        """Asian liquidity / London-NY expansion support for the candidate.
+
+        SHORT is best served by a sweep ABOVE the Asian high (buy-side
+        liquidity taken) or by expansion BELOW the range; LONG mirrors it.
+        Unknown context is neutral-low — honest absence, never fabricated.
+        """
+        if asian is None or not asian.known:
+            statuses["asian_range"] = "UNKNOWN"
+            return 0.3
+        statuses["asian_range"] = (
+            f"{asian.position} swept={asian.swept} "
+            f"{'EXPANDING' if asian.expanding else 'CONTAINED'}"
+        )
+        if direction is Direction.SHORT:
+            if asian.swept in ("HIGH", "BOTH"):
+                return 1.0                       # buy-side taken; trap above
+            if asian.position == "BELOW" and asian.expanding:
+                return 0.8                       # expansion below the range
+            if asian.position == "INSIDE":
+                return 0.3
+            return 0.4
+        if asian.swept in ("LOW", "BOTH"):
+            return 1.0
+        if asian.position == "ABOVE" and asian.expanding:
+            return 0.8
+        if asian.position == "INSIDE":
+            return 0.3
+        return 0.4
 
     @staticmethod
     def _orderflow_score(

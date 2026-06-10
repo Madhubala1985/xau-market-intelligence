@@ -96,6 +96,10 @@ class BannerInfo:
     kill_switch_status: str
     journal_path: str
     report_dir: str
+    macro_status: str = (
+        "DXY/yields/futures: UNAVAILABLE (no feed; "
+        "NEWS-001/MACRO-001/FUTURES-001 pending; never faked)"
+    )
 
 
 @dataclass(frozen=True)
@@ -157,6 +161,7 @@ class ProgressPrinter:
         self._line(f"  symbol:       {info.symbol}")
         self._line(f"  risk limits:  {info.risk_summary}")
         self._line(f"  news:         {info.news_status}")
+        self._line(f"  macro:        {info.macro_status}")
         self._line(f"  kill switch:  {info.kill_switch_status}")
         self._line(f"  journal:      {info.journal_path}")
         self._line(f"  reports:      {info.report_dir}")
@@ -232,9 +237,35 @@ class ProgressPrinter:
             tf = lambda k: mtf.get(k) or "-"  # noqa: E731
             self._line(
                 f"  MTF d1={tf('d1')} h4={tf('h4')} h1={tf('h1')} "
-                f"m15={tf('m15')} m5={tf('m5')} score={mtf.get('score', 0):.2f} "
+                f"m15={tf('m15')} m5={tf('m5')} m1={tf('m1')} "
+                f"score={mtf.get('score', 0):.2f} "
                 f"-> {mtf.get('direction') or 'NO_TRADE'}"
             )
+            sources = mtf.get("sources") or {}
+            degraded = {k: v for k, v in sources.items() if v != "MT5"}
+            if degraded:
+                self._line(
+                    "  MTF sources degraded: "
+                    + " ".join(f"{k}={v}" for k, v in sorted(degraded.items()))
+                )
+            if mtf.get("conflict"):
+                self._line(f"  MTF conflict: {mtf['conflict']}")
+        volatility = intel.get("volatility")
+        asian = intel.get("asian")
+        if volatility or asian:
+            vol_text = (
+                f"vol={volatility['state']}" if volatility else "vol=-"
+            )
+            if asian and asian.get("known"):
+                asian_text = (
+                    f"asian={asian['position']}"
+                    f"({asian['low']:.2f}-{asian['high']:.2f}) "
+                    f"swept={asian['swept']} "
+                    f"expansion={asian['expansion_ratio']:.2f}x"
+                )
+            else:
+                asian_text = "asian=UNKNOWN"
+            self._line(f"  {vol_text} {asian_text}")
         confluence = intel.get("confluence")
         if confluence:
             st = confluence.get("statuses", {})

@@ -2692,3 +2692,104 @@ files + updates).
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-10-08
+
+## Date:
+2026-06-10
+
+## Area:
+Risk Policy / Strategy / Data / Observability
+
+## Decision:
+INTELLIGENCE-002: full wiring verification, true MTF, gold session logic,
+volatility safety layer, and the Adaptive Demo Risk Policy.
+
+(a) Wiring matrix (25_WIRING_MATRIX.md, new tracked doc): all 20
+    intelligence layers audited with evidence; 17 LIVE, news PARTIAL
+    (honest manual/static, fail-closed), futures/macro PLACEHOLDER (honest
+    interface, NullMacroProvider cannot fabricate availability — enforced
+    by construction and tests).
+(b) TRUE multi-timeframe data: the live cycle now fetches M15/H1/M1 from
+    MT5 (M5/H4/D1 were already real). The pipeline prefers native candles
+    and degrades honestly to labelled M5 aggregation ("aggregated(M5)") or
+    "missing" — sources are carried in MtfAlignment and printed when
+    degraded. M1 contributes a display-only trigger state (no weight until
+    calibrated). Mixed alignment now reports an explicit conflict string.
+(c) Asian range + London/NY logic (src/data/session_levels.py): today's
+    Asian high/low, price position, sweep of Asian liquidity, post-Asian
+    expansion ratio — wired as a confluence component (asian_range, weight
+    0.05; weights re-normalized) and a terminal line. Unknown context is
+    UNKNOWN, never fabricated.
+(d) Dangerous-volatility classifier (src/regime/volatility_classifier.py):
+    NORMAL / EXPANSION / DANGEROUS_SPIKE / NEWS_LIKE_SHOCK /
+    SPREAD_MISMATCH / UNSTABLE_STOPS. Dangerous states hard-gate the
+    pipeline BEFORE hypothesis; EXPANSION never blocks alone
+    (03_RISK_POLICY volatility rule now explicit).
+(e) ADAPTIVE DEMO RISK POLICY (owner-directed change to 03_RISK_POLICY):
+    the fixed 0.5% demo cap is replaced by evidence-gated per-phase bounds:
+    P1 (<$10k) base 0.40% ceiling 1.00%; P2 base 0.35% ceiling 0.80%;
+    P3 base 0.30% ceiling 0.60%; P4 base 0.20% ceiling 0.50%.
+    Daily 2% / weekly 5% / 3 trades/day / 1 position + protected add-on are
+    UNCHANGED survival anchors; real-money policy UNCHANGED. Justification:
+    E = r(pR-(1-p)); concentrating risk on the elite-evidence subset halves
+    trades-to-milestone while the daily/weekly stops (not the per-trade
+    cap) bound the tail — two max-risk Phase-1 losses still stop the day at
+    -2%. Expansion multipliers x1.4 (strong) / x2.0 (elite); contraction
+    unchanged (multiplicative, no martingale structurally). The demo tier
+    dollar caps ($40/$80/$100, policy 20) remain a further outer bound and
+    are non-binding at $2k equity.
+(f) Opportunity audit verdicts extended: MISSED_SWEEP_REVERSAL,
+    MISSED_CONTINUATION, DATA_INSUFFICIENT (plus existing
+    NO_TRADE_CORRECT / POSSIBLY_TOO_STRICT / MIXED).
+(g) BACKTEST-001 readiness: src/backtest/calibration.py +
+    scripts/calibration_replay.py replay threshold variants
+    (chop-override / continuation confluence / displacement, now a pipeline
+    parameter) over historical M5 candles, score outcomes in R, and emit a
+    recommendation. The tool NEVER mutates live thresholds (tested).
+(h) Terminal: MTF row gains m1 + degraded-source + conflict lines; new
+    vol=/asian= line; banner gains an honest macro status line.
+
+## Evidence:
+668 tests pass (+34): test_volatility_classifier (7), test_session_levels
+(6), test_macro_context (3), test_calibration (4), adaptive phase-ceiling
+tests (3), MTF true-fetch/degradation tests (session + pipeline), terminal
+field assertions, opportunity-audit verdict tests.
+pre_demo_safety_check.sh passed.
+
+## Alternatives Considered:
+- Keeping 0.5% and extending session length instead: rejected — at $2k a
+  0.5% cap yields $10 risk/trade, which barely clears the broker min-lot
+  floor on normal gold stops; the evaluation would starve mathematically.
+- Weighting M1 in alignment now: rejected — uncalibrated micro-noise; it is
+  display-only until BACKTEST-001 says otherwise.
+- Pretending aggregated M5 is native H1/M15: rejected outright — sources
+  are labelled and printed.
+
+## Risk:
+Phase-1 elite trades can risk up to 0.8% (x2.0 of 0.4% base), reaching 1.0%
+only if a future evidence multiplier is added; loss clusters are capped by
+the unchanged daily/weekly stops. Asian/volatility heuristics are reasoned,
+not yet calibrated.
+
+## Mitigation:
+Demo-only; daily/weekly anchors unchanged; every adverse signal contracts
+the budget multiplicatively; calibration tooling is ready to test all new
+thresholds on history before any further change.
+
+## Files Affected:
+03_RISK_POLICY.md, 25_WIRING_MATRIX.md (new),
+src/regime/volatility_classifier.py (new), src/data/session_levels.py (new),
+src/orderflow/macro_context.py (new), src/backtest/calibration.py (new),
+scripts/calibration_replay.py (new), src/risk/adaptive_risk.py,
+src/strategy/pipeline.py, src/strategy/confluence.py,
+src/execution/demo_session.py, src/execution/session_profiles.py,
+src/execution/trading_service.py, src/reflection/opportunity_audit.py,
+scripts/trading_service.py, scripts/demo_session_run.py,
+scripts/generate_evidence_pack.py, package __init__ files, tests.
+
+## Status:
+Accepted

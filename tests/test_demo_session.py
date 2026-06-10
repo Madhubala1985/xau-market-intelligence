@@ -649,3 +649,42 @@ def test_cycle_stats_capture_evaluation_data(tmp_path):
     assert len(payload["cycle_stats"]) == 2
     assert payload["mode"] == "DEMO_LIVE"
     assert payload["orders_simulated"] == 0
+
+def test_session_fetches_true_mtf_timeframes(tmp_path):
+    """INTELLIGENCE-002: the live cycle requests real M15/H1/M1 candles from
+    MT5 and hands them to the pipeline (no silent M5-only operation)."""
+    session, fake, _, _ = make_session(
+        tmp_path, results=[no_trade_result()], max_orders=None,
+    )
+    session.run(duration_seconds=1.0, poll_seconds=1.0, max_cycles=1)
+    pipeline = session._pipeline  # StubPipeline records its inputs
+    inp = pipeline.inputs[0]
+    assert inp.m15_candles is not None and len(inp.m15_candles) > 0
+    assert inp.h1_candles is not None and len(inp.h1_candles) > 0
+    assert inp.m1_candles is not None and len(inp.m1_candles) > 0
+    requested = {call.args[1] for call in fake.copy_rates_from_pos.call_args_list}
+    assert fake.TIMEFRAME_M15 in requested
+    assert fake.TIMEFRAME_H1 in requested
+    assert fake.TIMEFRAME_M1 in requested
+
+
+def test_session_degrades_when_extra_timeframes_fail(tmp_path):
+    """A failed M15/H1/M1 fetch must degrade to None, never crash the cycle."""
+    fake = FakeMT5Trading()
+    original = fake.copy_rates_from_pos.side_effect
+
+    def flaky(symbol, tf, start, count):
+        if tf in (fake.TIMEFRAME_M15, fake.TIMEFRAME_H1, fake.TIMEFRAME_M1):
+            raise RuntimeError("timeframe unavailable")
+        return original(symbol, tf, start, count)
+
+    fake.copy_rates_from_pos.side_effect = flaky
+    session, fake, _, _ = make_session(
+        tmp_path, results=[no_trade_result()], fake=fake, max_orders=None,
+    )
+    report = session.run(duration_seconds=1.0, poll_seconds=1.0, max_cycles=1)
+    assert report.cycles == 1  # no crash
+    inp = session._pipeline.inputs[0]
+    assert inp.m15_candles is None
+    assert inp.h1_candles is None
+    assert inp.m1_candles is None

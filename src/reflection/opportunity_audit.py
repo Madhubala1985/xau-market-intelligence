@@ -8,11 +8,17 @@ This auditor reads the per-cycle intelligence stats (regime subtype, MTF
 alignment, confluence, sweep/displacement statuses, entry actions) collected
 by the session and produces a classified report:
 
-- NO_TRADE_CORRECT      the market genuinely offered nothing (dangerous /
-                        low-quality conditions dominated, no near-misses),
-- POSSIBLY_TOO_STRICT   repeated near-misses: evidence was present but gates
-                        kept blocking — a Hypothesis for backtesting,
-- MIXED                 some of both; read the findings.
+- NO_TRADE_CORRECT       the market genuinely offered nothing (dangerous /
+                         low-quality conditions dominated, no near-misses),
+- MISSED_SWEEP_REVERSAL  confirmed sweeps with meaningful confluence kept
+                         appearing and nothing fired (specific Hypothesis),
+- MISSED_CONTINUATION    aligned MTF + displacement kept appearing without a
+                         sweep and nothing fired (specific Hypothesis),
+- POSSIBLY_TOO_STRICT    repeated generic near-misses: evidence was present
+                         but gates kept blocking — Hypothesis for backtest,
+- DATA_INSUFFICIENT      too few cycles or missing intelligence fields to
+                         judge,
+- MIXED                  some of everything; read the findings.
 
 Every finding carries one of the standard classifications (Proven Defect /
 High-Confidence Defect / Hypothesis / Observation / Market Artifact / Design
@@ -109,8 +115,51 @@ def build_opportunity_audit(stats: Sequence[dict]) -> OpportunityAudit:
     findings: List[Finding] = []
     n = max(1, len(stats))
     near_rate = near_misses / n
+    with_intel = sum(1 for s in stats if s.get("confluence_score") is not None)
 
-    if trades == 0 and near_rate >= 0.20:
+    if len(stats) < 10 or with_intel < n / 2:
+        verdict = "DATA_INSUFFICIENT"
+        detail = (
+            f"{len(stats)} cycle(s), {with_intel} with intelligence fields; "
+            "not enough evidence to judge the gates"
+        )
+        findings.append(Finding(
+            FindingClass.OBSERVATION, "insufficient audit data", detail,
+            "monitor",
+        ))
+    elif (
+        trades == 0 and sweep_evidence >= 3
+        and near_misses >= max(3, int(0.10 * n))
+    ):
+        verdict = "MISSED_SWEEP_REVERSAL"
+        detail = (
+            f"{sweep_evidence} sweep-evidence cycle(s) and {near_misses} "
+            f"near-miss(es) without any entry"
+        )
+        findings.append(Finding(
+            FindingClass.HYPOTHESIS,
+            "sweep-reversal candidates kept appearing without an entry",
+            detail + "; whether they were profitable is unproven without "
+            "hindsight data",
+            "backtest before changing",
+        ))
+    elif (
+        trades == 0 and sweep_evidence == 0
+        and mtf_aligned >= max(5, int(0.20 * n)) and displacement >= 3
+    ):
+        verdict = "MISSED_CONTINUATION"
+        detail = (
+            f"{mtf_aligned} MTF-aligned cycle(s) with {displacement} "
+            f"displacement cycle(s), no sweep, no entry"
+        )
+        findings.append(Finding(
+            FindingClass.HYPOTHESIS,
+            "continuation conditions kept appearing without an entry",
+            detail + "; check the continuation gate (confluence/displacement "
+            "thresholds) against this window",
+            "backtest before changing",
+        ))
+    elif trades == 0 and near_rate >= 0.20:
         verdict = "POSSIBLY_TOO_STRICT"
         detail = (
             f"{near_misses}/{len(stats)} cycles reached confluence >= "

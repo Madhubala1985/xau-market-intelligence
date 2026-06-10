@@ -132,6 +132,8 @@ def test_startup_banner_prints_required_fields(tmp_path):
     assert "kill switch:  absent" in out
     assert "journal:      logs/demo_trade_journal.jsonl" in out
     assert "KILL_SWITCH" in out  # how to stop safely
+    # macro honesty: shown as unavailable, never faked
+    assert "macro:" in out and "UNAVAILABLE" in out
     assert "Service is ALIVE" in out
 
 
@@ -456,7 +458,10 @@ def rich_no_trade_result():
     """A NO_TRADE cycle carrying the full INTELLIGENCE-001 reasoning."""
     mtf = MtfAlignment(d1=Bias.BEARISH, h4=Bias.BEARISH, h1=Bias.BEARISH,
                        m15=None, m5=Bias.BEARISH, direction=Direction.SHORT,
-                       score=0.78, reason="t")
+                       score=0.78, reason="t", m1="BEARISH",
+                       sources={"d1": "MT5", "h4": "MT5", "h1": "MT5",
+                                "m15": "aggregated(M5)", "m5": "MT5",
+                                "m1": "MT5"})
     confluence = ConfluenceReport(
         direction=Direction.SHORT, score=0.52, components={},
         missing=("fvg", "order_block"),
@@ -475,11 +480,26 @@ def rich_no_trade_result():
         risk_pct=0.0018, tier=RiskTier.DEFENSIVE, phase=CapitalPhase.PHASE_1,
         reasons=("contraction: weak evidence",),
     )
+    from src.data.session_levels import AsianRangeContext
+    from src.regime.volatility_classifier import (
+        VolatilityAssessment,
+        VolatilityState,
+    )
+    volatility = VolatilityAssessment(
+        state=VolatilityState.NORMAL, dangerous=False,
+        reason="ordinary volatility", spike_ratio=1.1, atr_ratio=1.0,
+        wick_ratio=0.3,
+    )
+    asian = AsianRangeContext(
+        known=True, high=4126.8, low=4118.2, position="INSIDE",
+        swept="HIGH", expansion_ratio=1.4, expanding=True, reason="t",
+    )
     context = PipelineContext(
         session=SessionType.LONDON, htf_bias=HtfBias.BEARISH,
         regime=Regime.CHOPPY, structure_bias=Bias.BEARISH, has_setup=False,
         regime_reason="3 structure direction flips", chop=chop, mtf=mtf,
         confluence=confluence, displacement_ratio=1.2,
+        volatility=volatility, asian=asian,
     )
     return PipelineResult(
         stage=PipelineStage.HYPOTHESIS, approved=False,
@@ -495,8 +515,12 @@ def test_terminal_shows_full_reasoning_fields(tmp_path):
     )
     service.run()
     out = stream.getvalue()
-    assert "MTF d1=BEARISH h4=BEARISH h1=BEARISH m15=- m5=BEARISH" in out
+    assert ("MTF d1=BEARISH h4=BEARISH h1=BEARISH m15=- m5=BEARISH "
+            "m1=BEARISH") in out
     assert "score=0.78 -> SHORT" in out
+    assert "MTF sources degraded: m15=aggregated(M5)" in out
+    assert "vol=NORMAL" in out
+    assert "asian=INSIDE(4118.20-4126.80) swept=HIGH expansion=1.40x" in out
     assert "intel sweep=PENDING bos=BOS:BEARISH fvg=NONE ob=NONE" in out
     assert "pd=PREMIUM" in out and "flow=BEARISH" in out
     assert "confluence=0.52 risk=DEFENSIVE 0.18%" in out

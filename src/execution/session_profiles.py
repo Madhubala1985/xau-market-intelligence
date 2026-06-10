@@ -29,8 +29,11 @@ from typing import Dict, Optional
 
 from src.risk.governor import RiskLimits
 
-# 03_RISK_POLICY.md "Demo Risk Profile" — the loosest any demo profile may be.
-POLICY_MAX_RISK_PER_TRADE = 0.005
+# 03_RISK_POLICY.md "Adaptive Demo Risk Policy" (decision 2026-06-10-08):
+# the ABSOLUTE demo per-trade ceiling. The AdaptiveRiskEngine applies tighter
+# per-phase ceilings (1.0%/0.8%/0.6%/0.5%) and an evidence-driven budget
+# below them; this static bound is what the governor/planner enforce.
+POLICY_MAX_RISK_PER_TRADE = 0.010
 POLICY_MAX_DAILY_LOSS = 0.02
 POLICY_MAX_WEEKLY_LOSS = 0.05
 POLICY_MAX_TRADES_PER_DAY = 3

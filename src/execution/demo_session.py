@@ -414,6 +414,11 @@ class SupervisedDemoSession:
         exec_candles = self._adapter.fetch_candles(self._exec_tf, self._exec_count)
         daily = self._adapter.fetch_candles(Timeframe.D1, self._daily_count)
         h4 = self._adapter.fetch_candles(Timeframe.H4, self._h4_count)
+        # TRUE multi-timeframe fetches (INTELLIGENCE-002); a failed fetch
+        # degrades honestly to None (pipeline aggregates and labels it).
+        m15 = self._fetch_optional(Timeframe.M15, 200)
+        h1 = self._fetch_optional(Timeframe.H1, 120)
+        m1 = self._fetch_optional(Timeframe.M1, 60)
         tick = self._adapter.fetch_tick()
         spread_price = round(tick.spread, 6)
         broker = self._adapter.fetch_broker_state(now)
@@ -440,6 +445,9 @@ class SupervisedDemoSession:
                 exec_candles=exec_candles,
                 daily_candles=daily,
                 h4_candles=h4,
+                m15_candles=m15,
+                h1_candles=h1,
+                m1_candles=m1,
                 broker=broker,
                 current_spread=spread_price,
                 risk_pct=self._risk_pct,
@@ -554,6 +562,12 @@ class SupervisedDemoSession:
         price_zone = getattr(context, "price_zone", None)
         if price_zone is not None:
             intel["price_zone"] = price_zone.value
+        volatility = getattr(context, "volatility", None)
+        if volatility is not None:
+            intel["volatility"] = volatility.to_dict()
+        asian = getattr(context, "asian", None)
+        if asian is not None:
+            intel["asian"] = asian.to_dict()
         if adaptive is not None:
             intel["adaptive_risk"] = adaptive.to_dict()
         return intel
@@ -591,6 +605,13 @@ class SupervisedDemoSession:
                 "CLOSE_DETECTED",
                 f"ticket {ticket} closed; outcome={outcome.value} pnl={pnl}",
             )
+
+    def _fetch_optional(self, timeframe: Timeframe, count: int):
+        """Fetch one extra timeframe; None on failure (honest degradation)."""
+        try:
+            return self._adapter.fetch_candles(timeframe, count)
+        except Exception:  # noqa: BLE001 - any fetch problem degrades, never crashes
+            return None
 
     @staticmethod
     def _ticket_of(record: TradeRecord) -> Optional[int]:

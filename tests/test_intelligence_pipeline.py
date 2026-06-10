@@ -313,3 +313,77 @@ def test_adaptive_risk_changes_position_size_with_evidence():
     assert strong.lot_size > weak.lot_size          # evidence sized it up...
     assert strong.adaptive_risk.risk_pct <= POLICY_RISK_CAP  # ...inside policy
     assert weak.adaptive_risk.risk_pct < strong.adaptive_risk.risk_pct
+
+# ---------------------------------------------------------------------------
+# INTELLIGENCE-002: true MTF sources, M1 state, volatility gate
+# ---------------------------------------------------------------------------
+
+def test_true_mt5_timeframes_are_used_when_supplied():
+    candles = falling(30)
+    entry = candles[-1].close
+    engines = bearish_engines(entry, regime=Regime.TREND)
+    engines.mtf = None  # use the REAL alignment engine
+    from src.strategy.confluence import MtfAlignmentEngine
+    engines.mtf = MtfAlignmentEngine()
+    result = DecisionPipeline(engines).decide(
+        base_input(
+            candles, broker=big_broker(),
+            m15_candles=falling(20), h1_candles=falling(20),
+            m1_candles=rising(10),
+        )
+    )
+    sources = result.context.mtf.sources
+    assert sources["m15"] == "MT5"
+    assert sources["h1"] == "MT5"
+    assert sources["m1"] == "MT5"
+    assert result.context.mtf.m1 == "BULLISH"  # M1 trigger state computed
+
+
+def test_mtf_degrades_honestly_without_native_candles():
+    candles = falling(30)  # 1h-spaced test candles: M15 aggregation impossible
+    entry = candles[-1].close
+    engines = bearish_engines(entry, regime=Regime.TREND)
+    from src.strategy.confluence import MtfAlignmentEngine
+    engines.mtf = MtfAlignmentEngine()
+    result = DecisionPipeline(engines).decide(
+        base_input(candles, broker=big_broker())
+    )
+    sources = result.context.mtf.sources
+    assert sources["m15"] in ("aggregated(M5)", "missing")
+    assert sources["m1"] == "missing"
+    assert result.context.mtf.m1 is None  # no M1 data -> no fake state
+
+
+def test_dangerous_volatility_blocks_despite_full_bearish_evidence():
+    candles = falling(29)
+    last = candles[-1].close
+    # one massive spike candle: ~6x the median range
+    candles.append(candle(29, last, last + 6.0, last - 6.0, last - 1.0))
+    entry = candles[-1].close
+    engines = bearish_engines(entry, regime=Regime.TREND, confluence=0.95)
+    result = DecisionPipeline(engines).decide(
+        base_input(candles, broker=big_broker())
+    )
+    assert result.approved is False
+    assert "dangerous volatility" in result.reason
+    assert result.context.volatility.dangerous is True
+
+
+def test_asian_context_flows_into_the_pipeline_context():
+    candles = falling(30)
+    entry = candles[-1].close
+    engines = bearish_engines(entry, regime=Regime.TREND)
+    result = DecisionPipeline(engines).decide(
+        base_input(candles, broker=big_broker())
+    )
+    # Asian context computed and carried in the pipeline context (the hourly
+    # test series happens to span a next-day Asian window -> known levels).
+    asian = result.context.asian
+    assert asian is not None
+    assert asian.known is True
+    assert asian.high is not None and asian.low is not None
+    # and a short feed with no Asian candles reads honestly UNKNOWN
+    from src.data.session_levels import AsianRangeEngine
+    short_feed = candles[-3:]
+    ctx = AsianRangeEngine().analyze(short_feed, short_feed[-1].time_utc)
+    assert ctx.known is False

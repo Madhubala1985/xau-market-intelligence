@@ -638,3 +638,19 @@ Rules:
 
 Status:
 Completed in commit INTELLIGENCE-001.
+
+---
+
+## Task INTELLIGENCE-002: Verify Wiring, True MTF, Session Logic, Adaptive Demo Risk
+
+Goal:
+Prove every intelligence layer is truly live-wired (25_WIRING_MATRIX.md),
+fetch real MT5 M15/H1/M1 candles with honest degradation, wire Asian range +
+London/NY expansion into confluence, add the dangerous-volatility safety
+classifier, replace the flat 0.5% demo cap with the evidence-gated Adaptive
+Demo Risk Policy (per-phase ceilings; daily/weekly anchors unchanged),
+extend opportunity-audit verdicts, and ship the BACKTEST-001 calibration
+replay tool.
+
+Status:
+Completed in commit INTELLIGENCE-002.

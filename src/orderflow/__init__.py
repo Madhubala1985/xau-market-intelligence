@@ -21,3 +21,10 @@ __all__ = [
     "FuturesConfirmation",
     "FuturesAlignment",
 ]
+
+from src.orderflow.macro_context import (  # noqa: E402
+    MacroContext,
+    MacroProvider,
+    MacroSignal,
+    NullMacroProvider,
+)

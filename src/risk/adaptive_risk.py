@@ -5,19 +5,33 @@ budget. The budget EXPANDS only when evidence is strong (confluence, MTF
 alignment, confidence, clean conditions) and CONTRACTS multiplicatively on
 losses, drawdown, uncertainty, bad spread, news risk, or existing exposure.
 
-Hard guarantees (03_RISK_POLICY.md is the authority):
-- the budget NEVER exceeds the policy cap (0.50% per trade in demo) — the cap
-  is a ceiling the engine can only stay under, not a default it always uses;
+Hard guarantees (03_RISK_POLICY.md is the authority; its Adaptive Demo Risk
+Policy section, decision 2026-06-10-08, defines the bounds used here):
+- the budget NEVER exceeds the phase ceiling, and no phase ceiling exceeds
+  the absolute demo cap (1.0%); daily 2% / weekly 5% loss limits are
+  untouched survival anchors enforced by the governor and the service;
 - contraction factors are multiplicative and <= 1, so consecutive losses can
   only shrink risk: no martingale, no grid, no recovery sizing, structurally;
-- raising the policy cap itself requires validated evidence and a manual
-  policy change — this engine cannot do it.
+- real-money risk policy is NOT this policy and remains unchanged (0.25%);
+- changing these bounds again requires evidence and a manual policy edit —
+  this engine cannot do it.
 
-Capital phases (growth objective $2k -> $10k -> $15k -> $25k+) set the BASE
-budget: earlier phases run a relatively larger base (small-account growth),
-later phases de-risk — but every phase remains inside the policy cap and
-every phase contracts identically on bad conditions. Growth is treated as a
-probabilistic objective (expectancy x opportunity quality), never a promise.
+Capital phases (growth objective $2k -> $10k -> $15k -> $25k+):
+
+    phase     equity        base    ceiling   rationale
+    PHASE_1   < $10k        0.40%   1.00%     growth phase: elite evidence may
+                                              run 2 losses-to-daily-stop risk
+    PHASE_2   $10k-$15k     0.35%   0.80%     protect the first milestone
+    PHASE_3   $15k-$25k     0.30%   0.60%     de-risk into the next milestone
+    PHASE_4   >= $25k       0.20%   0.50%     capital preservation
+
+The ceiling is reached ONLY via evidence expansion (max x2.0 of base on
+elite evidence) and only when nothing is contracting. Expected-growth math
+(recorded in 03_RISK_POLICY): with expectancy E = r(pR - (1-p)) at p=0.45,
+R=2, a flat 0.5% risks E≈0.18%/trade => ~900 trades to 5x; evidence-tiered
+risk concentrating 0.8-1.0% on the highest-quality subset roughly halves the
+trades needed for the same drawdown bound, because the daily/weekly stops —
+not the per-trade cap — bound the tail.
 """
 
 from __future__ import annotations
@@ -26,7 +40,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Tuple
 
-POLICY_RISK_CAP = 0.005   # 03_RISK_POLICY demo: max risk per trade
+# 03_RISK_POLICY "Adaptive Demo Risk Policy": absolute demo per-trade ceiling.
+# Phase ceilings below can only tighten it. Real-money policy is separate
+# and unchanged.
+POLICY_RISK_CAP = 0.010
 RISK_FLOOR = 0.001        # below this a trade is not worth its costs
 
 
@@ -48,10 +65,19 @@ class CapitalPhase(str, Enum):
 
 
 _PHASE_BASE = {
-    CapitalPhase.PHASE_1: 0.0030,
-    CapitalPhase.PHASE_2: 0.0030,
-    CapitalPhase.PHASE_3: 0.0025,
+    CapitalPhase.PHASE_1: 0.0040,
+    CapitalPhase.PHASE_2: 0.0035,
+    CapitalPhase.PHASE_3: 0.0030,
     CapitalPhase.PHASE_4: 0.0020,
+}
+
+# Evidence-gated ceilings per phase (Adaptive Demo Risk Policy). Reached only
+# through expansion on elite evidence with nothing contracting.
+_PHASE_CEILING = {
+    CapitalPhase.PHASE_1: 0.0100,
+    CapitalPhase.PHASE_2: 0.0080,
+    CapitalPhase.PHASE_3: 0.0060,
+    CapitalPhase.PHASE_4: 0.0050,
 }
 
 
@@ -136,16 +162,16 @@ class AdaptiveRiskEngine:
             and inputs.confidence >= 0.75
             and inputs.uncertainty <= 0.20
         ):
-            risk *= 1.65
-            reasons.append("expansion x1.65: elite evidence")
+            risk *= 2.00
+            reasons.append("expansion x2.00: elite evidence")
         elif (
             inputs.confluence_score >= 0.70
             and inputs.mtf_score >= 0.60
             and inputs.confidence >= 0.65
             and inputs.uncertainty <= 0.30
         ):
-            risk *= 1.30
-            reasons.append("expansion x1.30: strong evidence")
+            risk *= 1.40
+            reasons.append("expansion x1.40: strong evidence")
         elif inputs.confluence_score < 0.50 or evidence < 0.35:
             risk *= 0.60
             reasons.append("contraction x0.60: weak evidence")
@@ -174,17 +200,18 @@ class AdaptiveRiskEngine:
             risk *= 0.50
             reasons.append("contraction x0.50: existing open exposure")
 
-        # -- clamp to [floor, policy cap]; the cap is NEVER exceeded -----------
-        if risk > self._cap:
-            reasons.append(f"clamped to policy cap {self._cap:.4f}")
-            risk = self._cap
+        # -- clamp to [floor, phase ceiling]; ceilings are NEVER exceeded ------
+        ceiling = min(_PHASE_CEILING[phase], self._cap)
+        if risk > ceiling:
+            reasons.append(f"clamped to {phase.value} ceiling {ceiling:.4f}")
+            risk = ceiling
         if risk < self._floor:
             reasons.append(f"raised to floor {self._floor:.4f} (probe size)")
             risk = self._floor
 
         return AdaptiveRiskDecision(
             risk_pct=risk,
-            tier=self._tier(risk, _PHASE_BASE[phase]),
+            tier=self._tier(risk, _PHASE_BASE[phase], ceiling),
             phase=phase,
             reasons=tuple(reasons),
         )
@@ -196,8 +223,8 @@ class AdaptiveRiskEngine:
             reasons=(f"no risk budget: {why}",),
         )
 
-    def _tier(self, risk: float, base: float) -> RiskTier:
-        if risk >= self._cap * 0.99:
+    def _tier(self, risk: float, base: float, ceiling: float) -> RiskTier:
+        if risk >= ceiling * 0.99:
             return RiskTier.MAX_EVIDENCE
         if risk >= base * 1.2:
             return RiskTier.ELEVATED

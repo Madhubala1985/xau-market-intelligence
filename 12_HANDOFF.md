@@ -12,7 +12,7 @@ This file allows Claude sessions to resume without losing direction.
 Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task ID:
-INTELLIGENCE-001 (implemented; restart + evidence collection pending —
+INTELLIGENCE-002 (implemented; restart + evidence collection pending —
 user-started only)
 
 ## Current Task Goal:
@@ -22,7 +22,19 @@ vary, chop subtypes appear, confluence/risk lines explain every decision,
 and entries occur when (and only when) evidence justifies them.
 
 ## Current Status:
-INTELLIGENCE-001 implemented. 634 tests pass.
+INTELLIGENCE-002 implemented. 668 tests pass.
+- Wiring verified per layer: 25_WIRING_MATRIX.md (17 LIVE, news PARTIAL,
+  futures/macro PLACEHOLDER — honest, never faked).
+- True MT5 MTF: M15/H1/M1 fetched natively; labelled degradation; conflict
+  reporting; M1 display-only.
+- Asian range + London/NY expansion in confluence + terminal.
+- Dangerous-volatility classifier hard-gates the pipeline.
+- Adaptive Demo Risk Policy (03_RISK_POLICY updated): per-phase bases/
+  ceilings 0.40%/1.00% -> 0.20%/0.50%; daily/weekly anchors unchanged.
+- Opportunity-audit verdicts extended; calibration replay tool ready
+  (scripts/calibration_replay.py — recommendation only).
+
+INTELLIGENCE-001 status (previous): implemented; 634 tests then.
 - Live-evidence audit root causes FIXED: regime now classifies the recent
   ~5h window (was: whole 25h window -> near-permanent CHOPPY); CHOPPY is a
   graded gate (tradeable subtype + confluence >= 0.65), not a blind block;
@@ -137,9 +149,11 @@ CONTINUOUS-001 status (previous): implemented and committed; 583 tests then.
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, 10_TASK_QUEUE.md,
 23_DEMO_TRADING_RUNBOOK.md, 24_INTELLIGENCE_AUDIT_ROADMAP.md.
 
-INTELLIGENCE-001 is implemented. Guide the user to restart the continuous
-service, review the new per-cycle reasoning and any opportunity audits with
-them, and evaluate whether the graded gates behave correctly over full
-sessions. Do not start the service. Do not weaken risk. Threshold changes
-(chop override 0.65, continuation 0.60, displacement 1.5x) require
-BACKTEST-001 evidence first; a real news feed is NEWS-001.
+INTELLIGENCE-002 is implemented. Guide the user to restart the continuous
+service and review the full reasoning (MTF sources, vol/asian lines,
+adaptive phase budgets) plus any opportunity audits over full sessions.
+Have them run scripts/calibration_replay.py --fetch on the Windows host and
+review reports/runtime/calibration.md. Do not start the service. Do not
+weaken risk (daily 2% / weekly 5% anchors and the per-phase ceilings are
+policy). Threshold changes require BACKTEST-001 walk-forward evidence;
+real feeds are NEWS-001 / MACRO-001 / FUTURES-001.

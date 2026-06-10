@@ -35,20 +35,52 @@ def test_hard_block_window_reads_no_trade_correct():
     )
 
 
-def test_repeated_near_misses_read_possibly_too_strict():
+def test_repeated_sweep_near_misses_read_missed_sweep_reversal():
     stats = [
         stat(confluence=0.62, mtf_direction="SHORT", mtf_score=0.8,
              sweep="TRUE_SWEEP", displacement=2.0)
         for _ in range(30)
     ]
     audit = build_opportunity_audit(stats)
-    assert audit.verdict == "POSSIBLY_TOO_STRICT"
+    assert audit.verdict == "MISSED_SWEEP_REVERSAL"
     assert audit.near_misses == 30
     hypo = [f for f in audit.findings
             if f.classification is FindingClass.HYPOTHESIS]
     assert hypo and all(f.action == "backtest before changing" for f in hypo)
     # aligned MTF + sweep + displacement coincided without an entry
     assert any("coincided" in f.title for f in audit.findings)
+
+
+def test_aligned_displacement_without_sweep_reads_missed_continuation():
+    stats = [
+        stat(confluence=0.50, mtf_direction="SHORT", mtf_score=0.8,
+             sweep="NONE", displacement=2.0)
+        for _ in range(30)
+    ]
+    audit = build_opportunity_audit(stats)
+    assert audit.verdict == "MISSED_CONTINUATION"
+    assert any("continuation" in f.title for f in audit.findings)
+
+
+def test_generic_near_misses_read_possibly_too_strict():
+    stats = [
+        stat(confluence=0.60, sweep="NONE", displacement=0.5,
+             mtf_direction=None)
+        for _ in range(30)
+    ]
+    audit = build_opportunity_audit(stats)
+    assert audit.verdict == "POSSIBLY_TOO_STRICT"
+
+
+def test_too_little_data_reads_data_insufficient():
+    audit = build_opportunity_audit([stat() for _ in range(4)])
+    assert audit.verdict == "DATA_INSUFFICIENT"
+    # and a window where intel fields are mostly absent
+    bare = [{"session": "LONDON", "entry_action": "NONE",
+             "confluence_score": None, "regime": "CHOPPY",
+             "regime_subtype": None, "intel": {}} for _ in range(20)]
+    audit2 = build_opportunity_audit(bare)
+    assert audit2.verdict == "DATA_INSUFFICIENT"
 
 
 def test_trades_taken_reads_mixed():

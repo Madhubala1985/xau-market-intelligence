@@ -10,6 +10,11 @@ from src.regime.chop_classifier import (
     ChopClassifier,
     ChopSubtype,
 )
+from src.regime.volatility_classifier import (
+    VolatilityAssessment,
+    VolatilityClassifier,
+    VolatilityState,
+)
 from src.regime.regime_engine import (
     Regime,
     RegimeEngine,

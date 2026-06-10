@@ -162,6 +162,22 @@ _TABLE: Dict[str, dict] = {
         layer="risk",
         summary="evidence-driven adaptive risk budget, policy-capped (INTELLIGENCE-001)",
         test_file="test_adaptive_risk.py", test_note="", **_PURE_SHADOW_READY),
+    "src.regime.volatility_classifier": dict(
+        layer="regime",
+        summary="gold volatility safety states; dangerous states block (INTELLIGENCE-002)",
+        test_file="test_volatility_classifier.py", test_note="", **_PURE_SHADOW_READY),
+    "src.data.session_levels": dict(
+        layer="data",
+        summary="Asian range + London/NY expansion context (INTELLIGENCE-002)",
+        test_file="test_session_levels.py", test_note="", **_PURE_SHADOW_READY),
+    "src.orderflow.macro_context": dict(
+        layer="orderflow",
+        summary="honest macro interface; Null provider only (MACRO-001 pending)",
+        test_file="test_macro_context.py", test_note="", **_PURE_SHADOW_READY),
+    "src.backtest.calibration": dict(
+        layer="backtest",
+        summary="threshold calibration replay (BACKTEST-001 readiness; offline)",
+        test_file="test_calibration.py", test_note="", **_PURE_SHADOW_READY),
     "src.reflection.opportunity_audit": dict(
         layer="reflection",
         summary="long no-trade opportunity audit (INTELLIGENCE-001; offline)",

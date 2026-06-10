@@ -24,19 +24,40 @@ Demo MT5 order execution is allowed after the system can connect to MT5 demo and
 
 Real-money execution is forbidden until explicit real-mode approval.
 
-## Demo Risk Profile
+## Adaptive Demo Risk Policy (decision 2026-06-10-08; supersedes the fixed demo profile)
 
-In demo mode, risk may be higher than initial real mode for stress testing.
+In demo mode, risk is EVIDENCE-DRIVEN, not fixed. The AdaptiveRiskEngine
+decides the per-trade budget from confluence, multi-timeframe alignment,
+setup class, volatility state, spread, uncertainty, drawdown, recent
+performance, news state, and capital phase.
 
-Allowed demo profile:
+Bounds (the engine may only stay under them):
 
-- maximum risk per trade: 0.50%,
-- maximum daily loss: 2.00%,
-- maximum weekly loss: 5.00%,
-- maximum trades per day: 3,
-- maximum open trades: 1.
+- absolute demo per-trade ceiling: 1.00%,
+- per-phase ceilings and bases (ceilings reached only via evidence expansion):
+  - Phase 1 (equity <  $10,000): base 0.40%, ceiling 1.00%,
+  - Phase 2 ($10,000 - $15,000): base 0.35%, ceiling 0.80%,
+  - Phase 3 ($15,000 - $25,000): base 0.30%, ceiling 0.60%,
+  - Phase 4 (>= $25,000):        base 0.20%, ceiling 0.50%,
+- maximum daily loss: 2.00% (UNCHANGED - survival anchor),
+- maximum weekly loss: 5.00% (UNCHANGED - survival anchor),
+- maximum trades per day: 3 (UNCHANGED),
+- maximum open trades: 1 plus at most one protected add-on (UNCHANGED).
 
-This profile is for demo validation only and does not approve the same risk for real-money trading.
+Mathematical rationale: per-trade expectancy E = r(pR - (1-p)). At p=0.45,
+R=2, a flat 0.50% risk yields E ~ 0.18%/trade (~900 compounding trades to 5x
+the account). Concentrating 0.8-1.0% on the elite-evidence subset roughly
+halves the trades required without changing the tail bound, because the
+DAILY and WEEKLY loss limits - not the per-trade cap - bound the worst
+day/week: two maximum-risk losses still stop the day at -2%.
+
+Risk must contract multiplicatively after losses, drawdown, uncertainty,
+degraded spread, or open exposure; it may never expand after a loss
+(no martingale structurally). Unclear news or an untradeable regime means
+ZERO budget.
+
+This policy is for demo validation only and does not approve the same risk
+for real-money trading.
 
 ## Initial Real-Money Risk
 

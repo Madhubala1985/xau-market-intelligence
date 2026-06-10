@@ -431,3 +431,25 @@ evidence + account state, capital-phase aware, hard-clamped to the policy
 cap; contraction-only on adverse signals (no martingale structurally).
 03_RISK_POLICY remains the ceiling and the authority; raising the cap
 requires validated multi-week evidence and a manual policy change.
+
+---
+
+# 10. INTELLIGENCE-002 — 2026-06-10 (sixth pass)
+
+Full wiring verification: see 25_WIRING_MATRIX.md (the per-layer matrix with
+evidence is now a tracked doc). Summary: 17/20 layers LIVE; news PARTIAL
+(manual/static, fail-closed, NEWS-001 pending); futures + macro PLACEHOLDER
+(honest interface via MacroProvider/NullMacroProvider; FUTURES-001/MACRO-001
+pending). Fixed this pass: TRUE MT5 M15/H1/M1 fetching with labelled
+degradation (the H1/M15-from-M5 aggregation shortcut of INTELLIGENCE-001 is
+now only the fallback), Asian range + London/NY expansion wired into
+confluence, an explicit dangerous-volatility classifier hard-gating the
+pipeline, the Adaptive Demo Risk Policy (per-phase ceilings replacing the
+flat 0.5% demo cap; daily/weekly anchors unchanged), extended opportunity-
+audit verdicts, and the BACKTEST-001 calibration replay tool.
+
+Open (honest backlog): NEWS-001 real calendar feed; MACRO-001 DXY/yields;
+FUTURES-001 gold futures stream; BACKTEST-001 actual data run + walk-forward
+(tooling ready); M1 stays display-only until calibrated; F-11's deeper
+zone-entry logic (zones currently gate confluence, not entries) remains a
+Design Improvement.
