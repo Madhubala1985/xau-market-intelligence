@@ -41,7 +41,9 @@ Bounds (the engine may only stay under them):
   - Phase 4 (>= $25,000):        base 0.20%, ceiling 0.50%,
 - maximum daily loss: 2.00% (UNCHANGED - survival anchor),
 - maximum weekly loss: 5.00% (UNCHANGED - survival anchor),
-- maximum trades per day: 3 (UNCHANGED),
+- maximum trades per day: condition-driven (see the Adaptive Exposure
+  Policy, decision 2026-06-10-11; ordinary bound 3, hard maximum 6 only in
+  AGGRESSIVE conditions on the growth_evaluation profile),
 - maximum open trades: 1 plus at most one protected add-on (UNCHANGED).
 
 Mathematical rationale: per-trade expectancy E = r(pR - (1-p)). At p=0.45,
@@ -72,6 +74,26 @@ When real-money mode is eventually allowed:
 - no scaling after early wins.
 
 Risk may not be increased without validated live-paper and real-mode evidence.
+
+## Adaptive Exposure Policy (decision 2026-06-10-11)
+
+Trade-frequency limits are CONDITION-DRIVEN, not fixed. The Adaptive
+Exposure Governor decides the entry allowance per cycle:
+
+- LOCKDOWN (daily/weekly loss limit reached): 0 entries,
+- BLOCKED (news block/unknown, dangerous volatility, spread at max): 0,
+- DEFENSIVE (loss streak >= 2, daily drawdown >= 1%, weekly >= 3%, or news
+  caution): at most 1 careful entry, single position,
+- NORMAL: up to 3 entries/day, 1 position + 1 protected add-on,
+- AGGRESSIVE (confluence >= 0.70 AND MTF alignment >= 0.75 in a kill-zone
+  session with a clean day): up to 6 entries/day — ONLY within the
+  profile's hard maximum (growth_evaluation: 6; all other profiles: 3).
+
+Unchanged survival anchors: maximum daily loss 2.00%, maximum weekly loss
+5.00%, 1 position + at most 1 protected add-on, stop-loss mandatory,
+loss-at-stop risk math, no martingale/grid/averaging/revenge structurally
+(adverse conditions can only SHRINK the allowance). Open positions are
+always still managed regardless of exposure state.
 
 ## Mandatory Risk Checks Before Trade
 

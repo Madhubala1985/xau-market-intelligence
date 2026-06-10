@@ -92,7 +92,8 @@ class _StubChop:
             drift_ratio=0.4, displacement_ratio=2.0, wick_ratio=0.3,
         )
 
-    def classify(self, candles, sweeps=(), *, spread_ratio=0.0):
+    def classify(self, candles, sweeps=(), *, spread_ratio=0.0,
+                 directional_score=0.0):
         return self._a
 
 
@@ -449,3 +450,57 @@ def test_threshold_profiles_select_and_print():
     custom = DecisionPipeline(threshold_profile="current",
                               continuation_confluence=0.42)
     assert custom._continuation_confluence == pytest.approx(0.42)
+
+# ---------------------------------------------------------------------------
+# OPERATIONAL-001: threshold display correctness + macro neutrality
+# ---------------------------------------------------------------------------
+
+def test_block_reason_shows_raw_confluence_margin_and_alt_profile():
+    """No more '0.65 < 0.65': raw 4-decimal score, signed margin, and the
+    demo_exploration would-pass answer in the block reason."""
+    candles = falling(30)
+    entry = candles[-1].close
+    engines = bearish_engines(
+        entry,
+        chop=_StubChop(ChopSubtype.CONTINUATION_AFTER_CHOP, tradeable=True),
+        confluence=0.6478,
+    )
+    result = DecisionPipeline(engines).decide(
+        base_input(candles, broker=big_broker())
+    )
+    assert result.approved is False
+    assert "confluence_raw=0.6478" in result.decision.reason
+    assert "threshold=0.65" in result.decision.reason
+    assert "margin=-0.0022" in result.decision.reason
+    assert "would_pass(demo_exploration)=yes" in result.decision.reason
+    # and a raw score AT the threshold passes (>= comparison)
+    engines2 = bearish_engines(
+        entry,
+        chop=_StubChop(ChopSubtype.CONTINUATION_AFTER_CHOP, tradeable=True),
+        confluence=0.65,
+    )
+    result2 = DecisionPipeline(engines2).decide(
+        base_input(candles, broker=big_broker())
+    )
+    assert result2.approved is True
+
+
+def test_macro_and_futures_unavailable_stay_neutral_never_blocking():
+    """With no macro config file, macro/futures read UNAVAILABLE at the
+    neutral 0.5 — never listed as missing evidence, never a blocker."""
+    from src.strategy.confluence import ConfluenceEngine
+
+    candles = falling(30)
+    entry = candles[-1].close
+    engines = bearish_engines(entry, regime=Regime.TREND)
+    engines.confluence = ConfluenceEngine()   # real engine, real statuses
+    result = DecisionPipeline(engines).decide(
+        base_input(candles, broker=big_broker())
+    )
+    confluence = result.context.confluence
+    assert confluence.statuses["macro"] == "MACRO_UNAVAILABLE"
+    assert confluence.statuses["futures"] == "FUTURES_UNAVAILABLE"
+    assert confluence.components["macro"] == 0.5    # neutral, not punished
+    assert confluence.components["futures"] == 0.5
+    assert "macro" not in confluence.missing
+    assert "futures" not in confluence.missing

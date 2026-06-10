@@ -2977,3 +2977,86 @@ scripts/generate_evidence_pack.py, tests (test_lot_sizer.py new + updates).
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-10-11
+
+## Date:
+2026-06-10
+
+## Area:
+Regime / Risk / Exposure / Observability / Profiles
+
+## Decision:
+OPERATIONAL-INTELLIGENCE-001: warmstart context, adaptive exposure governor,
+threshold display correctness, directional chop, growth profile.
+
+Root causes from live evidence (all-bearish MTF score 1.00, FVG/OB aligned,
+displacement 1.5-1.7x, NY session — still NO_TRADE):
+(R1) DISPLAY DEFECT: block messages printed the raw confluence at 2 decimals
+     — a raw 0.6478 displayed as the impossible "0.65 < 0.65". The
+     comparison was correct; the message was misleading. Fixed: every gate
+     message and terminal line shows confluence_raw at 4 decimals, the
+     active threshold, the signed margin, and whether the cycle would pass
+     under the demo_exploration profile.
+(R2) CLASSIFIER BLINDNESS (High-Confidence Defect): the chop classifier saw
+     only price-path geometry + sweeps; an all-aligned MTF stack with
+     1.5-1.7x displacement (below the 1.8x pure-breakout bar) fell through
+     to LOW_QUALITY_CHOP. Fixed: the classifier receives the external MTF
+     directional score; >= 0.75 with displacement >= 1.3x (or drift >= .25)
+     classifies DIRECTIONAL_CHOP_BREAKDOWN (tradeable candidate; dangerous
+     states still win; confluence still gates downstream).
+(R3) STATIC EXPOSURE: fixed 3 trades/day regardless of conditions. Fixed:
+     AdaptiveExposureGovernor (LOCKDOWN/BLOCKED/DEFENSIVE/NORMAL/AGGRESSIVE)
+     decides the per-cycle entry allowance (0/0/1/3/6) bounded by the
+     profile hard maximum; 03_RISK_POLICY gains the Adaptive Exposure
+     Policy section; daily 2%/weekly 5% anchors and protected-add-on rules
+     unchanged; adverse conditions can only shrink the allowance.
+(R4) NO STARTUP CONTEXT: the service now runs a full multi-timeframe
+     warmstart analysis at startup (same real MT5 candle depth as the live
+     loop) and prints candle counts per TF, HTF/MTF direction, regime +
+     reason, Asian levels, premium/discount, volatility, displacement,
+     market phase, candidate + raw confluence, and active thesis. (Each
+     cycle already analysed full history; the startup REPORT makes it
+     visible.)
+(R5) Macro/futures neutrality verified by test: UNAVAILABLE sits at the
+     neutral 0.5 confluence component, is never listed as missing evidence,
+     and never blocks.
+
+New profile: growth_evaluation — continuous, no duration/order caps,
+exposure-governor-driven (hard max 6/day reached only in AGGRESSIVE
+conditions), milestone campaign $2k -> $10k -> $15k -> $25k. All other
+profiles keep the 3/day bound.
+
+## Evidence:
+726 tests pass (+17): exposure governor (9), directional chop (3, incl. the
+live regression), threshold display + at-threshold pass (1), macro
+neutrality (1), warmstart prints + failure-tolerant (2), session-level
+DEFENSIVE gating (1). pre_demo_safety_check.sh passed.
+
+## Alternatives Considered:
+- Lowering the 0.65 threshold instead of fixing the display: rejected — the
+  comparison was already correct; calibration evidence still pending.
+- Letting MTF evidence bypass confluence gating entirely: rejected — the
+  directional subtype is a CANDIDATE; confluence/hypothesis/governor still
+  gate.
+- Removing trades/day limits: rejected — adaptive allowance bounded by
+  policy hard maxima keeps survival anchors intact.
+
+## Risk:
+AGGRESSIVE windows allow up to 6 entries/day on the growth profile; bounded
+by unchanged daily/weekly stops (2 max-risk losses still end the day) and
+the contraction-only adaptive risk budget.
+
+## Files Affected:
+src/risk/exposure_governor.py (new), src/regime/chop_classifier.py,
+src/strategy/pipeline.py, src/execution/demo_session.py,
+src/execution/trading_service.py, src/execution/session_profiles.py,
+scripts/trading_service.py, 03_RISK_POLICY.md,
+scripts/generate_evidence_pack.py, tests (test_exposure_governor.py new +
+updates).
+
+## Status:
+Accepted

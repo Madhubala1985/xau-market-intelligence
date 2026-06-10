@@ -45,6 +45,12 @@ class ChopSubtype(str, Enum):
     TRAP_REVERSAL_FROM_CHOP = "TRAP_REVERSAL_FROM_CHOP"
     BREAKOUT_EXPANSION_FROM_CHOP = "BREAKOUT_EXPANSION_FROM_CHOP"
     CONTINUATION_AFTER_CHOP = "CONTINUATION_AFTER_CHOP"
+    # OPERATIONAL-INTELLIGENCE-001: price-path geometry alone called strong
+    # multi-timeframe directional moves "LOW_QUALITY_CHOP" (live evidence:
+    # all-bearish MTF + FVG/OB aligned + 1.5-1.7x displacement still read as
+    # low quality). When the EXTERNAL directional evidence is strong, modest
+    # displacement/drift is a directional breakdown, not noise.
+    DIRECTIONAL_CHOP_BREAKDOWN = "DIRECTIONAL_CHOP_BREAKDOWN"
 
 
 _HARD_BLOCK = {ChopSubtype.DANGEROUS_CHOP, ChopSubtype.LOW_QUALITY_CHOP}
@@ -98,6 +104,7 @@ class ChopClassifier:
         sweeps: Sequence[SweepEvent] = (),
         *,
         spread_ratio: float = 0.0,   # current spread / allowed max, in [0, ~]
+        directional_score: float = 0.0,  # external MTF alignment score [0,1]
     ) -> ChopAssessment:
         recent = list(candles[-self._window:])
         if len(recent) < 6:
@@ -141,6 +148,22 @@ class ChopClassifier:
             return self._make(
                 ChopSubtype.BREAKOUT_EXPANSION_FROM_CHOP,
                 f"displacement {displacement:.1f}x closed beyond the recent range",
+                drift, displacement, wick,
+            )
+
+        # 3b) Directional breakdown: strong EXTERNAL multi-timeframe evidence
+        # plus real (if modest) displacement or drift. Price-path geometry is
+        # not the only witness; an all-aligned MTF stack with 1.3x+ bodies is
+        # a directional move, not low-quality noise. Still merely a CANDIDATE
+        # gated by confluence downstream — never an auto-trade.
+        if (
+            directional_score >= 0.75
+            and (displacement >= 1.3 or drift >= 0.25)
+        ):
+            return self._make(
+                ChopSubtype.DIRECTIONAL_CHOP_BREAKDOWN,
+                f"strong MTF direction (score {directional_score:.2f}) with "
+                f"displacement {displacement:.1f}x / drift {drift:.2f}",
                 drift, displacement, wick,
             )
 

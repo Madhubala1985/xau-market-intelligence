@@ -84,6 +84,7 @@ from src.execution.trading_service import (  # noqa: E402
 from src.journal.journal import TradeJournal  # noqa: E402
 from src.orderflow.macro_context import FileMacroProvider  # noqa: E402
 from src.risk.adaptive_risk import CapitalPhase  # noqa: E402
+from src.risk.exposure_governor import AdaptiveExposureGovernor  # noqa: E402
 from src.risk.governor import RiskGovernor  # noqa: E402
 from src.risk.news_guard import NewsRiskGuard  # noqa: E402
 
@@ -224,6 +225,13 @@ def main() -> int:
             # pipeline/governor enforce; the AdaptiveRiskEngine's per-phase
             # ceilings and evidence budget decide the actual risk below it.
             risk_pct=limits.max_risk_per_trade,
+            # Adaptive Exposure Policy (OPERATIONAL-001): condition-driven
+            # entry allowance, hard-bounded by the profile.
+            exposure_governor=AdaptiveExposureGovernor(),
+            hard_max_trades=limits.max_trades_per_day,
+            hard_max_open=limits.max_open_trades,
+            max_daily_loss=limits.max_daily_loss,
+            max_weekly_loss=limits.max_weekly_loss,
         )
 
         now = datetime.now(timezone.utc)
@@ -289,6 +297,7 @@ def main() -> int:
             heartbeat_path=HEARTBEAT_PATH,
             tick_age=tick_age,
             max_cycles=args.max_cycles,
+            warmstart=True,
         )
         report = service.run()
         exit_code = 0 if report.stop_reason in _CLEAN_STOPS else 2

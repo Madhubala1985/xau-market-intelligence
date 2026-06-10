@@ -684,3 +684,17 @@ diagnostics with milestone context.
 
 Status:
 Completed in commit SIZING-001.
+
+---
+
+## Task OPERATIONAL-INTELLIGENCE-001: Warmstart Context and Adaptive Exposure
+
+Goal:
+Startup multi-timeframe warmstart report; 4-decimal raw-confluence threshold
+display with margin and alt-profile answer; DIRECTIONAL_CHOP_BREAKDOWN for
+MTF-backed moves; AdaptiveExposureGovernor (condition-driven 0-6 entries/day
+bounded by profile); growth_evaluation profile; macro/futures neutrality
+verified.
+
+Status:
+Completed in commit OPERATIONAL-INTELLIGENCE-001.

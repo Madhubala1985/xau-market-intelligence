@@ -318,10 +318,20 @@ class ProgressPrinter:
             )
             phase = (intel.get("adaptive_risk") or {}).get("phase", "-")
             self._line(
-                f"  confluence={confluence.get('score', 0):.2f} "
+                f"  confluence_raw={confluence.get('score', 0):.4f} "
                 f"risk={risk_tier} {risk_pct} phase={phase} "
                 f"subtype={subtype} regime_why: {regime_reason}"
             )
+        exposure = intel.get("exposure")
+        if exposure:
+            self._line(
+                f"  exposure={exposure.get('state')} "
+                f"remaining={exposure.get('trades_remaining')}"
+                f"/{exposure.get('max_trades_today')} "
+                f"open_allowed={exposure.get('max_open')} "
+                f"why: {exposure.get('reason')}"
+            )
+        if confluence:
             missing = confluence.get("missing") or []
             if missing and s.entry_action in ("NONE", "PLAN_BLOCKED",
                                               "ENTRY_BLOCKED"):
@@ -351,6 +361,52 @@ class ProgressPrinter:
             f"governor blocks new entries until the next UTC day; open "
             f"positions remain managed"
         )
+
+    def warmstart(self, data: dict) -> None:
+        """Startup historical-context report (OPERATIONAL-001)."""
+        candles = data.get("candles") or {}
+        self._line(
+            "Warmstart context loaded: "
+            + " ".join(f"{k}={v}" for k, v in candles.items()) + " candles"
+        )
+        mtf = data.get("mtf") or {}
+        self._line(
+            f"  HTF={data.get('htf_bias') or '-'} "
+            f"mtf_score={mtf.get('score', 0):.2f} "
+            f"-> {mtf.get('direction') or 'NO_CANDIDATE'} | "
+            f"regime={data.get('regime') or '-'} "
+            f"({data.get('regime_reason') or '-'})"
+        )
+        asian = data.get("asian") or {}
+        asian_text = (
+            f"{asian.get('low'):.2f}-{asian.get('high'):.2f} "
+            f"swept={asian.get('swept')}"
+            if asian.get("known") else "UNKNOWN"
+        )
+        self._line(
+            f"  key levels: asian={asian_text} "
+            f"pd={data.get('price_zone') or '-'} "
+            f"last={data.get('last_price')} "
+            f"vol={data.get('volatility') or '-'} "
+            f"disp={data.get('displacement', 0):.1f}x"
+        )
+        confluence = data.get("confluence")
+        conf_text = (
+            f"confluence_raw={confluence:.4f}"
+            if confluence is not None else "confluence_raw=n/a"
+        )
+        self._line(
+            f"  market phase: {data.get('market_phase')} | "
+            f"candidate={data.get('candidate') or 'none'} {conf_text}"
+        )
+        self._line(
+            f"  active thesis: {data.get('thesis') or 'none yet'}"
+        )
+        self._line()
+
+    def warmstart_unavailable(self, why: str) -> None:
+        self._line(f"Warmstart unavailable ({why}); continuing with live "
+                   "cycles (each cycle still analyses full history)")
 
     def opportunity_audit(self, now: datetime, verdict: str, detail: str,
                           filename: str) -> None:
@@ -382,6 +438,7 @@ class TradingService:
         closed_poll_seconds: float = 60.0,
         max_cycles: Optional[int] = None,
         opportunity_audit_cycles: int = 60,
+        warmstart: bool = False,  # OPERATIONAL-001 startup context report
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -413,12 +470,20 @@ class TradingService:
         self._audit_cycles = opportunity_audit_cycles
         self._no_trade_streak = 0
         self._audits_written = 0
+        self._warmstart = warmstart
 
     # -- main loop ---------------------------------------------------------------
     def run(self) -> ServiceReport:
         started = self._now()
         self._current_day = started.date()
         self._printer.banner(self._banner)
+        if self._warmstart:
+            try:
+                self._printer.warmstart(self._session.build_warmstart())
+            except Exception as exc:  # noqa: BLE001 - reported, never fatal
+                self._printer.warmstart_unavailable(
+                    f"{exc.__class__.__name__}: {exc}"
+                )
         cycles = 0
         stop_reason = StopReason.MAX_CYCLES
         detail = ""

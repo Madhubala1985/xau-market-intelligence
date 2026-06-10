@@ -36,7 +36,11 @@ from src.risk.governor import RiskLimits
 POLICY_MAX_RISK_PER_TRADE = 0.010
 POLICY_MAX_DAILY_LOSS = 0.02
 POLICY_MAX_WEEKLY_LOSS = 0.05
-POLICY_MAX_TRADES_PER_DAY = 3
+# Adaptive Exposure Policy (decision 2026-06-10-11): the static trades/day
+# bound becomes the ADAPTIVE EXPOSURE GOVERNOR's hard maximum (reached only
+# in AGGRESSIVE conditions); ordinary conditions remain at 3 and adverse
+# conditions go to 1 or 0. Daily 2% / weekly 5% anchors are unchanged.
+POLICY_MAX_TRADES_PER_DAY = 6
 # 03_RISK_POLICY says max 1 open trade; decision log 2026-06-10-03 resolved
 # the contradiction with 20_LEVERAGE_AND_PYRAMIDING_POLICY tightest-rule-wins:
 # a second position may exist ONLY as a guard-approved protected add-on.
@@ -153,6 +157,7 @@ PROFILES: Dict[str, SessionProfile] = {
             poll_seconds=30,
             max_orders=1,
             max_open_positions=1,
+            max_trades_per_day=3,
         ),
         SessionProfile(
             name="evaluation",
@@ -164,6 +169,7 @@ PROFILES: Dict[str, SessionProfile] = {
             duration_minutes=60,
             poll_seconds=30,
             max_orders=None,
+            max_trades_per_day=3,
         ),
         SessionProfile(
             name="london",
@@ -174,6 +180,7 @@ PROFILES: Dict[str, SessionProfile] = {
             duration_minutes=240,
             poll_seconds=60,
             max_orders=None,
+            max_trades_per_day=3,
         ),
         SessionProfile(
             name="newyork",
@@ -184,6 +191,7 @@ PROFILES: Dict[str, SessionProfile] = {
             duration_minutes=240,
             poll_seconds=60,
             max_orders=None,
+            max_trades_per_day=3,
         ),
         SessionProfile(
             name="full_day",
@@ -194,6 +202,7 @@ PROFILES: Dict[str, SessionProfile] = {
             duration_minutes=480,
             poll_seconds=60,
             max_orders=None,
+            max_trades_per_day=3,
         ),
         SessionProfile(
             name="continuous",
@@ -206,6 +215,22 @@ PROFILES: Dict[str, SessionProfile] = {
             duration_minutes=None,
             poll_seconds=60,
             max_orders=None,
+            max_trades_per_day=3,
+        ),
+        SessionProfile(
+            name="growth_evaluation",
+            description=(
+                "Serious demo GROWTH evaluation (the milestone campaign "
+                "$2k -> $10k -> $15k -> $25k): continuous, no artificial "
+                "duration or order caps, adaptive exposure governor decides "
+                "the entry allowance per conditions (up to 6/day only in "
+                "AGGRESSIVE conditions; 0 in poor ones). Daily 2% / weekly "
+                "5% anchors unchanged. Use scripts/trading_service.py."
+            ),
+            duration_minutes=None,
+            poll_seconds=60,
+            max_orders=None,
+            max_trades_per_day=6,
         ),
     )
 }

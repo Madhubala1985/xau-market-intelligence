@@ -190,6 +190,10 @@ _TABLE: Dict[str, dict] = {
         layer="risk",
         summary="milestone-aware adaptive lot resolver with min-lot promotion (SIZING-001)",
         test_file="test_lot_sizer.py", test_note="", **_PURE_SHADOW_READY),
+    "src.risk.exposure_governor": dict(
+        layer="risk",
+        summary="adaptive exposure governor: condition-driven entry allowance (OPERATIONAL-001)",
+        test_file="test_exposure_governor.py", test_note="", **_PURE_SHADOW_READY),
     "src.reflection.opportunity_audit": dict(
         layer="reflection",
         summary="long no-trade opportunity audit (INTELLIGENCE-001; offline)",

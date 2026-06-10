@@ -122,3 +122,30 @@ def test_assessment_serializes():
     d = a.to_dict()
     assert d["subtype"] == a.subtype.value
     assert isinstance(d["tradeable"], bool)
+
+
+def test_strong_mtf_direction_is_a_breakdown_not_low_quality():
+    """OPERATIONAL-001 live regression: all-bearish MTF (score 1.0) with
+    1.5x displacement must not read LOW_QUALITY_CHOP."""
+    candles = noisy_flat(38)
+    # a 1.5x-displacement bearish body: real but below the 1.8x breakout bar
+    last = candles[-1].close
+    candles.append(candle(38, last, last + 0.1, last - 1.6, last - 1.5))
+    candles.append(candle(39, last - 1.5, last - 1.3, last - 1.7, last - 1.45))
+    weak_geo = CLF.classify(candles)
+    assert weak_geo.subtype is ChopSubtype.LOW_QUALITY_CHOP
+    with_evidence = CLF.classify(candles, directional_score=0.90)
+    assert with_evidence.subtype is ChopSubtype.DIRECTIONAL_CHOP_BREAKDOWN
+    assert with_evidence.tradeable is True
+    assert "MTF direction" in with_evidence.reason
+
+
+def test_directional_evidence_cannot_override_dangerous_chop():
+    a = CLF.classify(wicky(40), directional_score=1.0)
+    assert a.subtype is ChopSubtype.DANGEROUS_CHOP
+    assert a.tradeable is False
+
+
+def test_weak_direction_with_weak_geometry_stays_low_quality():
+    a = CLF.classify(noisy_flat(40), directional_score=0.60)
+    assert a.subtype is ChopSubtype.LOW_QUALITY_CHOP

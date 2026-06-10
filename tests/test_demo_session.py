@@ -726,3 +726,16 @@ def test_defensive_budget_with_wide_stop_sends_promoted_min_lot(tmp_path):
     # sizing diagnostics reach the cycle stats / journal trail
     stat = report.cycle_stats[0]
     assert stat.intel["sizing"]["verdict"] == "MIN_LOT_PROMOTED_TO_0.01"
+
+def test_warmstart_is_read_only(tmp_path):
+    """OPERATIONAL-001: build_warmstart analyses full history but journals
+    nothing, sends nothing, and mutates no positions."""
+    session, fake, journal, _ = make_session(
+        tmp_path, results=[approved_result()], max_orders=None,
+    )
+    data = session.build_warmstart()
+    assert data["candles"]["m5"] > 0
+    assert set(data["candles"]) == {"d1", "h4", "h1", "m15", "m5", "m1"}
+    fake.order_send.assert_not_called()
+    assert len(journal.entries()) == 0          # nothing journaled
+    assert fake.positions == {}                 # nothing opened/mutated

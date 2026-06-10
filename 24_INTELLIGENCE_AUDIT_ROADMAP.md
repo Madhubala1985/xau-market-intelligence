@@ -498,3 +498,17 @@ Threshold profiles added ("current" default, "demo_exploration" optional via
 --thresholds; active profile printed at startup). The calibration replay's
 looser recommendation had negative expectancy on a small sample — default
 unchanged until real-history evidence justifies otherwise.
+
+---
+
+# 13. OPERATIONAL-INTELLIGENCE-001 — 2026-06-10 (ninth pass)
+
+Live evidence (all-bearish MTF 1.00, FVG/OB aligned, disp 1.5-1.7x, still
+NO_TRADE) audited; fixed: (R1) misleading 2-decimal threshold display (raw
+4-decimal + signed margin + would-pass-alt everywhere); (R2) chop classifier
+blindness to external MTF evidence -> DIRECTIONAL_CHOP_BREAKDOWN subtype;
+(R3) static 3/day exposure -> AdaptiveExposureGovernor with policy-bounded
+states (0/0/1/3/6); (R4) startup warmstart context report from real MT5
+history; (R5) macro/futures UNAVAILABLE proven neutral by test. New
+growth_evaluation profile for the milestone campaign. Survival anchors
+(2%/5%, protected add-ons, stop mandatory, contraction-only) unchanged.

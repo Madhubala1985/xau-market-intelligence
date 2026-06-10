@@ -12,8 +12,8 @@ This file allows Claude sessions to resume without losing direction.
 Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task ID:
-SIZING-001 (implemented; restart + evidence collection pending —
-user-started only)
+OPERATIONAL-INTELLIGENCE-001 (implemented; restart with
+--profile growth_evaluation pending — user-started only)
 
 ## Current Task Goal:
 Run the upgraded continuous service through full London/NY sessions and
@@ -22,7 +22,14 @@ vary, chop subtypes appear, confluence/risk lines explain every decision,
 and entries occur when (and only when) evidence justifies them.
 
 ## Current Status:
-SIZING-001 implemented. 709 tests pass.
+OPERATIONAL-INTELLIGENCE-001 implemented. 726 tests pass.
+- Warmstart context report at startup; raw-confluence (4-dec) + margin +
+  alt-profile display; DIRECTIONAL_CHOP_BREAKDOWN for MTF-backed moves;
+  AdaptiveExposureGovernor (0/0/1/3/6 by conditions, profile-bounded);
+  growth_evaluation profile (hard max 6/day); macro/futures neutrality
+  proven. Survival anchors unchanged.
+
+SIZING-001 status (previous): implemented; 709 tests then.
 - "invalid lot size 0.0" Proven Defect fixed: milestone-aware lot resolver
   with explicit verdicts; min-lot promotion bounded by the phase ceiling;
   the same promotion in the planner order path; stale RiskLimits default

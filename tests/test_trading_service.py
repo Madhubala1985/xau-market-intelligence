@@ -89,10 +89,11 @@ def banner_info(mode="EXECUTION — orders WILL be sent to the .env account (DEM
 
 def make_service(tmp_path, *, results=None, flags=None, fake=None, journal=None,
                  max_cycles=1, now=None, schedule=None, tick_age=None,
-                 service_sleep=None, banner=None, profile=None):
+                 service_sleep=None, banner=None, profile=None,
+                 warmstart=False, **session_overrides):
     session, fake, journal, kill_switch = make_session(
         tmp_path, results=results, flags=flags, fake=fake, journal=journal,
-        max_orders=None, profile_name="continuous",
+        max_orders=None, profile_name="continuous", **session_overrides,
     )
     stream = StringIO()
     service = TradingService(
@@ -107,6 +108,7 @@ def make_service(tmp_path, *, results=None, flags=None, fake=None, journal=None,
         schedule=schedule or MarketSchedule(),
         tick_age=tick_age,
         max_cycles=max_cycles,
+        warmstart=warmstart,
         now=now or (lambda: NOW),
         sleep=service_sleep or MagicMock(),
     )
@@ -523,7 +525,7 @@ def test_terminal_shows_full_reasoning_fields(tmp_path):
     assert "asian=INSIDE(4118.20-4126.80) swept=HIGH expansion=1.40x" in out
     assert "intel sweep=PENDING bos=BOS:BEARISH fvg=NONE ob=NONE" in out
     assert "pd=PREMIUM" in out and "flow=BEARISH" in out
-    assert "confluence=0.52 risk=DEFENSIVE 0.18% phase=PHASE_1" in out
+    assert "confluence_raw=0.5200 risk=DEFENSIVE 0.18% phase=PHASE_1" in out
     assert ("external macro=MACRO_UNAVAILABLE futures=FUTURES_UNAVAILABLE") in out
     assert "subtype=LIQUIDITY_CHOP_WITH_SWEEP" in out
     assert "regime_why: 3 structure direction flips" in out
@@ -579,3 +581,61 @@ def test_terminal_prints_sizing_diagnostics(tmp_path):
     assert "final=0.01" in out
     assert "verdict=MIN_LOT_PROMOTED_TO_0.01" in out
     assert "PHASE_1 -> $10,000 (milestone 1)" in out
+
+
+def test_warmstart_context_prints_at_startup(tmp_path):
+    """OPERATIONAL-001: startup analyses full multi-timeframe history and
+    prints the market context before the first cycle."""
+    results = [rich_no_trade_result(), rich_no_trade_result()]
+    service, *_ , stream = make_service(tmp_path, results=results,
+                                        max_cycles=1, warmstart=True)
+    report = service.run()
+    out = stream.getvalue()
+    assert "Warmstart context loaded:" in out
+    assert "d1=" in out and "m5=" in out and "m1=" in out  # candle counts
+    assert "HTF=BEARISH" in out
+    assert "market phase: LIQUIDITY_CHOP_WITH_SWEEP" in out
+    assert "key levels: asian=4118.20-4126.80 swept=HIGH" in out
+    assert "active thesis:" in out
+    assert "[cycle 1]" in out          # the live loop still ran
+    assert report.cycles == 1
+
+
+def test_warmstart_failure_is_reported_not_fatal(tmp_path):
+    service, session, *_ , stream = make_service(
+        tmp_path, results=[no_trade_result()], max_cycles=1, warmstart=True,
+    )
+    session.build_warmstart = MagicMock(side_effect=RuntimeError("feed down"))
+    report = service.run()
+    out = stream.getvalue()
+    assert "Warmstart unavailable" in out and "feed down" in out
+    assert report.cycles == 1          # service continued
+
+
+def test_exposure_governor_gates_entries_and_prints(tmp_path):
+    """Two prior consecutive losses force DEFENSIVE (cap 1): first entry
+    sends, second is exposure-blocked with a printed reason."""
+    from src.risk.exposure_governor import AdaptiveExposureGovernor
+
+    journal = TradeJournal(tmp_path / "journal.jsonl")
+    yesterday = NOW - timedelta(days=1)
+    for i, pnl in enumerate((-1.0, -1.0)):
+        journal.log_record(TradeRecord(
+            record_id=f"L-{i}", created_at_utc=yesterday, symbol="XAUUSDM",
+            direction=Direction.LONG, outcome=TradeOutcome.LOSS, pnl=pnl,
+            opened_at_utc=yesterday,
+            closed_at_utc=yesterday + timedelta(minutes=i),
+        ))
+    fake = FakeMT5Trading()
+    results = [approved_result_with_id(1), approved_result_with_id(2)]
+    service, *_ , stream = make_service(
+        tmp_path, results=results, fake=fake, journal=journal, max_cycles=2,
+        service_sleep=closing_sleep(fake, pnl=-10.0),  # streak continues
+        exposure_governor=AdaptiveExposureGovernor(),
+        hard_max_trades=6, hard_max_open=2,
+    )
+    report = service.run()
+    out = stream.getvalue()
+    assert report.orders_sent == 1     # DEFENSIVE allows exactly one entry
+    assert "exposure=DEFENSIVE" in out
+    assert "exposure governor DEFENSIVE" in out  # the block reason printed

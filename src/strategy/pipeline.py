@@ -346,8 +346,15 @@ class DecisionPipeline:
         )
 
         # Chop decomposition + graded confluence for the candidate direction.
+        # The classifier sees the EXTERNAL MTF evidence (OPERATIONAL-001), so
+        # strong aligned moves cannot be mislabelled low-quality noise.
         chop = (
-            e.chop.classify(inp.exec_candles, sweeps, spread_ratio=spread_ratio)
+            e.chop.classify(
+                inp.exec_candles, sweeps, spread_ratio=spread_ratio,
+                directional_score=(
+                    mtf.score if mtf.direction is not None else 0.0
+                ),
+            )
             if regime is Regime.CHOPPY else None
         )
         candidate = mtf.direction or self._htf_direction(htf_bias)
@@ -574,14 +581,22 @@ class DecisionPipeline:
             return None, ""
         if not chop.tradeable:
             return False, f"{chop.subtype.value}: {chop.reason}"
-        if confluence.score >= self._chop_override_confluence:
-            return True, (
-                f"{chop.subtype.value} override: confluence "
-                f"{confluence.score:.2f} >= {self._chop_override_confluence}"
-            )
+        # Threshold correctness (OPERATIONAL-001): RAW score at 4 decimals
+        # plus the signed margin — a raw 0.6478 must never display as the
+        # confusing "0.65 < 0.65".
+        threshold = self._chop_override_confluence
+        margin = confluence.score - threshold
+        detail = (
+            f"confluence_raw={confluence.score:.4f} "
+            f"threshold={threshold:.2f} margin={margin:+.4f}"
+        )
+        if confluence.score >= threshold:
+            return True, f"{chop.subtype.value} override: {detail}"
+        alt = THRESHOLD_PROFILES["demo_exploration"]["chop_override_confluence"]
+        would_pass = "yes" if confluence.score >= alt else "no"
         return False, (
-            f"{chop.subtype.value} tradeable but confluence "
-            f"{confluence.score:.2f} < {self._chop_override_confluence}"
+            f"{chop.subtype.value} tradeable but {detail} "
+            f"would_pass(demo_exploration)={would_pass}"
         )
 
     @staticmethod

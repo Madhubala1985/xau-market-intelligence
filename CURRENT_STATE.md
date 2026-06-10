@@ -10,7 +10,12 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-SIZING-001: IMPLEMENTED — the "invalid lot size 0.0" Proven Defect is fixed
+OPERATIONAL-INTELLIGENCE-001: IMPLEMENTED — warmstart context report,
+adaptive exposure governor, DIRECTIONAL_CHOP_BREAKDOWN, raw-confluence
+threshold display, growth_evaluation profile. Restart the continuous service
+with --profile growth_evaluation and collect evidence (user-started).
+
+Previously: SIZING-001: IMPLEMENTED — the "invalid lot size 0.0" Proven Defect is fixed
 with milestone-aware adaptive lot sizing (min-lot promotion bounded by the
 phase ceiling, full sizing diagnostics, threshold profiles). Restart the
 continuous service and collect evidence (user-started)
@@ -154,7 +159,31 @@ SIZING-001 (2026-06-10, decision 2026-06-10-10):
   small and negative-expectancy).
 - Terminal: per-candidate sizing lines (risk %/$, stop, min-lot risk,
   raw/rounded/final lot, verdict, phase -> milestone).
-- 709 tests pass; pre_demo_safety_check.sh passes.
+- 709 tests passed at SIZING-001.
+
+OPERATIONAL-INTELLIGENCE-001 (2026-06-10, decision 2026-06-10-11):
+- DISPLAY DEFECT fixed: gate messages and terminal show confluence_raw at
+  4 decimals + threshold + signed margin + would_pass(demo_exploration) —
+  no more "0.65 < 0.65" confusion (comparison was always >=).
+- CLASSIFIER BLINDNESS fixed: the chop classifier now receives the MTF
+  directional score; strong external evidence (>=0.75) with displacement
+  >=1.3x classifies DIRECTIONAL_CHOP_BREAKDOWN (tradeable candidate) instead
+  of LOW_QUALITY_CHOP. Dangerous states still always win.
+- Adaptive Exposure Governor (src/risk/exposure_governor.py; 03_RISK_POLICY
+  Adaptive Exposure Policy): LOCKDOWN/BLOCKED/DEFENSIVE/NORMAL/AGGRESSIVE
+  decide 0/0/1/3/6 entries per day, hard-bounded by the profile (growth: 6;
+  others: 3); printed per cycle with the reason; entries-only (management
+  continues); adverse conditions only shrink the allowance.
+- Startup WARMSTART: full multi-timeframe history analysis printed at
+  service start (candle counts per TF, HTF/MTF direction, regime + reason,
+  Asian levels, PD, volatility, displacement, market phase, candidate +
+  raw confluence, active thesis). Failure-tolerant.
+- growth_evaluation profile: continuous milestone campaign ($2k->$10k->
+  $15k->$25k), exposure-governor-driven, hard max 6 trades/day, no
+  duration/order caps; daily 2%/weekly 5% anchors unchanged.
+- Macro/futures UNAVAILABLE proven neutral by test (0.5 component, never
+  "missing", never blocking).
+- 726 tests pass; pre_demo_safety_check.sh passes.
 
 ## Next Task
 

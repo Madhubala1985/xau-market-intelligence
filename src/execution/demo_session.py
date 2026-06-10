@@ -59,6 +59,11 @@ from src.execution.kill_switch import KillSwitch
 from src.execution.positions import PositionReconciler, ReconciliationReport
 from src.execution.preflight import PreflightReport
 from src.journal.journal import TradeJournal
+from src.risk.exposure_governor import (
+    AdaptiveExposureGovernor,
+    ExposureDecision,
+    ExposureInputs,
+)
 from src.risk.governor import RiskContext
 from src.risk.leverage_sizing import AccountSnapshot
 from src.risk.news_guard import NewsRiskGuard
@@ -244,6 +249,12 @@ class SupervisedDemoSession:
         protection: Optional[PositionProtectionManager] = None,
         max_orders: Optional[int] = None,
         profile_name: str = "",
+        # OPERATIONAL-001: adaptive exposure (tighten-only; None = off).
+        exposure_governor: Optional[AdaptiveExposureGovernor] = None,
+        hard_max_trades: int = 3,
+        hard_max_open: int = 2,
+        max_daily_loss: float = 0.02,
+        max_weekly_loss: float = 0.05,
         risk_pct: float = 0.005,
         exec_timeframe: Timeframe = Timeframe.M5,
         exec_count: int = 300,
@@ -278,6 +289,11 @@ class SupervisedDemoSession:
         self._protection = protection or PositionProtectionManager()
         self._max_orders = max_orders
         self._profile_name = profile_name
+        self._exposure = exposure_governor
+        self._hard_max_trades = hard_max_trades
+        self._hard_max_open = hard_max_open
+        self._max_daily_loss = max_daily_loss
+        self._max_weekly_loss = max_weekly_loss
         self._risk_pct = risk_pct
         self._exec_tf = exec_timeframe
         self._exec_count = exec_count
@@ -385,6 +401,73 @@ class SupervisedDemoSession:
     def violations(self) -> int:
         return self._violations
 
+    # -- startup warmstart (OPERATIONAL-001) -----------------------------------
+    def build_warmstart(self) -> dict:
+        """Analyse FULL multi-timeframe history once at startup (read-only).
+
+        Fetches the same real MT5 candle depth the live loop uses (D1/H4/H1/
+        M15/M5/M1), runs one pipeline analysis, and returns the starting
+        market context for the terminal report. Journals nothing, sends
+        nothing.
+        """
+        now = self._now()
+        exec_candles = self._adapter.fetch_candles(self._exec_tf, self._exec_count)
+        daily = self._adapter.fetch_candles(Timeframe.D1, self._daily_count)
+        h4 = self._adapter.fetch_candles(Timeframe.H4, self._h4_count)
+        m15 = self._fetch_optional(Timeframe.M15, 200) or []
+        h1 = self._fetch_optional(Timeframe.H1, 120) or []
+        m1 = self._fetch_optional(Timeframe.M1, 60) or []
+        tick = self._adapter.fetch_tick()
+        broker = self._adapter.fetch_broker_state(now)
+        result = self._pipeline.decide(PipelineInput(
+            symbol=self._symbol, exec_candles=exec_candles,
+            daily_candles=daily, h4_candles=h4,
+            m15_candles=m15 or None, h1_candles=h1 or None,
+            m1_candles=m1 or None,
+            broker=broker, current_spread=round(tick.spread, 6),
+            risk_pct=self._risk_pct, now=now,
+        ))
+        ctx = result.context
+        chop = getattr(ctx, "chop", None) if ctx else None
+        confluence = getattr(ctx, "confluence", None) if ctx else None
+        if chop is not None:
+            phase = chop.subtype.value
+        elif ctx is not None and ctx.regime is not None:
+            phase = ctx.regime.value
+        else:
+            phase = "UNKNOWN"
+        decision = result.decision
+        return {
+            "candles": {"d1": len(daily), "h4": len(h4), "h1": len(h1),
+                        "m15": len(m15), "m5": len(exec_candles),
+                        "m1": len(m1)},
+            "htf_bias": (ctx.htf_bias.value
+                         if ctx is not None and ctx.htf_bias else None),
+            "mtf": (ctx.mtf.to_dict()
+                    if ctx is not None and ctx.mtf is not None else None),
+            "regime": (ctx.regime.value
+                       if ctx is not None and ctx.regime else None),
+            "regime_reason": getattr(ctx, "regime_reason", ""),
+            "market_phase": phase,
+            "asian": (ctx.asian.to_dict()
+                      if ctx is not None and ctx.asian is not None else None),
+            "price_zone": (ctx.price_zone.value
+                           if ctx is not None and ctx.price_zone else None),
+            "volatility": (ctx.volatility.state.value
+                           if ctx is not None and ctx.volatility else None),
+            "displacement": getattr(ctx, "displacement_ratio", 0.0),
+            "confluence": (confluence.score if confluence else None),
+            "candidate": (
+                confluence.direction.value
+                if confluence and confluence.direction else None
+            ),
+            "thesis": (
+                decision.thesis
+                if decision is not None and decision.thesis else None
+            ),
+            "last_price": exec_candles[-1].close if exec_candles else None,
+        }
+
     # -- one cycle (public: the continuous service drives this directly) ------
     def run_cycle(self) -> CycleOutcome:
         """Run ONE full cycle and return everything it produced.
@@ -475,12 +558,16 @@ class SupervisedDemoSession:
         # Protect open positions (stop updates only via the gateway).
         self._manage_positions(positions, exec_candles)
 
+        # Adaptive exposure (OPERATIONAL-001): condition-driven entry
+        # allowance; tighten-only and entries-only (management continues).
+        exposure = self._assess_exposure(result, news, risk_state, positions)
+
         # Entry path.
         entry_action, entry_detail = "NONE", ""
         if decision.direction in (Direction.LONG, Direction.SHORT) and result.approved:
             entry_action, entry_detail = self._try_entry(
                 decision, result, broker, spread_price, positions,
-                reconciliation, news, risk_state, now,
+                reconciliation, news, risk_state, now, exposure=exposure,
             )
 
         context = result.context
@@ -537,8 +624,11 @@ class SupervisedDemoSession:
                 ),
                 risk_tier=(adaptive.tier.value if adaptive is not None else None),
                 risk_pct=(adaptive.risk_pct if adaptive is not None else None),
-                intel=self._record_sizing(
-                    result, self._intel_of(context, adaptive)
+                intel=self._record_exposure(
+                    exposure,
+                    self._record_sizing(
+                        result, self._intel_of(context, adaptive)
+                    ),
                 ),
             )
         )
@@ -589,6 +679,44 @@ class SupervisedDemoSession:
             intel["sizing"] = lot_decision.to_dict()
         return intel
 
+    @staticmethod
+    def _record_exposure(exposure, intel: dict) -> dict:
+        if exposure is not None:
+            intel["exposure"] = exposure.to_dict()
+        return intel
+
+    def _assess_exposure(
+        self, result, news, risk_state, positions
+    ) -> Optional[ExposureDecision]:
+        if self._exposure is None:
+            return None
+        context = result.context
+        confluence = getattr(context, "confluence", None) if context else None
+        mtf = getattr(context, "mtf", None) if context else None
+        volatility = getattr(context, "volatility", None) if context else None
+        session_type = (
+            context.session.value
+            if context is not None and context.session is not None else ""
+        )
+        return self._exposure.decide(ExposureInputs(
+            confluence_score=(confluence.score if confluence else 0.0),
+            mtf_score=(mtf.score if mtf else 0.0),
+            session=session_type,
+            volatility_dangerous=bool(volatility and volatility.dangerous),
+            spread_ratio=0.0,  # spread blocking lives in governor/confluence
+            news_blocked=(not news.known) or news.risky,
+            news_caution=getattr(news, "caution", False),
+            daily_loss_pct=risk_state.daily_loss_pct,
+            weekly_loss_pct=risk_state.weekly_loss_pct,
+            max_daily_loss=self._max_daily_loss,
+            max_weekly_loss=self._max_weekly_loss,
+            consecutive_losses=risk_state.consecutive_losses,
+            trades_today=risk_state.trades_today,
+            open_positions=len(positions),
+            hard_max_trades=self._hard_max_trades,
+            hard_max_open=self._hard_max_open,
+        ))
+
     # -- close detection ---------------------------------------------------------
     def _detect_closes(self, positions: List[BrokerPosition], now: datetime) -> None:
         open_tickets = {p.ticket for p in positions}
@@ -629,6 +757,20 @@ class SupervisedDemoSession:
             return self._adapter.fetch_candles(timeframe, count)
         except Exception:  # noqa: BLE001 - any fetch problem degrades, never crashes
             return None
+
+    @staticmethod
+    def _rr_of(decision: TradeDecision) -> str:
+        """Expected R:R from the decision's stop/target (display only)."""
+        if (
+            decision.stop_loss is None or decision.entry_price is None
+            or not decision.take_profits
+        ):
+            return "n/a"
+        risk = abs(decision.entry_price - decision.stop_loss)
+        if risk <= 0:
+            return "n/a"
+        reward = abs(decision.take_profits[0] - decision.entry_price)
+        return f"{reward / risk:.1f}"
 
     @staticmethod
     def _ticket_of(record: TradeRecord) -> Optional[int]:
@@ -688,6 +830,7 @@ class SupervisedDemoSession:
         news,
         risk_state,
         now: datetime,
+        exposure: Optional[ExposureDecision] = None,
     ) -> Tuple[str, str]:
         """Run the planner -> gateway entry path; returns (action, detail).
 
@@ -695,6 +838,23 @@ class SupervisedDemoSession:
         (smoke runs). Real sends and dry-run simulations both count against
         it, so a dry-run rehearses the same cap behavior the live run has.
         """
+        if exposure is not None:
+            if not exposure.allows_entry:
+                self._entries_blocked += 1
+                detail = (
+                    f"exposure governor {exposure.state}: {exposure.reason} "
+                    f"(remaining={exposure.trades_remaining})"
+                )
+                self._event("ENTRY_BLOCKED", detail)
+                return "EXPOSURE_BLOCKED", detail
+            if len(positions) >= exposure.max_open:
+                self._entries_blocked += 1
+                detail = (
+                    f"exposure governor {exposure.state}: open positions "
+                    f"{len(positions)} >= allowed {exposure.max_open}"
+                )
+                self._event("ENTRY_BLOCKED", detail)
+                return "EXPOSURE_BLOCKED", detail
         if (
             self._max_orders is not None
             and self._orders_sent + self._orders_simulated >= self._max_orders
@@ -806,7 +966,7 @@ class SupervisedDemoSession:
             detail = (
                 f"ticket={exec_result.order_ticket} lot={plan.lot_size} "
                 f"tier={plan.tier.value} addon={plan.is_addon} "
-                f"sl={decision.stop_loss}"
+                f"sl={decision.stop_loss} rr={self._rr_of(decision)}"
             )
             self._event("ORDER_SENT", detail)
             return "SENT", detail
