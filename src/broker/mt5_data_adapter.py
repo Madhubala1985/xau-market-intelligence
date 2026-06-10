@@ -369,6 +369,34 @@ class MT5DataAdapter:
             )
         return out
 
+    def fetch_position_profit(
+        self, ticket: int, *, lookback_days: int = 7
+    ) -> Optional[float]:
+        """Realized P&L of a CLOSED position from deal history (READ-ONLY).
+
+        Sums profit + commission + swap over all deals belonging to the
+        position ticket (history_deals_get). Returns None when history is
+        unavailable or no deals are found — callers must treat None as
+        "unknown", never as zero.
+        """
+        if not self._connected:
+            raise BrokerConnectionError("adapter is not connected; call connect() first")
+        mt5 = self._mt5
+        if not hasattr(mt5, "history_deals_get"):
+            return None
+        now = datetime.now(timezone.utc)
+        deals = mt5.history_deals_get(
+            now - timedelta(days=lookback_days), now, position=ticket
+        )
+        if not deals:
+            return None
+        total = 0.0
+        for d in deals:
+            total += float(_field(d, "profit", 0.0) or 0.0)
+            total += float(_field(d, "commission", 0.0) or 0.0)
+            total += float(_field(d, "swap", 0.0) or 0.0)
+        return round(total, 2)
+
     def _to_candle(self, row: Any, timeframe: Timeframe, symbol: str) -> Candle:
         """Convert a single MT5 rate row into a validated Candle."""
         broker_time, time_utc = self._epoch_to_times(int(_row_value(row, "time")))

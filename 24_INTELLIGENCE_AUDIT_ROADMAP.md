@@ -224,14 +224,28 @@ in the gate map.
 
 # 4. Next Highest-Impact Task
 
-**User (manual, Windows PowerShell):**
-1. `python scripts/live_shadow_run.py --cycles 5` (smoke)
-2. `python scripts/live_shadow_run.py --duration-minutes 5 --poll-seconds 60 --report-name live_shadow_session` (LIVE-002 evidence)
-3. `python scripts/demo_preflight.py` (DEMO-001 gates)
+## Status update — DEMO-002 session loop implemented
 
-**Implementation (next session):** F-3 + F-4 as the DEMO-002 preparation
-commit(s), test-first, with no order_send outside the gateway and no weakening
-of any limit. F-5 minimal calendar module follows.
+SupervisedDemoSession + scripts/demo_session_run.py complete (529 tests).
+Additional integration defects found and fixed during implementation:
+- gateway duplicate pre-check ignored protected_addon (add-ons could never
+  execute) — fixed, governor still re-checks independently;
+- append-only journal poisoned open_symbols after the first close (permanent
+  block) — fixed with latest-per-record_id collapse semantics;
+- no close detection (stopped-out positions deadlocked reconciliation and
+  losses never reached the loss tracker) — fixed via deal-history P&L close
+  records; unknown P&L stays OPEN and fails closed;
+- order volume could leave the broker lot grid under a size_factor — fixed
+  (snap down); sizing reduction now applied exactly once.
+
+**Next: user produces first supervised demo evidence (Windows PowerShell):**
+1. `python scripts/demo_preflight.py` (13 gates; needs configs/news_windows.json)
+2. `python scripts/demo_session_run.py --dry-run --duration-minutes 10`
+3. `python scripts/demo_session_run.py --confirm "START SUPERVISED DEMO" --duration-minutes 60 --max-orders 1`
+
+**Implementation after evidence:** reflection report from the demo journal
+(F-7), partial take-profits, richer close classification, multi-session
+aggregation — all validation-gated.
 
 # 5. Audit Method Note
 

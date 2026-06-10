@@ -10,7 +10,7 @@ Phase 12: Live Demo Readiness
 
 ## Current Task
 
-DEMO-002: Supervised MT5 demo trading (BLOCKED until gates pass; see blockers)
+DEMO-002: IMPLEMENTED — awaiting the first supervised demo run (user-started)
 
 ## Last Completed Task
 
@@ -63,14 +63,32 @@ F-3/F-4/F-5 implemented (commit DEMO-002-BLOCKERS):
 - NewsRiskGuard: manual block file + static calendar; UNKNOWN state blocks
   order planning (fail-closed); wired into LiveShadowSession.
 
+## DEMO-002 Implementation (2026-06-10)
+
+SupervisedDemoSession (src/execution/demo_session.py) + scripts/demo_session_run.py:
+- requires EXACT confirmation token "START SUPERVISED DEMO" (or --dry-run),
+- runs a FRESH DEMO-001 preflight every start; refuses anything not READY
+  (preflight now includes a 13th gate: news_source_available),
+- per cycle: kill-switch check -> close detection (real P&L from deal history)
+  -> reconciliation (orphans fail closed) -> pipeline decision (journaled) ->
+  break-even/trailing stop updates ONLY via gateway.modify_stop (never widens,
+  never removes) -> entry via DemoTradePlanner -> ExecutionGateway,
+- FILLED orders journaled with their MT5 ticket (notes="ticket=<n>"),
+- max_orders cap (first run: 1), 8h hard session ceiling, session report with
+  events, verdict CLEAN / HALTED_BY_KILL_SWITCH / ATTENTION_REQUIRED.
+Integration defects fixed: gateway duplicate check now honors guard-approved
+protected add-ons; journal append-only streams collapse to latest-per-record_id
+(closed trades no longer block forever); stopped-out positions auto-close in
+the journal with real P&L (loss limits see real losses); order volume snaps
+down to the broker lot step; sizing reduction applied once (not twice).
+
 ## Next Task
 
-DEMO-002: implement the supervised demo session loop (planner -> gateway,
-proposal application, session report), then the user manually starts the
-supervised run. Before order_send the operator must also:
-- create configs/news_windows.json (even {"windows": []}) or engage
-  control/NEWS_BLOCK, because unknown news state blocks all plans,
-- re-run demo_preflight on the session day.
+User runs on the Windows MT5 host, in order:
+1. python scripts/demo_preflight.py            (13 gates, needs news calendar)
+2. python scripts/demo_session_run.py --dry-run --duration-minutes 10
+3. python scripts/demo_session_run.py --confirm "START SUPERVISED DEMO" --duration-minutes 60 --max-orders 1
+Then record evidence and review the session report before any longer run.
 
 ## Current Execution Mode
 

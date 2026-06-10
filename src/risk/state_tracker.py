@@ -34,6 +34,21 @@ _ACTIONABLE = (Direction.LONG, Direction.SHORT)
 _STREAK_BREAKERS = (TradeOutcome.WIN, TradeOutcome.BREAKEVEN)
 
 
+def collapse_records(records: List[TradeRecord]) -> List[TradeRecord]:
+    """Collapse an append-only record stream to the LATEST entry per record_id.
+
+    The journal never rewrites lines; a trade's lifecycle is appended as
+    successive TradeRecords sharing one record_id (OPEN, then a closing
+    record). For risk math and reconciliation only the latest state counts —
+    otherwise a long-closed trade's OPEN record would block trading forever.
+    Journal order is preserved; the last occurrence wins.
+    """
+    latest: dict = {}
+    for r in records:
+        latest[r.record_id] = r
+    return list(latest.values())
+
+
 @dataclass(frozen=True)
 class RiskStateSnapshot:
     """Risk enforcement inputs derived from the journal at one moment."""
@@ -56,7 +71,7 @@ class RiskStateTracker:
         if now.tzinfo is None:
             raise ValueError("now must be timezone-aware (UTC)")
         now = now.astimezone(timezone.utc)
-        records = self._journal.records()
+        records = collapse_records(self._journal.records())
 
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_start = day_start - timedelta(days=now.weekday())  # ISO Monday

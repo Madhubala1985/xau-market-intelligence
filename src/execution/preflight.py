@@ -45,6 +45,7 @@ from src.execution.gateway import (
 from src.execution.kill_switch import KillSwitch
 from src.journal.journal import TradeJournal
 from src.risk.governor import RiskContext, RiskGovernor, RiskLimits
+from src.risk.news_guard import NewsRiskGuard
 
 # MT5 ACCOUNT_TRADE_MODE_* fallback values (documented constants).
 _TRADE_MODE_DEMO = 0
@@ -112,12 +113,14 @@ class DemoPreflight:
         client: Optional[Any] = None,
         journal_probe_path: Union[str, Path] = "logs/demo_preflight_probe.jsonl",
         kill_switch: Optional[KillSwitch] = None,
+        news_guard: Optional[NewsRiskGuard] = None,
     ) -> None:
         self._env = env
         self._symbol = broker_symbol.strip()  # exact broker case (e.g. XAUUSDm)
         self._client = client
         self._journal_probe_path = Path(journal_probe_path)
         self._kill_switch = kill_switch or KillSwitch()
+        self._news_guard = news_guard or NewsRiskGuard()
 
     @property
     def canonical_symbol(self) -> str:
@@ -132,6 +135,7 @@ class DemoPreflight:
         self._check_gateway_stop_loss(report)
         self._check_journal(report)
         self._check_kill_switch(report)
+        self._check_news_source(report)
         return report
 
     # -- gates 1-5: environment flags ---------------------------------------
@@ -348,4 +352,20 @@ class DemoPreflight:
             "kill_switch_available", GateStatus.PASS,
             f"engage/release verified; gateway blocks while engaged "
             f"(file: {ks.path})",
+        )
+
+    # -- gate 13: news source (DEMO-002 fail-closed requirement) ----------------
+    def _check_news_source(self, report: PreflightReport) -> None:
+        state = self._news_guard.assess(datetime.now(timezone.utc))
+        if not state.known:
+            report.add(
+                "news_source_available", GateStatus.FAIL,
+                "no news source: create configs/news_windows.json (reviewed "
+                "calendar; an empty windows list is an explicit all-clear) or "
+                "engage control/NEWS_BLOCK — unknown news state blocks all plans",
+            )
+            return
+        report.add(
+            "news_source_available", GateStatus.PASS,
+            f"news source: {state.source} ({state.detail})",
         )

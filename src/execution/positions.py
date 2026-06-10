@@ -31,6 +31,7 @@ from typing import List, Sequence, Tuple
 from src.broker.mt5_data_adapter import BrokerPosition
 from src.data.enums import TradeOutcome
 from src.data.schemas import TradeRecord
+from src.risk.state_tracker import collapse_records
 
 _TICKET_RE = re.compile(r"\bticket=(\d+)\b")
 _LOT_TOL = 1e-9
@@ -75,8 +76,11 @@ class PositionReconciler:
         broker_positions: Sequence[BrokerPosition],
         journal_records: Sequence[TradeRecord],
     ) -> ReconciliationReport:
+        # Collapse the append-only stream first: only a record_id's LATEST
+        # entry counts (a closed trade's earlier OPEN line must not resurrect).
         open_records: List[TradeRecord] = [
-            r for r in journal_records if r.outcome is TradeOutcome.OPEN
+            r for r in collapse_records(list(journal_records))
+            if r.outcome is TradeOutcome.OPEN
         ]
         unmatched_positions = list(broker_positions)
         unmatched_records = list(open_records)

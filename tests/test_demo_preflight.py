@@ -83,6 +83,16 @@ class FakeMT5:
         self.order_check.assert_not_called()
 
 
+def make_news_guard(tmp_path):
+    import json
+    from src.risk import NewsRiskGuard
+
+    cal = tmp_path / "news_windows.json"
+    if not cal.exists():
+        cal.write_text(json.dumps({"windows": []}), encoding="utf-8")
+    return NewsRiskGuard(block_path=tmp_path / "NEWS_BLOCK", calendar_path=cal)
+
+
 def make_preflight(tmp_path, *, env=None, client="default", **overrides) -> DemoPreflight:
     if client == "default":
         client = FakeMT5()
@@ -92,6 +102,7 @@ def make_preflight(tmp_path, *, env=None, client="default", **overrides) -> Demo
         client=client,
         journal_probe_path=tmp_path / "probe.jsonl",
         kill_switch=KillSwitch(tmp_path / "KILL_SWITCH"),
+        news_guard=make_news_guard(tmp_path),
     )
     kwargs.update(overrides)
     return DemoPreflight(**kwargs)
@@ -121,9 +132,20 @@ def test_all_gates_pass_with_ready_environment(tmp_path):
         "journal_writable": GateStatus.PASS,
         "state_persistence": GateStatus.PASS,
         "kill_switch_available": GateStatus.PASS,
+        "news_source_available": GateStatus.PASS,
     }
     assert report.ready is True
     client.assert_no_trades()
+
+
+def test_missing_news_source_fails_preflight(tmp_path):
+    from src.risk import NewsRiskGuard
+
+    no_source = NewsRiskGuard(block_path=tmp_path / "NB2",
+                              calendar_path=tmp_path / "missing.json")
+    report = make_preflight(tmp_path, news_guard=no_source).run()
+    assert gate_map(report)["news_source_available"] is GateStatus.FAIL
+    assert report.ready is False
 
 
 def test_preflight_never_calls_order_send(tmp_path):

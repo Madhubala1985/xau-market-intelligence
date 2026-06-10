@@ -12,31 +12,41 @@ This file allows Claude sessions to resume without losing direction.
 Phase 12: Live Demo Readiness
 
 ## Current Task ID:
-DEMO-002 (implementation of the supervised session loop)
+DEMO-002 (implemented; first supervised run pending — user-started only)
 
 ## Current Task Goal:
-Build the supervised demo session loop that consumes DemoTradePlanner plans,
-applies stop proposals, and routes any order exclusively through the
-ExecutionGateway — then the user manually starts the supervised run.
+Produce first supervised demo session evidence on the Windows MT5 host:
+dry-run first, then ONE supervised order maximum, then review.
 
 ## Current Status:
-Windows proof CLEARED 2026-06-10: live_shadow_run --cycles 5 COMPLETED,
-live_shadow_session 5-minute run COMPLETED, demo_preflight Ready: True.
-Audit blockers F-3 (sizing/pyramiding wiring), F-4 (position reconciliation +
-protection proposals), F-5 (fail-closed news guard) are IMPLEMENTED and tested
-(commit DEMO-002-BLOCKERS). No orders are sent anywhere yet.
+SupervisedDemoSession + scripts/demo_session_run.py implemented and committed.
+529 tests pass. The session refuses to construct without a READY preflight and
+the exact confirmation token; --dry-run runs the full loop with sending
+hard-disabled. Orders flow ONLY planner -> governor -> gateway; stop updates
+ONLY via gateway.modify_stop (never widens/removes); kill switch halts the
+session; orphans and unknown news fail closed; filled orders journal their MT5
+ticket; closes are detected with real P&L from deal history so loss limits
+operate on real losses.
 
-## Remaining before supervised demo order_send:
-1. Implement the DEMO-002 supervised session loop (planner -> gateway wiring,
-   stop-proposal application via gateway-gated calls, session report,
-   journaling with ticket=<n> notes so reconciliation can ticket-match).
-2. Operator: create configs/news_windows.json for the session week (even
-   {"windows": []} after reviewing the calendar) — unknown news state blocks
-   every plan by design. control/NEWS_BLOCK engages an immediate manual block.
-3. Operator: re-run `python scripts/demo_preflight.py` on the session day
-   (all 12 gates PASS) and verify control/KILL_SWITCH is absent.
-4. User manually starts the supervised demo session; Claude must not start it.
-5. Real trading remains forbidden throughout.
+## Operator steps for the first supervised run (Windows PowerShell):
+1. Review the week's calendar and create configs/news_windows.json
+   (an empty {"windows": []} is an explicit all-clear assertion);
+   control/NEWS_BLOCK engages an immediate manual block at any time.
+2. Verify control/KILL_SWITCH is absent (create it to stop the session).
+3. python scripts/demo_preflight.py            -> all 13 gates PASS
+4. python scripts/demo_session_run.py --dry-run --duration-minutes 10
+   -> verdict CLEAN, zero orders, review events
+5. python scripts/demo_session_run.py --confirm "START SUPERVISED DEMO" --duration-minutes 60 --max-orders 1
+   -> supervise live; stop anytime: New-Item -ItemType File control\KILL_SWITCH
+6. Review reports/runtime/demo_session.md + logs/demo_trade_journal.jsonl;
+   record evidence; commit the outcome notes.
+
+## After first evidence:
+- If CLEAN: consider longer supervised sessions (still demo, still supervised).
+- DEMO-003 candidates: partial take-profit execution, richer close
+  classification (commission/swap split), reflection report generation from
+  the demo journal, multi-session aggregation.
+- Real trading remains FORBIDDEN.
 
 ---
 

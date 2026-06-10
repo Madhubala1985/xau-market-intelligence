@@ -2280,3 +2280,90 @@ tests/test_positions.py, tests/test_news_guard.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-10-04
+
+## Date:
+2026-06-10
+
+## Area:
+Execution / Risk / Architecture
+
+## Decision:
+DEMO-002 implemented: SupervisedDemoSession + scripts/demo_session_run.py.
+Key design decisions:
+(a) Hard preconditions at construction: exact confirmation token
+    ("START SUPERVISED DEMO"), a READY DemoPreflight produced fresh on the
+    same run, and a gateway that does not request real mode.
+(b) Preflight gained gate 13 (news_source_available): a missing/unparseable
+    news source fails preflight, so the fail-closed news rule is caught
+    before the session, not during it.
+(c) Stop management goes exclusively through a new gateway.modify_stop
+    (TRADE_ACTION_SLTP): real refused, kill-switch aware, never widens,
+    never removes; with sending disabled it is a DRY_RUN.
+(d) Close detection: journal OPEN records whose broker position vanished are
+    closed with realized P&L from history_deals_get (profit+commission+swap);
+    unknown P&L keeps the record OPEN -> reconciliation fails closed.
+(e) Journal lifecycle semantics: append-only streams collapse to the LATEST
+    record per record_id (collapse_records) in the risk tracker and the
+    reconciler — without this, the first closed trade would poison
+    open_symbols and block trading forever.
+(f) Gateway duplicate pre-check now honors RiskContext.protected_addon, so a
+    guard-approved add-on can pass the gateway while a plain duplicate stays
+    blocked (the governor re-checks independently).
+(g) Sizing reduction applied exactly once: the session passes
+    size_factor_hint=1.0 to the gateway context because the planner's lot
+    already encodes the confidence tier; the gateway also snaps volume DOWN
+    to the broker lot step so a factor can never produce an unaligned or
+    enlarged volume.
+(h) Session ceilings: max_orders (default 1) and an 8-hour hard duration cap.
+
+## Reason:
+The session loop is the last component before demo order_send. The integration
+defects (e)(f) would have deadlocked or blocked the very first session; (d) is
+required for loss limits to operate on real losses; (c) keeps every order-side
+effect inside the single gated pathway.
+
+## Evidence:
+tests/test_demo_session.py — 18 tests covering: preflight/confirmation/real
+refusals; full entry path (order_send called once, stop attached, ticket
+journaled); max_orders; kill-switch halt; unknown news and orphan positions
+block entries; no averaging down; journaled daily loss blocks entries via the
+governor; close detection journals real P&L and reconciliation stays clean;
+unknown close P&L is a violation and fails closed; break-even applied via
+TRADE_ACTION_SLTP with exact symbol case; modify_stop never widens/removes and
+respects the kill switch; dry-run never calls order_send; report credential-
+free. Updated preflight tests (13 gates). Full suite: 529 passed.
+pre_demo_safety_check.sh passed. WSL runner refusals exit 2.
+
+## Alternatives Considered:
+- Reusing ShadowRunner inside the demo session: rejected — shadow's no-send
+  guard contradicts a sending session; a dedicated loop with its own
+  fail-closed gates is clearer.
+- Treating a vanished position as WIN/LOSS by last seen profit: rejected —
+  dishonest; deal history is the source of truth, unknown stays OPEN.
+- Rewriting journal lines in place for closes: rejected — the journal is
+  append-only by design (restart-safe); collapse semantics preserve that.
+
+## Risk:
+The close-detection path depends on history_deals_get availability on the
+Windows terminal; if history is disabled, every close becomes a violation and
+the session stops trading (fail-closed but noisy).
+
+## Mitigation:
+First run is supervised with max ONE order; the operator reviews the session
+report; the dry-run rehearses the full loop including close detection paths.
+
+## Files Affected:
+src/execution/demo_session.py, scripts/demo_session_run.py,
+src/execution/gateway.py, src/execution/positions.py,
+src/execution/preflight.py, src/risk/state_tracker.py,
+src/broker/mt5_data_adapter.py, src/execution/__init__.py,
+scripts/generate_evidence_pack.py, tests/test_demo_session.py,
+tests/test_demo_preflight.py
+
+## Status:
+Accepted

@@ -36,6 +36,12 @@ from src.execution.demo_planner import (
     TradePlan,
     confidence_tier,
 )
+from src.execution.demo_session import (
+    CONFIRMATION_TOKEN,
+    DemoSessionReport,
+    SessionEvent,
+    SupervisedDemoSession,
+)
 
 __all__ = [
     "ExecutionGateway",
@@ -65,4 +71,9 @@ __all__ = [
     "TradePlan",
     "PlanCheck",
     "confidence_tier",
+    # Supervised demo session (DEMO-002)
+    "SupervisedDemoSession",
+    "DemoSessionReport",
+    "SessionEvent",
+    "CONFIRMATION_TOKEN",
 ]

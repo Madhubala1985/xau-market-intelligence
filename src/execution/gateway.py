@@ -22,6 +22,7 @@ assert order_send is only called in the allowed case.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, List, Mapping, Optional, Tuple
@@ -31,6 +32,7 @@ from src.data.schemas import TradeDecision
 from src.risk.governor import RiskContext, RiskDecision, RiskGovernor
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
+_LOT_STEP = 0.01  # XAU/USD broker volume step (verified live: WINMT5-LIVE-001)
 
 
 def _as_bool(value: Optional[str], *, default: bool) -> bool:
@@ -120,6 +122,17 @@ class ExecutionResult:
     order_ticket: Optional[int] = None
     failed_checks: Tuple[ExecutionCheck, ...] = ()
     risk_decision: Optional[RiskDecision] = None
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class StopModifyResult:
+    """Outcome of a stop-loss modification attempt (gateway-gated)."""
+
+    status: ExecutionStatus
+    sent: bool
+    ticket: int
+    new_stop: Optional[float]
     reason: str = ""
 
 
@@ -228,6 +241,78 @@ class ExecutionGateway:
             reason="demo order rejected by broker",
         )
 
+    # -- stop modification (protection only; never widens, never removes) ---
+    def modify_stop(
+        self,
+        *,
+        ticket: int,
+        symbol: str,
+        direction: Direction,
+        current_stop: float,
+        new_stop: float,
+        take_profit: Optional[float] = None,
+    ) -> StopModifyResult:
+        """Tighten a position's stop-loss via TRADE_ACTION_SLTP (demo only).
+
+        Safety invariants:
+        - real mode refused outright,
+        - kill switch blocks,
+        - a stop may only IMPROVE (move toward profit): widening or removing
+          is refused regardless of what the caller computed upstream,
+        - with sending disabled this is a DRY_RUN (nothing reaches MT5).
+
+        `symbol` must be the EXACT broker symbol case (e.g. XAUUSDm).
+        """
+        if self._flags.real_requested:
+            return StopModifyResult(
+                status=ExecutionStatus.REAL_FORBIDDEN, sent=False, ticket=ticket,
+                new_stop=None, reason="real trading is forbidden",
+            )
+        if self._kill_switch is not None and self._kill_switch.engaged:
+            return StopModifyResult(
+                status=ExecutionStatus.BLOCKED, sent=False, ticket=ticket,
+                new_stop=None, reason="manual kill switch is engaged",
+            )
+        if new_stop is None or new_stop <= 0:
+            return StopModifyResult(
+                status=ExecutionStatus.BLOCKED, sent=False, ticket=ticket,
+                new_stop=None, reason="a stop-loss may never be removed",
+            )
+        if direction is Direction.LONG and new_stop <= current_stop:
+            return StopModifyResult(
+                status=ExecutionStatus.BLOCKED, sent=False, ticket=ticket,
+                new_stop=None, reason="refused: would widen/not improve LONG stop",
+            )
+        if direction is Direction.SHORT and new_stop >= current_stop:
+            return StopModifyResult(
+                status=ExecutionStatus.BLOCKED, sent=False, ticket=ticket,
+                new_stop=None, reason="refused: would widen/not improve SHORT stop",
+            )
+        if not self._flags.demo_send_enabled:
+            return StopModifyResult(
+                status=ExecutionStatus.DRY_RUN, sent=False, ticket=ticket,
+                new_stop=new_stop, reason="sending disabled; dry-run stop update",
+            )
+
+        mt5 = self._mt5
+        request = {
+            "action": getattr(mt5, "TRADE_ACTION_SLTP", 6),
+            "position": ticket,
+            "symbol": symbol,
+            "sl": new_stop,
+            "tp": take_profit,
+        }
+        send_result = mt5.order_send(request)
+        if self._accepted(send_result):
+            return StopModifyResult(
+                status=ExecutionStatus.FILLED, sent=True, ticket=ticket,
+                new_stop=new_stop, reason="stop tightened",
+            )
+        return StopModifyResult(
+            status=ExecutionStatus.REJECTED, sent=True, ticket=ticket,
+            new_stop=None, reason="stop modification rejected by broker",
+        )
+
     # -- checks ------------------------------------------------------------
     def _pre_checks(self, decision: TradeDecision, context: RiskContext, log: _Log) -> None:
         if decision.direction not in (Direction.LONG, Direction.SHORT):
@@ -243,7 +328,11 @@ class ExecutionGateway:
             log.fail(ExecutionCheck.BROKER_DISCONNECTED)
         open_syms = {s.strip().upper() for s in context.open_symbols}
         if decision.symbol.strip().upper() in open_syms or broker.open_positions > 0:
-            log.fail(ExecutionCheck.DUPLICATE)
+            # The ONLY permitted same-symbol second order is a protected
+            # add-on (PyramidingGuard ALLOWED upstream, flagged in the
+            # context). The Risk Governor re-checks this with its own limits.
+            if not context.protected_addon:
+                log.fail(ExecutionCheck.DUPLICATE)
 
     # -- order construction ------------------------------------------------
     @property
@@ -266,7 +355,10 @@ class ExecutionGateway:
         order_type = (
             getattr(mt5, "ORDER_TYPE_BUY", 0) if is_long else getattr(mt5, "ORDER_TYPE_SELL", 1)
         )
-        volume = round(context.lot_size * verdict.size_factor, 8)
+        # Snap DOWN to the broker lot step so a size_factor reduction can
+        # never produce an unaligned volume; reduction may shrink, never grow.
+        raw_volume = context.lot_size * verdict.size_factor
+        volume = round(math.floor(raw_volume / _LOT_STEP + 1e-9) * _LOT_STEP, 8)
         take_profit = decision.take_profits[0] if decision.take_profits else None
         # NOTE: contains no credentials (login/password/server) by construction.
         return {

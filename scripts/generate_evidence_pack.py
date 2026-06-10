@@ -231,6 +231,10 @@ _TABLE: Dict[str, dict] = {
         layer="execution",
         summary="sized+guarded+governed demo trade plans; never sends (F-3)",
         test_file="test_demo_planner.py", test_note="", **_MT5_BOUNDARY),
+    "src.execution.demo_session": dict(
+        layer="execution",
+        summary="supervised demo session loop (DEMO-002; gateway-only orders)",
+        test_file="test_demo_session.py", test_note="", **_MT5_BOUNDARY),
     "src.trade_management.position_manager": dict(
         layer="trade_management",
         summary="BE/trailing stop proposals for open positions (F-4; no MT5 calls)",
