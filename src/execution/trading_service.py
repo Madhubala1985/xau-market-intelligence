@@ -293,6 +293,22 @@ class ProgressPrinter:
         m1 = intel.get("m1")
         if m1:
             self._line(f"  m1={m1.get('state')} ({m1.get('reason')})")
+        sizing = intel.get("sizing")
+        if sizing:
+            self._line(
+                f"  sizing risk={sizing.get('risk_pct', 0):.2%}"
+                f"(${sizing.get('risk_usd', 0):.2f}) "
+                f"stop={sizing.get('stop_distance', 0):.2f} "
+                f"min_lot_risk=${sizing.get('min_lot_risk_usd', 0):.2f} "
+                f"raw={sizing.get('raw_lot', 0):.4f} "
+                f"rounded={sizing.get('rounded_lot', 0):.2f} "
+                f"final={sizing.get('lot', 0):.2f} "
+                f"verdict={sizing.get('verdict')}"
+            )
+            self._line(
+                f"  sizing_why: {sizing.get('reason')} "
+                f"[{sizing.get('phase')} -> {sizing.get('milestone')}]"
+            )
         if confluence:
             regime_reason = intel.get("regime_reason", "")
             subtype = s.regime_subtype or "-"

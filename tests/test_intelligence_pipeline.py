@@ -15,6 +15,8 @@ Proves, through the REAL DecisionPipeline:
 
 from datetime import timedelta
 
+import pytest
+
 from src.data.enums import Direction
 from src.liquidity.liquidity_map import (
     LiquidityKind,
@@ -387,3 +389,63 @@ def test_asian_context_flows_into_the_pipeline_context():
     short_feed = candles[-3:]
     ctx = AsianRangeEngine().analyze(short_feed, short_feed[-1].time_utc)
     assert ctx.known is False
+
+# ---------------------------------------------------------------------------
+# SIZING-001: explicit sizing verdicts + threshold profiles
+# ---------------------------------------------------------------------------
+
+def test_small_account_candidate_is_promoted_not_vaguely_blocked():
+    """The live regression: a $2,000 account with a qualified candidate must
+    size to the broker minimum (within the phase ceiling), not die on
+    'invalid lot size 0.0'."""
+    from tests.test_pipeline import broker as small_broker
+
+    candles = falling(30)
+    entry = candles[-1].close
+    engines = bearish_engines(entry, regime=Regime.TREND, confluence=0.70)
+    result = DecisionPipeline(engines).decide(
+        base_input(candles, broker=small_broker(), risk_pct=0.01)
+    )
+    assert result.approved is True
+    assert result.lot_size == pytest.approx(0.01)
+    assert result.lot_decision is not None
+    assert result.lot_decision.verdict in ("SIZED", "MIN_LOT_PROMOTED_TO_0.01")
+    assert "invalid lot size" not in result.reason
+
+
+def test_stop_too_wide_blocks_with_explicit_sizing_stage():
+    from src.strategy.pipeline import PipelineStage
+    from tests.test_pipeline import broker as small_broker
+
+    candles = falling(30)
+    entry = candles[-1].close
+    engines = bearish_engines(entry, regime=Regime.TREND)
+    engines.sweep = _StubSweepBear(entry + 300)   # absurd structural stop
+    result = DecisionPipeline(engines).decide(
+        base_input(candles, broker=small_broker(), risk_pct=0.01)
+    )
+    assert result.approved is False
+    assert result.stage is PipelineStage.SIZING_BLOCKED
+    assert "STOP_TOO_WIDE_FOR_ACCOUNT" in result.reason
+    assert "invalid lot size" not in result.reason
+    assert result.lot_decision.min_lot_risk_usd > 0
+
+
+def test_threshold_profiles_select_and_print():
+    from src.strategy.pipeline import THRESHOLD_PROFILES
+
+    current = DecisionPipeline()
+    assert current.threshold_profile == "current"
+    assert current._chop_override_confluence == pytest.approx(0.65)
+    explore = DecisionPipeline(threshold_profile="demo_exploration")
+    assert explore._chop_override_confluence == pytest.approx(0.55)
+    assert explore._continuation_confluence == pytest.approx(0.50)
+    assert explore._continuation_displacement == pytest.approx(1.3)
+    assert set(THRESHOLD_PROFILES) == {"current", "demo_exploration"}
+    import pytest as _pytest
+    with _pytest.raises(ValueError, match="unknown threshold profile"):
+        DecisionPipeline(threshold_profile="yolo")
+    # explicit kwargs still override the profile
+    custom = DecisionPipeline(threshold_profile="current",
+                              continuation_confluence=0.42)
+    assert custom._continuation_confluence == pytest.approx(0.42)

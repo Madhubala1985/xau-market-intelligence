@@ -537,7 +537,9 @@ class SupervisedDemoSession:
                 ),
                 risk_tier=(adaptive.tier.value if adaptive is not None else None),
                 risk_pct=(adaptive.risk_pct if adaptive is not None else None),
-                intel=self._intel_of(context, adaptive),
+                intel=self._record_sizing(
+                    result, self._intel_of(context, adaptive)
+                ),
             )
         )
         return reconciliation
@@ -579,6 +581,12 @@ class SupervisedDemoSession:
                                           "UNAVAILABLE")
         if adaptive is not None:
             intel["adaptive_risk"] = adaptive.to_dict()
+        return intel
+
+    def _record_sizing(self, result, intel: dict) -> dict:
+        lot_decision = getattr(result, "lot_decision", None)
+        if lot_decision is not None:
+            intel["sizing"] = lot_decision.to_dict()
         return intel
 
     # -- close detection ---------------------------------------------------------
@@ -717,6 +725,12 @@ class SupervisedDemoSession:
             account.balance * adaptive.risk_pct
             if adaptive is not None and adaptive.risk_pct > 0 else None
         )
+        # SIZING-001: the phase ceiling authorizes min-lot promotion when the
+        # contracted budget sizes below the broker minimum.
+        risk_ceiling = (
+            account.balance * getattr(adaptive, "ceiling_pct", 0.0)
+            if adaptive is not None else None
+        )
         plan = self._planner.plan(
             decision,
             result.confidence,
@@ -736,6 +750,7 @@ class SupervisedDemoSession:
             fresh_setup=has_setup,
             continuation_supported=has_setup,
             risk_budget=risk_budget,
+            risk_ceiling=risk_ceiling,
         )
         if not plan.approved:
             self._entries_blocked += 1

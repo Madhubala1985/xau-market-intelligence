@@ -160,12 +160,12 @@ def test_trade_progress_prints_plan_ticket_and_toolbox_hint(tmp_path):
     service.run()
     out = stream.getvalue()
     assert "decision=TRADE" in out
-    assert "entry: SENT" in out and "lot=0.08" in out and "sl=2299.0" in out
+    assert "entry: SENT" in out and "lot=0.16" in out and "sl=2299.0" in out
     assert ">> ORDER SENT ticket=1000" in out
     assert "MT5 Toolbox/Trade tab" in out
     # positions are read at cycle start, so the new position is visible (and
     # managed) from the NEXT cycle on
-    assert "pos 1000 LONG 0.08" in out
+    assert "pos 1000 LONG 0.16" in out
 
 
 # ---------------------------------------------------------------------------
@@ -557,3 +557,25 @@ def test_quiet_sessions_do_not_trigger_the_audit(tmp_path):
     service.run()
     assert "OPPORTUNITY AUDIT" not in stream.getvalue()
     assert not list((tmp_path / "reports").glob("opportunity_audit_*"))
+
+
+def test_terminal_prints_sizing_diagnostics(tmp_path):
+    """SIZING-001: candidate cycles print the full sizing breakdown."""
+    from dataclasses import replace as dc_replace
+    from src.risk.lot_sizer import resolve_lot
+
+    lot_decision = resolve_lot(equity=2000.0, risk_pct=0.002,
+                               ceiling_pct=0.010, stop_distance=5.20)
+    base = rich_no_trade_result()
+    result = dc_replace(base, lot_decision=lot_decision)
+    service, *_ , stream = make_service(tmp_path, results=[result],
+                                        max_cycles=1)
+    service.run()
+    out = stream.getvalue()
+    assert "sizing risk=0.20%($4.00)" in out
+    assert "stop=5.20" in out
+    assert "min_lot_risk=$5.20" in out
+    assert "raw=0.0077" in out
+    assert "final=0.01" in out
+    assert "verdict=MIN_LOT_PROMOTED_TO_0.01" in out
+    assert "PHASE_1 -> $10,000 (milestone 1)" in out

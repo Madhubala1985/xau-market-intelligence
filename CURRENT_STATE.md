@@ -10,10 +10,10 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-FINAL-INTELLIGENCE: IMPLEMENTED — news/macro/futures/M1/calibration layers
-completed or honestly finalized; executable wiring verification passes with
-0 MISSING. The system is feature-complete for the demo evaluation campaign;
-restart the continuous service and collect evidence (user-started)
+SIZING-001: IMPLEMENTED — the "invalid lot size 0.0" Proven Defect is fixed
+with milestone-aware adaptive lot sizing (min-lot promotion bounded by the
+phase ceiling, full sizing diagnostics, threshold profiles). Restart the
+continuous service and collect evidence (user-started)
 
 ## Last Completed Task
 
@@ -131,7 +131,30 @@ FINAL-INTELLIGENCE (2026-06-10, decision 2026-06-10-09):
 - Terminal/banner: news 5-state label, external macro=/futures= line, m1=
   line, phase= in risk line, banner shows providers + thresholds + capital
   phase.
-- 692 tests pass; pre_demo_safety_check.sh passes.
+- 692 tests passed at FINAL-INTELLIGENCE.
+
+SIZING-001 (2026-06-10, decision 2026-06-10-10):
+- PROVEN DEFECT FIXED (live evidence): a qualified candidate (confluence
+  0.70, MTF 0.90, sweep/FVG/OB, displacement 1.8x) died with "invalid lot
+  size 0.0" — the DEFENSIVE 0.20% budget ($4 on $2,000) was below the
+  broker minimum-lot loss (~$5 at a ~5 stop).
+- src/risk/lot_sizer.py: explicit resolver — raw lot from loss-at-stop
+  math; below the broker minimum, min-lot viability against the PHASE
+  CEILING: MIN_LOT_PROMOTED_TO_0.01 / MIN_LOT_RISK_TOO_HIGH /
+  STOP_TOO_WIDE_FOR_ACCOUNT; never a vague 0.0. Lot size is never fixed:
+  scales with equity, adaptive budget, and stop distance; milestone context
+  ($2k -> $10k -> $15k -> $25k) in every decision.
+- Pipeline: SIZING_BLOCKED stage with the verdict in the reason; planner
+  order path applies the same promotion (bounded by ceiling AND policy).
+- Self-audit fix: stale RiskLimits default 0.5% -> 1.0% (Adaptive Demo Risk
+  Policy absolute ceiling; live profiles already used 1.0%).
+- Threshold profiles: "current" (0.65/0.60/1.5x, DEFAULT) and
+  "demo_exploration" (0.55/0.50/1.3x) via --thresholds; active profile +
+  values printed in the banner. Default unchanged (calibration sample was
+  small and negative-expectancy).
+- Terminal: per-candidate sizing lines (risk %/$, stop, min-lot risk,
+  raw/rounded/final lot, verdict, phase -> milestone).
+- 709 tests pass; pre_demo_safety_check.sh passes.
 
 ## Next Task
 

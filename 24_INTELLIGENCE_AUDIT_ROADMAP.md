@@ -474,3 +474,27 @@ All previously-partial layers finished or honestly finalized:
 The system is feature-complete for the demo evaluation campaign; remaining
 work is external-feed integration (NEWS-001/MACRO-001/FUTURES-001), the
 BACKTEST-001 data run, and evidence collection toward the real-money gates.
+
+---
+
+# 12. SIZING-001 — 2026-06-10 (eighth pass)
+
+## F-15. Adaptive budget below the broker minimum lot died as "invalid lot size 0.0"
+- **Class:** Proven Defect (FIXED — caught by live evidence on the first
+  qualified candidate)
+- **Evidence:** confluence 0.70 / MTF 0.90 / TRUE_SWEEP / FVG / OB /
+  displacement 1.8x produced DEFENSIVE 0.20% = $4 on $2,000; min-lot loss at
+  the ~5 stop was ~$5; sizers blocked; governor reported a vague invalid lot.
+- **Fix:** milestone-aware lot resolver (src/risk/lot_sizer.py) with explicit
+  verdicts (SIZED / MIN_LOT_PROMOTED_TO_0.01 / MIN_LOT_RISK_TOO_HIGH /
+  STOP_TOO_WIDE_FOR_ACCOUNT) bounded by the phase ceiling; the same
+  promotion in the DemoTradePlanner order path; full terminal/journal
+  diagnostics. Also fixed the stale RiskLimits default (0.5% -> 1.0% per the
+  Adaptive Demo Risk Policy).
+- **Lesson:** every sizing refusal must state its dollar math; a 0.0 volume
+  may only exist together with an explicit verdict.
+
+Threshold profiles added ("current" default, "demo_exploration" optional via
+--thresholds; active profile printed at startup). The calibration replay's
+looser recommendation had negative expectancy on a small sample — default
+unchanged until real-history evidence justifies otherwise.

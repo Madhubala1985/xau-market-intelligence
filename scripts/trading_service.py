@@ -73,6 +73,7 @@ from src.execution.kill_switch import KillSwitch  # noqa: E402
 from src.execution.live_shadow import make_live_pipeline  # noqa: E402
 from src.execution.preflight import DemoPreflight  # noqa: E402
 from src.execution.session_profiles import PROFILES, get_profile  # noqa: E402
+from src.strategy.pipeline import THRESHOLD_PROFILES  # noqa: E402
 from src.execution.trading_service import (  # noqa: E402
     BannerInfo,
     ProgressPrinter,
@@ -139,6 +140,10 @@ def main() -> int:
                         help="override the profile poll interval")
     parser.add_argument("--max-cycles", type=int, default=None,
                         help="diagnostic: stop after N cycles")
+    parser.add_argument("--thresholds", default="current",
+                        choices=sorted(THRESHOLD_PROFILES),
+                        help="threshold profile (explicit operator choice; "
+                             "default: current)")
     args = parser.parse_args()
 
     profile = get_profile(args.profile)
@@ -202,7 +207,8 @@ def main() -> int:
         session = SupervisedDemoSession(
             adapter=adapter,
             pipeline=make_live_pipeline(
-                canonical, max_spread_price=profile.max_spread_price
+                canonical, max_spread_price=profile.max_spread_price,
+                threshold_profile=args.thresholds,
             ),
             planner=DemoTradePlanner(limits=limits),
             gateway=gateway,
@@ -258,6 +264,11 @@ def main() -> int:
                 REPO_ROOT / "configs" / "macro_context.json"
             ).assess(now).summary(),
             capital_phase=f"{phase.value} (equity ~{equity:,.0f})",
+            thresholds=(
+                f"profile={args.thresholds} "
+                + " ".join(f"{k}={v}" for k, v in
+                           THRESHOLD_PROFILES[args.thresholds].items())
+            ),
         )
 
         def tick_age(now_utc: datetime):

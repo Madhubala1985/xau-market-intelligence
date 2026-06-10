@@ -119,12 +119,15 @@ class AdaptiveRiskDecision:
     tier: RiskTier
     phase: CapitalPhase
     reasons: Tuple[str, ...]
+    # SIZING-001: the phase ceiling bounds min-lot viability promotion.
+    ceiling_pct: float = 0.0
 
     def to_dict(self) -> dict:
         return {
             "risk_pct": round(self.risk_pct, 6),
             "tier": self.tier.value,
             "phase": self.phase.value,
+            "ceiling_pct": round(self.ceiling_pct, 6),
             "reasons": list(self.reasons),
         }
 
@@ -225,6 +228,7 @@ class AdaptiveRiskEngine:
             tier=self._tier(risk, _PHASE_BASE[phase], ceiling),
             phase=phase,
             reasons=tuple(reasons),
+            ceiling_pct=ceiling,
         )
 
     # -- helpers ---------------------------------------------------------------
@@ -232,6 +236,7 @@ class AdaptiveRiskEngine:
         return AdaptiveRiskDecision(
             risk_pct=0.0, tier=RiskTier.BLOCKED, phase=phase,
             reasons=(f"no risk budget: {why}",),
+            ceiling_pct=0.0,
         )
 
     def _tier(self, risk: float, base: float, ceiling: float) -> RiskTier:

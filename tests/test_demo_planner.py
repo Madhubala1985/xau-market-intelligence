@@ -140,10 +140,11 @@ def test_tier_mapping():
 def test_approved_plan_sizes_from_governor_clamped_cap(tmp_path):
     result = plan(tmp_path=tmp_path)
     assert result.approved is True
-    # Cap = min(tier $80 HIGH_CONFLUENCE, $2000 * 0.5% = $10) = $10.
-    assert result.sizing.max_loss_cap == pytest.approx(10.0)
-    assert result.lot_size == pytest.approx(0.08)
-    assert result.sizing.implied_loss <= 10.0
+    # Cap = min(tier $80 HIGH_CONFLUENCE, $2000 * 1% = $20) = $20
+    # (Adaptive Demo Risk Policy absolute ceiling, decision 2026-06-10-08).
+    assert result.sizing.max_loss_cap == pytest.approx(20.0)
+    assert result.lot_size == pytest.approx(0.16)
+    assert result.sizing.implied_loss <= 20.0
     assert result.risk is not None and result.risk.approved
 
 
@@ -374,3 +375,28 @@ def test_planner_path_never_references_order_send(tmp_path):
     source = inspect.getsource(planner_module)
     assert "order_send" not in source
     assert "order_check" not in source
+
+# ---------------------------------------------------------------------------
+# SIZING-001: min-lot promotion in the ORDER path
+# ---------------------------------------------------------------------------
+
+def test_min_lot_promotion_when_budget_below_broker_minimum(tmp_path):
+    """A defensive adaptive budget smaller than the min-lot loss is promoted
+    to exactly the min-lot loss when the phase ceiling allows it."""
+    result = plan(tmp_path=tmp_path, risk_budget=0.80, risk_ceiling=20.0)
+    assert result.approved is True
+    assert result.lot_size == pytest.approx(0.01)
+
+
+def test_no_promotion_without_a_ceiling(tmp_path):
+    # Same tiny budget but no ceiling: the planner stays conservative.
+    result = plan(tmp_path=tmp_path, risk_budget=0.80)
+    assert result.approved is False
+    assert PlanCheck.SIZING_BLOCKED in result.failed_checks
+
+
+def test_promotion_never_exceeds_ceiling_or_policy(tmp_path):
+    # Ceiling below the min-lot loss: promotion refused, block stays explicit.
+    result = plan(tmp_path=tmp_path, risk_budget=0.80, risk_ceiling=1.0)
+    assert result.approved is False
+    assert PlanCheck.SIZING_BLOCKED in result.failed_checks

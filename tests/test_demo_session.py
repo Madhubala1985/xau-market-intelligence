@@ -290,7 +290,7 @@ def test_full_entry_path_sends_one_demo_order_with_stop(tmp_path):
     assert len(records) == 1
     assert records[0].outcome is TradeOutcome.OPEN
     assert "ticket=1000" in records[0].notes
-    assert records[0].lot_size == pytest.approx(0.08)
+    assert records[0].lot_size == pytest.approx(0.16)  # $20 cap over $125/lot
     assert report.verdict == "CLEAN"
 
 
@@ -688,3 +688,41 @@ def test_session_degrades_when_extra_timeframes_fail(tmp_path):
     assert inp.m15_candles is None
     assert inp.h1_candles is None
     assert inp.m1_candles is None
+
+def test_defensive_budget_with_wide_stop_sends_promoted_min_lot(tmp_path):
+    """SIZING-001 end-to-end regression: a DEFENSIVE adaptive budget smaller
+    than the min-lot loss must still produce a 0.01-lot MT5 order when the
+    phase ceiling allows it — not 'invalid lot size 0.0'."""
+    from src.risk.adaptive_risk import (
+        AdaptiveRiskDecision,
+        CapitalPhase,
+        RiskTier,
+    )
+    from src.risk.lot_sizer import resolve_lot
+
+    base = approved_result(stop=2294.0, entry=2300.0)  # ~6.2 stop distance
+    lot_decision = resolve_lot(equity=2000.0, risk_pct=0.002,
+                               ceiling_pct=0.010, stop_distance=6.18)
+    assert lot_decision.verdict == "MIN_LOT_PROMOTED_TO_0.01"
+    from dataclasses import replace as dc_replace
+    result = dc_replace(
+        base,
+        adaptive_risk=AdaptiveRiskDecision(
+            risk_pct=0.002, tier=RiskTier.DEFENSIVE,
+            phase=CapitalPhase.PHASE_1, reasons=("defensive",),
+            ceiling_pct=0.010,
+        ),
+        lot_decision=lot_decision,
+    )
+    session, fake, journal, _ = make_session(
+        tmp_path, results=[result], max_orders=None,
+    )
+    report = session.run(duration_seconds=1.0, poll_seconds=1.0, max_cycles=1)
+    assert report.orders_sent == 1
+    request = fake.order_send.call_args.args[0]
+    assert request["volume"] == pytest.approx(0.01)   # promoted minimum lot
+    assert request["symbol"] == "XAUUSDm"             # exact broker case
+    assert request["sl"] == pytest.approx(2294.0)
+    # sizing diagnostics reach the cycle stats / journal trail
+    stat = report.cycle_stats[0]
+    assert stat.intel["sizing"]["verdict"] == "MIN_LOT_PROMOTED_TO_0.01"

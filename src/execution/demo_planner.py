@@ -148,6 +148,7 @@ class DemoTradePlanner:
         fresh_setup: bool = False,
         continuation_supported: bool = False,
         risk_budget: Optional[float] = None,
+        risk_ceiling: Optional[float] = None,
     ) -> TradePlan:
         tier = confidence_tier(confidence)
         risk_inputs = risk_inputs or {}
@@ -194,6 +195,28 @@ class DemoTradePlanner:
         governor_budget = account.balance * self._limits.max_risk_per_trade
         if risk_budget is not None and risk_budget > 0:
             governor_budget = min(governor_budget, risk_budget)
+        # SIZING-001 min-lot viability: when the contracted adaptive budget
+        # sizes below the broker minimum, the budget is raised to EXACTLY the
+        # min-lot loss — but only when that loss fits inside the adaptive
+        # phase ceiling (risk_ceiling) AND the static policy bound above.
+        # The promotion can never exceed either bound, so it can only convert
+        # a vague zero-lot refusal into the explicit, policy-fitting minimum.
+        if (
+            risk_ceiling is not None and decision.stop_loss is not None
+            and decision.entry_price is not None
+        ):
+            spec = self._sizer.spec
+            effective_stop = (
+                abs(decision.entry_price - decision.stop_loss)
+                + max(spread_price, 0.0)
+            )
+            min_lot_loss = spec.min_lot * spec.loss_per_lot(effective_stop)
+            policy_bound = account.balance * self._limits.max_risk_per_trade
+            if (
+                governor_budget < min_lot_loss
+                <= min(risk_ceiling, policy_bound)
+            ):
+                governor_budget = min_lot_loss
         sizing = self._sizer.size(
             decision, account, tier,
             mode=TradingMode.DEMO,

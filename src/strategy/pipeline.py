@@ -55,6 +55,7 @@ from src.risk.adaptive_risk import (
     AdaptiveRiskInputs,
 )
 from src.risk.governor import RiskContext, RiskDecision, RiskGovernor
+from src.risk.lot_sizer import LotDecision, resolve_lot
 from src.risk.position_sizing import PositionSizer
 from src.strategy.confluence import (
     ConfluenceEngine,
@@ -102,7 +103,27 @@ _VOLATILITY_SCORE = {
 class PipelineStage(str, Enum):
     DATA_REJECTED = "DATA_REJECTED"
     HYPOTHESIS = "HYPOTHESIS"
+    SIZING_BLOCKED = "SIZING_BLOCKED"
     RISK_EVALUATED = "RISK_EVALUATED"
+
+
+# SIZING-001 / calibration: named threshold profiles. The ACTIVE profile is
+# printed at startup; changing it is an explicit operator choice, never an
+# automatic mutation. "demo_exploration" matches the calibration replay's
+# looser variant (its expectancy was negative on a small sample — kept
+# OPTIONAL, not default, until real-history evidence justifies a change).
+THRESHOLD_PROFILES = {
+    "current": {
+        "chop_override_confluence": 0.65,
+        "continuation_confluence": 0.60,
+        "continuation_displacement": 1.5,
+    },
+    "demo_exploration": {
+        "chop_override_confluence": 0.55,
+        "continuation_confluence": 0.50,
+        "continuation_displacement": 1.3,
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -172,6 +193,7 @@ class PipelineResult:
     context: Optional[PipelineContext] = None
     lot_size: float = 0.0
     adaptive_risk: Optional[AdaptiveRiskDecision] = None
+    lot_decision: Optional[LotDecision] = None  # SIZING-001 diagnostics
 
 
 @dataclass
@@ -227,9 +249,10 @@ class DecisionPipeline:
         *,
         max_spread: float = 50.0,
         regime_window: int = 60,
-        chop_override_confluence: float = 0.65,
-        continuation_confluence: float = 0.60,
-        continuation_displacement: float = 1.5,
+        threshold_profile: str = "current",
+        chop_override_confluence: Optional[float] = None,
+        continuation_confluence: Optional[float] = None,
+        continuation_displacement: Optional[float] = None,
     ) -> None:
         if max_spread <= 0:
             raise ValueError("max_spread must be > 0")
@@ -241,9 +264,28 @@ class DecisionPipeline:
         if regime_window < 6:
             raise ValueError("regime_window must be >= 6")
         self._regime_window = regime_window
-        self._chop_override_confluence = chop_override_confluence
-        self._continuation_confluence = continuation_confluence
-        self._continuation_displacement = continuation_displacement
+        if threshold_profile not in THRESHOLD_PROFILES:
+            raise ValueError(
+                f"unknown threshold profile {threshold_profile!r}; "
+                f"available: {sorted(THRESHOLD_PROFILES)}"
+            )
+        profile = THRESHOLD_PROFILES[threshold_profile]
+        self.threshold_profile = threshold_profile
+        self._chop_override_confluence = (
+            chop_override_confluence
+            if chop_override_confluence is not None
+            else profile["chop_override_confluence"]
+        )
+        self._continuation_confluence = (
+            continuation_confluence
+            if continuation_confluence is not None
+            else profile["continuation_confluence"]
+        )
+        self._continuation_displacement = (
+            continuation_displacement
+            if continuation_displacement is not None
+            else profile["continuation_displacement"]
+        )
 
     def decide(self, inp: PipelineInput) -> PipelineResult:
         e = self._e
@@ -441,13 +483,31 @@ class DecisionPipeline:
         )
         decision = self._with_stop(decision, placement.stop_price)
 
-        # 7) Position sizing from the ADAPTIVE budget, capped by policy.
-        risk_budget = min(adaptive.risk_pct, inp.risk_pct)
-        sizing = e.sizer.size(
-            decision, balance, risk_budget, spread_price=inp.current_spread
+        # 7) Milestone-aware adaptive lot sizing (SIZING-001): convert the
+        # adaptive budget into a broker-valid volume via loss-at-stop math.
+        # The spread buffer WIDENS the effective distance (conservative).
+        stop_distance = (
+            abs(entry - decision.stop_loss) + max(inp.current_spread, 0.0)
+            if decision.stop_loss is not None else 0.0
         )
-        lot = sizing.lot_size if sizing.approved else 0.0
-        intended_risk = sizing.risk_pct if sizing.approved else risk_budget
+        lot_decision = resolve_lot(
+            equity=balance,
+            risk_pct=min(adaptive.risk_pct, inp.risk_pct),
+            ceiling_pct=min(adaptive.ceiling_pct, inp.risk_pct),
+            stop_distance=stop_distance,
+        )
+        if not lot_decision.approved:
+            # An explicit, fully-diagnosed sizing refusal — never a vague
+            # "invalid lot size 0.0" from the governor.
+            return PipelineResult(
+                stage=PipelineStage.SIZING_BLOCKED, approved=False,
+                reason=f"sizing blocked {lot_decision.verdict}: "
+                       f"{lot_decision.reason}",
+                decision=decision, confidence=confidence, context=context,
+                adaptive_risk=adaptive, lot_decision=lot_decision,
+            )
+        lot = lot_decision.lot
+        intended_risk = lot_decision.realized_risk_pct
 
         # 8) Risk Governor (final authority).
         risk_context = RiskContext(
@@ -470,6 +530,7 @@ class DecisionPipeline:
             reason="; ".join(verdict.reasons),
             decision=decision, confidence=confidence, risk=verdict,
             context=context, lot_size=lot, adaptive_risk=adaptive,
+            lot_decision=lot_decision,
         )
 
     # -- helpers -----------------------------------------------------------

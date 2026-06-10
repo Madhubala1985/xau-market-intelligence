@@ -2880,3 +2880,100 @@ scripts/trading_service.py, scripts/generate_evidence_pack.py,
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-10-10
+
+## Date:
+2026-06-10
+
+## Area:
+Risk / Sizing / Execution / Observability
+
+## Decision:
+SIZING-001: milestone-aware adaptive lot sizing with explicit min-lot
+viability; no vague zero-lot refusals.
+
+Root cause (Proven Defect, live evidence): a fully-qualified SHORT
+candidate (confluence 0.70, MTF 0.90, TRUE_SWEEP/FVG/OB, displacement 1.8x)
+died with "invalid lot size 0.0". The DEFENSIVE adaptive budget (0.20% of
+$2,000 = $4) was below the broker MINIMUM-lot loss (0.01 lot x 100 oz x
+~$5 stop = ~$5); both sizers blocked by design, lot fell to 0.0, and the
+governor emitted the vague invalid-lot error. On a small account this
+silently killed nearly every defensive-budget candidate.
+
+Fix:
+(a) src/risk/lot_sizer.py — ONE explicit resolver:
+       raw_lot = (equity x risk_pct) / (stop_distance x contract_size)
+       rounded = floor(raw_lot / lot_step) x lot_step
+    rounded >= min_lot -> SIZED. Below the minimum, min-lot viability:
+    min_lot_risk = min_lot x contract_size x stop_distance;
+    <= phase ceiling -> MIN_LOT_PROMOTED_TO_0.01;
+    > phase ceiling -> MIN_LOT_RISK_TOO_HIGH;
+    > absolute demo cap -> STOP_TOO_WIDE_FOR_ACCOUNT.
+    Stop distance includes the spread buffer (widens only). Every outcome
+    carries full diagnostics (budget $, ceiling $, min-lot risk, raw/rounded/
+    final lot, realized risk, phase, milestone target). Lot size is never
+    fixed: it scales continuously with equity, budget, and stop distance.
+(b) Pipeline: PositionSizer call replaced by the resolver; refusals return
+    a new SIZING_BLOCKED stage with the verdict in the reason; approvals
+    carry lot_decision diagnostics into the journal/terminal.
+(c) Order path: DemoTradePlanner gains risk_ceiling; when the contracted
+    budget < min-lot loss <= min(ceiling, policy bound), the hard cap is
+    raised to EXACTLY the min-lot loss (promotion can only convert a zero
+    into the explicit minimum; it can never exceed either bound). The
+    session passes balance x adaptive.ceiling_pct.
+(d) Stale default fixed (self-audit): RiskLimits.max_risk_per_trade default
+    still carried the superseded 0.5%; now 1.0% per the Adaptive Demo Risk
+    Policy (the live profiles already used 1.0%; affected defaults only).
+(e) Threshold profiles: THRESHOLD_PROFILES "current" (0.65/0.60/1.5x,
+    default) and "demo_exploration" (0.55/0.50/1.3x, matching the
+    calibration replay's looser variant). Selected ONLY via
+    --thresholds (explicit operator choice; calibration expectancy was
+    negative on a small sample, so the default stays current); the active
+    profile + values print in the banner.
+(f) Terminal: per-candidate sizing lines (risk %/$, stop, min-lot risk,
+    raw/rounded/final lot, verdict, reason, phase -> milestone).
+
+## Evidence:
+709 tests pass (+17): test_lot_sizer.py (9, incl. the exact live
+regression: $2,000 / 0.20% / 5.20 stop -> promoted 0.01 lot at 0.26%
+realized), planner promotion bounds (3), pipeline SIZING_BLOCKED stage +
+small-account promotion + threshold profiles (3), end-to-end session test
+(promoted 0.01-lot order SENT with exact XAUUSDm case and SL), terminal
+sizing diagnostics. pre_demo_safety_check.sh passed.
+
+## Alternatives Considered:
+- Fixed 0.01 lot whenever budget is small: rejected — fixed lots bypass
+  loss-at-stop math; the promotion is computed from the actual stop and
+  bounded by the phase ceiling every time.
+- Promoting against the contracted budget itself: rejected — the budget is
+  the target ("risk less when evidence is weak"); the CEILING is the bound
+  for whether the broker minimum is acceptable at all.
+- Letting the resolver shrink the stop to fit: rejected outright
+  (03_RISK_POLICY: never shrink the stop to increase size).
+
+## Risk:
+Defensive-budget trades now realize slightly more than their contracted
+budget (e.g. 0.26% instead of 0.20%) when promoted — always inside the
+phase ceiling, the daily 2%/weekly 5% anchors, and policy 20's tier caps.
+
+## Mitigation:
+Promotion is fully diagnosed in terminal + journal; blocked cases state the
+exact dollar math; martingale remains structurally impossible (contraction-
+only adaptive engine; the resolver cannot exceed its ceilings).
+
+## Files Affected:
+src/risk/lot_sizer.py (new), src/risk/adaptive_risk.py (ceiling_pct),
+src/risk/governor.py (stale default), src/risk/leverage_sizing.py (spec
+property), src/strategy/pipeline.py (resolver + SIZING_BLOCKED +
+THRESHOLD_PROFILES), src/execution/demo_planner.py (min-lot promotion),
+src/execution/demo_session.py (ceiling pass-through + sizing intel),
+src/execution/live_shadow.py, src/execution/trading_service.py,
+scripts/trading_service.py (--thresholds + banner),
+scripts/generate_evidence_pack.py, tests (test_lot_sizer.py new + updates).
+
+## Status:
+Accepted

@@ -56,10 +56,16 @@ class RiskCheck(str, Enum):
 
 @dataclass(frozen=True)
 class RiskLimits:
-    """Risk limits. Defaults are the demo profile (INIT-007 / 03_RISK_POLICY.md)."""
+    """Risk limits. Defaults are the demo profile (03_RISK_POLICY.md).
+
+    max_risk_per_trade is the ABSOLUTE demo ceiling of the Adaptive Demo Risk
+    Policy (decision 2026-06-10-08); the AdaptiveRiskEngine's per-phase
+    ceilings and evidence budget operate BELOW it. Real-money limits are a
+    separate, tighter profile.
+    """
 
     expected_symbol: str = "XAUUSD"
-    max_risk_per_trade: float = 0.005
+    max_risk_per_trade: float = 0.010
     max_daily_loss: float = 0.02
     max_weekly_loss: float = 0.05
     max_trades_per_day: int = 3

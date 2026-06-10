@@ -156,6 +156,11 @@ class LeverageAwareSizer:
         self._tiers = demo_tiers or DemoTierTable()
         self._real_risk_pct = real_risk_pct
 
+    @property
+    def spec(self) -> SymbolSpec:
+        """The broker symbol spec (read-only; used for min-lot viability)."""
+        return self._spec
+
     # -- cap resolution ----------------------------------------------------
     def max_loss_cap(
         self, mode: TradingMode, tier: ConfidenceTier, balance: float
@@ -209,7 +214,7 @@ class LeverageAwareSizer:
         cap = self.max_loss_cap(mode, tier, account.balance)
         if hard_cap is not None:
             cap = min(cap, hard_cap)
-        spec = self._spec
+        spec = self.spec
         loss_per_lot = spec.loss_per_lot(effective_stop)
 
         raw_lot = cap / loss_per_lot

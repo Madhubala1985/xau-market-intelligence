@@ -51,6 +51,7 @@ def make_live_pipeline(
     *,
     max_spread_price: float = 1.0,
     max_staleness: timedelta = timedelta(minutes=30),
+    threshold_profile: str = "current",
 ) -> DecisionPipeline:
     """Build a DecisionPipeline configured for LIVE XAU/USD data.
 
@@ -80,7 +81,8 @@ def make_live_pipeline(
     )
     # Execution-quality scoring must degrade on the same (price-unit) spread
     # scale the governor enforces, not the points-oriented default.
-    return DecisionPipeline(engines, max_spread=max_spread_price)
+    return DecisionPipeline(engines, max_spread=max_spread_price,
+                            threshold_profile=threshold_profile)
 
 
 @dataclass(frozen=True)

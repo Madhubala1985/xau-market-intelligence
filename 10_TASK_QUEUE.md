@@ -669,3 +669,18 @@ and banner upgrades.
 
 Status:
 Completed in commit FINAL-INTELLIGENCE.
+
+---
+
+## Task SIZING-001: Adaptive Lot Sizing and Milestone-Aware Risk Diagnostics
+
+Goal:
+Fix the Proven Defect where a defensive adaptive budget below the broker
+minimum lot produced "invalid lot size 0.0": explicit min-lot viability
+(promotion within the phase ceiling, or a fully-diagnosed block), dynamic
+never-fixed lot sizing from loss-at-stop math, planner-path promotion,
+threshold profiles (current/demo_exploration), and full terminal sizing
+diagnostics with milestone context.
+
+Status:
+Completed in commit SIZING-001.

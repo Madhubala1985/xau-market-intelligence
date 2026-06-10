@@ -12,7 +12,7 @@ This file allows Claude sessions to resume without losing direction.
 Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task ID:
-FINAL-INTELLIGENCE (implemented; restart + evidence collection pending —
+SIZING-001 (implemented; restart + evidence collection pending —
 user-started only)
 
 ## Current Task Goal:
@@ -22,7 +22,16 @@ vary, chop subtypes appear, confluence/risk lines explain every decision,
 and entries occur when (and only when) evidence justifies them.
 
 ## Current Status:
-FINAL-INTELLIGENCE implemented. 692 tests pass.
+SIZING-001 implemented. 709 tests pass.
+- "invalid lot size 0.0" Proven Defect fixed: milestone-aware lot resolver
+  with explicit verdicts; min-lot promotion bounded by the phase ceiling;
+  the same promotion in the planner order path; stale RiskLimits default
+  aligned to the 1.0% policy ceiling.
+- Threshold profiles current/demo_exploration via --thresholds (default
+  unchanged); active profile printed in the banner.
+- Terminal sizing diagnostics per candidate cycle.
+
+FINAL-INTELLIGENCE status (previous): implemented; 692 tests then.
 - News: provider architecture, impact/category calendar, 5 graded states;
   HIGH blocks, MEDIUM/soon reduce risk; UNKNOWN fail-closed.
 - Macro/futures: stale-aware operator file configs/macro_context.json ->
@@ -160,8 +169,10 @@ CONTINUOUS-001 status (previous): implemented and committed; 583 tests then.
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, 10_TASK_QUEUE.md,
 23_DEMO_TRADING_RUNBOOK.md, 24_INTELLIGENCE_AUDIT_ROADMAP.md.
 
-FINAL-INTELLIGENCE is implemented; the system is feature-complete for the
-demo evaluation campaign. Guide the user to: (1) optionally maintain
+SIZING-001 is implemented on top of FINAL-INTELLIGENCE; the system is
+feature-complete for the demo evaluation campaign and the sizing path is
+proven end-to-end (promoted 0.01-lot order with exact XAUUSDm case in the
+fake-broker test). Guide the user to: (1) optionally maintain
 configs/macro_context.json (timestamped) and the impact/category fields in
 configs/news_windows.json; (2) restart the continuous service and review the
 full reasoning; (3) run scripts/calibration_replay.py --fetch on the Windows

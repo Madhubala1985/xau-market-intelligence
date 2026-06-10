@@ -186,6 +186,10 @@ _TABLE: Dict[str, dict] = {
         layer="reflection",
         summary="executable final wiring verification report (FINAL-INTELLIGENCE)",
         test_file="test_wiring_verification.py", test_note="", **_PURE_SHADOW_READY),
+    "src.risk.lot_sizer": dict(
+        layer="risk",
+        summary="milestone-aware adaptive lot resolver with min-lot promotion (SIZING-001)",
+        test_file="test_lot_sizer.py", test_note="", **_PURE_SHADOW_READY),
     "src.reflection.opportunity_audit": dict(
         layer="reflection",
         summary="long no-trade opportunity audit (INTELLIGENCE-001; offline)",
