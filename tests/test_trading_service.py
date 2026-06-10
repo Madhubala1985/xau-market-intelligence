@@ -523,7 +523,8 @@ def test_terminal_shows_full_reasoning_fields(tmp_path):
     assert "asian=INSIDE(4118.20-4126.80) swept=HIGH expansion=1.40x" in out
     assert "intel sweep=PENDING bos=BOS:BEARISH fvg=NONE ob=NONE" in out
     assert "pd=PREMIUM" in out and "flow=BEARISH" in out
-    assert "confluence=0.52 risk=DEFENSIVE 0.18%" in out
+    assert "confluence=0.52 risk=DEFENSIVE 0.18% phase=PHASE_1" in out
+    assert ("external macro=MACRO_UNAVAILABLE futures=FUTURES_UNAVAILABLE") in out
     assert "subtype=LIQUIDITY_CHOP_WITH_SWEEP" in out
     assert "regime_why: 3 structure direction flips" in out
     # NO_TRADE explains exactly what evidence is missing

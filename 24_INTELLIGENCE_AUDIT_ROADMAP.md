@@ -453,3 +453,24 @@ FUTURES-001 gold futures stream; BACKTEST-001 actual data run + walk-forward
 (tooling ready); M1 stays display-only until calibrated; F-11's deeper
 zone-entry logic (zones currently gate confluence, not entries) remains a
 Design Improvement.
+
+---
+
+# 11. FINAL-INTELLIGENCE — 2026-06-10 (seventh pass)
+
+All previously-partial layers finished or honestly finalized:
+- News: provider architecture, impact/category calendar, 5 graded states;
+  HIGH blocks, MEDIUM/soon reduce; UNKNOWN fail-closed. NEWS-001 (real HTTP
+  feed) remains the only open piece.
+- Macro/futures: stale-aware operator file (configs/macro_context.json) via
+  FileMacroProvider; gold-pressure confirmation in confluence + adaptive
+  contraction on conflict. MACRO-001/FUTURES-001 (live feeds) remain open.
+- M1: live as a veto/delay refinement layer; cannot create trades (tested).
+- Calibration: drawdown/false-positive/missed-decomposition/segments +
+  KEEP/TIGHTEN/LOOSEN/NEED_MORE_DATA verdicts; awaiting the real-history run.
+- Executable wiring verification (scripts/verify_wiring.py): 16 LIVE /
+  1 PARTIAL / 2 UNAVAILABLE_BY_CONFIG / 0 MISSING.
+
+The system is feature-complete for the demo evaluation campaign; remaining
+work is external-feed integration (NEWS-001/MACRO-001/FUTURES-001), the
+BACKTEST-001 data run, and evidence collection toward the real-money gates.

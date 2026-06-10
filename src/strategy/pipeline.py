@@ -36,6 +36,11 @@ from src.data.sessions import SessionEngine, SessionType
 from src.liquidity.liquidity_map import LiquidityMapEngine, LiquiditySide
 from src.liquidity.sweep import SweepEngine, SweepStatus
 from src.orderflow.futures_confirmation import FuturesConfirmationEngine
+from src.orderflow.macro_context import (
+    FileMacroProvider,
+    MacroContext,
+    gold_pressure,
+)
 from src.orderflow.proxy import OrderFlowProxyEngine
 from src.regime.chop_classifier import ChopAssessment, ChopClassifier
 from src.regime.htf_bias import HtfBias, HtfBiasEngine
@@ -58,6 +63,7 @@ from src.strategy.confluence import (
     MtfAlignmentEngine,
 )
 from src.strategy.hypothesis import HypothesisInput, TradeHypothesisEngine
+from src.strategy.m1_refinement import M1Refinement, M1RefinementEngine
 from src.strategy.scoring import ComponentScores, ConfidenceEngine, ConfidenceResult
 from src.structure.market_structure import (
     Bias,
@@ -121,6 +127,7 @@ class PipelineInput:
     trades_today: int = 0
     consecutive_losses: int = 0
     open_symbols: frozenset = frozenset()
+    news_caution: bool = False  # high-impact soon / medium active: reduce risk
     now: Optional[datetime] = None
 
 
@@ -142,6 +149,8 @@ class PipelineContext:
     setup_kind: str = ""  # "sweep_reclaim" | "bos_continuation" | ""
     volatility: Optional[VolatilityAssessment] = None
     asian: Optional[AsianRangeContext] = None
+    m1: Optional[M1Refinement] = None
+    macro_pressure: str = "UNAVAILABLE"
 
 
 @dataclass(frozen=True)
@@ -196,6 +205,12 @@ class PipelineEngines:
     # INTELLIGENCE-002: gold session levels + volatility safety layer.
     asian: AsianRangeEngine = field(default_factory=AsianRangeEngine)
     volatility: VolatilityClassifier = field(default_factory=VolatilityClassifier)
+    # FINAL-INTELLIGENCE: macro/futures confirmation (operator file until a
+    # real feed exists — stale/missing reads UNAVAILABLE) + M1 refinement.
+    macro_provider: object = field(
+        default_factory=lambda: FileMacroProvider("configs/macro_context.json")
+    )
+    m1_refine: M1RefinementEngine = field(default_factory=M1RefinementEngine)
 
 
 class DecisionPipeline:
@@ -294,6 +309,8 @@ class DecisionPipeline:
             if regime is Regime.CHOPPY else None
         )
         candidate = mtf.direction or self._htf_direction(htf_bias)
+        macro_ctx: MacroContext = e.macro_provider.assess(time_utc)
+        macro_press, _ = gold_pressure(macro_ctx)
         confluence = e.confluence.assess(
             candidate,
             mtf=mtf,
@@ -307,6 +324,7 @@ class DecisionPipeline:
             orderflow=orderflow,
             total_candles=len(inp.exec_candles),
             asian=asian,
+            macro=macro_ctx,
         )
 
         # Graded regime gate: CHOPPY may be overridden ONLY by a tradeable
@@ -319,6 +337,17 @@ class DecisionPipeline:
                 candidate, structure, confluence, displacement_ratio, entry,
                 liquidity_map,
             )
+
+        # M1 refinement (FINAL-INTELLIGENCE): only consulted when a setup
+        # ALREADY exists; a veto can only delay this cycle's entry — it can
+        # never create one or override the higher-timeframe stack.
+        m1 = e.m1_refine.assess(
+            inp.m1_candles, candidate if setup is not None else None
+        )
+        m1_veto = setup is not None and m1.vetoes_entry
+        if m1_veto:
+            setup = None
+
         context = PipelineContext(
             session=session, htf_bias=htf_bias, regime=regime,
             structure_bias=structure_bias, has_setup=setup is not None,
@@ -327,6 +356,7 @@ class DecisionPipeline:
             displacement_ratio=displacement_ratio,
             setup_kind=setup.kind if setup else "",
             volatility=volatility, asian=asian,
+            m1=m1, macro_pressure=macro_press,
         )
 
         # Hard volatility gate: dangerous states refuse new entries outright.
@@ -338,6 +368,14 @@ class DecisionPipeline:
                     f"dangerous volatility {volatility.state.value}: "
                     f"{volatility.reason}"
                 ),
+                context=context,
+            )
+
+        # M1 veto: a qualified setup is DELAYED this cycle (never re-routed).
+        if m1_veto:
+            return PipelineResult(
+                stage=PipelineStage.HYPOTHESIS, approved=False,
+                reason=f"entry delayed by M1 refinement: {m1.reason}",
                 context=context,
             )
 
@@ -382,6 +420,8 @@ class DecisionPipeline:
             daily_loss_pct=inp.daily_loss_pct,
             weekly_loss_pct=inp.weekly_loss_pct,
             open_positions=inp.broker.open_positions,
+            news_caution=inp.news_caution,
+            macro_conflict=confluence.components.get("macro", 0.5) == 0.0,
         ))
 
         if decision.direction not in (Direction.LONG, Direction.SHORT):

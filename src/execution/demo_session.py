@@ -107,6 +107,7 @@ class CycleStat:
     htf_bias: Optional[str] = None
     news_known: bool = False
     news_risky: bool = False
+    news_status: str = ""  # NEWS_CLEAR/BLOCK/UNKNOWN/HIGH_IMPACT_SOON/ACTIVE
     risk_action: Optional[str] = None
     # What the entry path did this cycle:
     # NONE (not actionable/approved) | SENT | SIMULATED | REJECTED |
@@ -137,6 +138,7 @@ class CycleStat:
             "htf_bias": self.htf_bias,
             "news_known": self.news_known,
             "news_risky": self.news_risky,
+            "news_status": self.news_status,
             "risk_action": self.risk_action,
             "entry_action": self.entry_action,
             "entry_detail": self.entry_detail,
@@ -452,6 +454,7 @@ class SupervisedDemoSession:
                 current_spread=spread_price,
                 risk_pct=self._risk_pct,
                 news_risk=news.known and news.risky,
+                news_caution=getattr(news, "caution", False),
                 daily_loss_pct=risk_state.daily_loss_pct,
                 weekly_loss_pct=risk_state.weekly_loss_pct,
                 trades_today=risk_state.trades_today,
@@ -517,6 +520,7 @@ class SupervisedDemoSession:
                 ),
                 news_known=news.known,
                 news_risky=news.risky,
+                news_status=getattr(news, "status", ""),
                 risk_action=(
                     result.risk.action.value if result.risk is not None else None
                 ),
@@ -568,6 +572,11 @@ class SupervisedDemoSession:
         asian = getattr(context, "asian", None)
         if asian is not None:
             intel["asian"] = asian.to_dict()
+        m1 = getattr(context, "m1", None)
+        if m1 is not None:
+            intel["m1"] = m1.to_dict()
+        intel["macro_pressure"] = getattr(context, "macro_pressure",
+                                          "UNAVAILABLE")
         if adaptive is not None:
             intel["adaptive_risk"] = adaptive.to_dict()
         return intel

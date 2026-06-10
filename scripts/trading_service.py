@@ -81,7 +81,8 @@ from src.execution.trading_service import (  # noqa: E402
     mask_login,
 )
 from src.journal.journal import TradeJournal  # noqa: E402
-from src.orderflow.macro_context import NullMacroProvider  # noqa: E402
+from src.orderflow.macro_context import FileMacroProvider  # noqa: E402
+from src.risk.adaptive_risk import CapitalPhase  # noqa: E402
 from src.risk.governor import RiskGovernor  # noqa: E402
 from src.risk.news_guard import NewsRiskGuard  # noqa: E402
 
@@ -221,6 +222,9 @@ def main() -> int:
 
         now = datetime.now(timezone.utc)
         news = news_guard.assess(now)
+        broker_state = adapter.fetch_broker_state(now)
+        equity = broker_state.equity or broker_state.balance or 0.0
+        phase = CapitalPhase.of(equity)
         if flags.demo_send_enabled:
             mode_label = (
                 f"EXECUTION — orders WILL be sent to the .env account "
@@ -243,14 +247,17 @@ def main() -> int:
                 f"{limits.max_open_trades} open max, "
                 f"spread<= {limits.max_spread}"
             ),
-            news_status=f"{'RISKY' if news.risky else 'clear' if news.known else 'UNKNOWN (blocks entries)'} ({news.detail})",
+            news_status=f"{getattr(news, 'status', '') or 'n/a'} ({news.detail})",
             kill_switch_status=(
                 "ENGAGED (service will stop immediately)"
                 if kill_switch.engaged else "absent"
             ),
             journal_path=str(JOURNAL_PATH.relative_to(REPO_ROOT)),
             report_dir=str(OUT_DIR.relative_to(REPO_ROOT)),
-            macro_status=NullMacroProvider().assess(now).summary(),
+            macro_status=FileMacroProvider(
+                REPO_ROOT / "configs" / "macro_context.json"
+            ).assess(now).summary(),
+            capital_phase=f"{phase.value} (equity ~{equity:,.0f})",
         )
 
         def tick_age(now_utc: datetime):

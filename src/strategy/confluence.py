@@ -29,6 +29,7 @@ from src.data.enums import Direction, SessionType
 from src.data.schemas import Candle
 from src.data.session_levels import AsianRangeContext
 from src.liquidity.sweep import SweepEvent, SweepStatus
+from src.orderflow.macro_context import MacroContext, gold_pressure
 from src.orderflow.proxy import OrderFlowProxy, ProxyPressure
 from src.structure.market_structure import (
     Bias,
@@ -44,18 +45,23 @@ _KILL_ZONES = {
 }
 
 # Component weights (sum == 1.0). MTF + sweep dominate; micro-evidence refines.
+# Macro + futures are CONFIRMATION components (FINAL-INTELLIGENCE): they shade
+# the score and can never trigger a trade; when unavailable they sit at the
+# neutral 0.5 so honest absence neither helps nor hurts.
 _WEIGHTS: Dict[str, float] = {
-    "mtf": 0.20,
-    "sweep": 0.16,
-    "bos_choch": 0.12,
-    "premium_discount": 0.10,
-    "displacement": 0.10,
-    "fvg": 0.08,
-    "order_block": 0.08,
+    "mtf": 0.18,
+    "sweep": 0.15,
+    "bos_choch": 0.11,
+    "premium_discount": 0.09,
+    "displacement": 0.09,
+    "fvg": 0.07,
+    "order_block": 0.07,
     "asian_range": 0.05,   # Asian liquidity / London-NY expansion context
     "session": 0.05,
     "spread": 0.03,
     "orderflow": 0.03,
+    "macro": 0.04,         # DXY + yields gold pressure (confirmation only)
+    "futures": 0.04,       # gold futures direction (confirmation only)
 }
 
 
@@ -219,6 +225,7 @@ class ConfluenceEngine:
         orderflow: Optional[OrderFlowProxy],
         total_candles: int,
         asian: Optional[AsianRangeContext] = None,
+        macro: Optional[MacroContext] = None,
     ) -> ConfluenceReport:
         if direction not in (Direction.LONG, Direction.SHORT):
             return ConfluenceReport(
@@ -247,6 +254,8 @@ class ConfluenceEngine:
                         else 0.5 if session is SessionType.ASIAN else 0.2),
             "spread": max(0.0, min(1.0, 1.0 - spread_ratio)),
             "orderflow": self._orderflow_score(orderflow, want, statuses),
+            "macro": self._macro_score(macro, direction, statuses),
+            "futures": self._futures_score(macro, direction, statuses),
         }
         statuses["mtf"] = f"{mtf.score:.2f}->{mtf.direction.value if mtf.direction else 'NONE'}"
         statuses["displacement"] = f"{displacement_ratio:.1f}x"
@@ -375,6 +384,49 @@ class ConfluenceEngine:
         if asian.position == "INSIDE":
             return 0.3
         return 0.4
+
+    @staticmethod
+    def _macro_score(
+        macro: Optional[MacroContext], direction: Direction,
+        statuses: Dict[str, str],
+    ) -> float:
+        """DXY + yields gold pressure vs the candidate. Confirmation only."""
+        if macro is None:
+            statuses["macro"] = "MACRO_UNAVAILABLE"
+            return 0.5
+        pressure, why = gold_pressure(macro)
+        if pressure == "UNAVAILABLE":
+            statuses["macro"] = "MACRO_UNAVAILABLE"
+            return 0.5
+        statuses["macro"] = f"{pressure} ({why})"
+        wanted = (
+            "BULLISH_GOLD" if direction is Direction.LONG else "BEARISH_GOLD"
+        )
+        if pressure == wanted:
+            return 1.0
+        if pressure == "NEUTRAL":
+            return 0.5
+        return 0.0
+
+    @staticmethod
+    def _futures_score(
+        macro: Optional[MacroContext], direction: Direction,
+        statuses: Dict[str, str],
+    ) -> float:
+        """Gold futures direction vs the candidate. Confirmation only."""
+        signal = macro.gold_futures if macro is not None else None
+        if signal is None or not signal.available:
+            statuses["futures"] = "FUTURES_UNAVAILABLE"
+            return 0.5
+        statuses["futures"] = signal.bias
+        wanted = (
+            "BULLISH_GOLD" if direction is Direction.LONG else "BEARISH_GOLD"
+        )
+        if signal.bias == wanted:
+            return 1.0
+        if signal.bias == "NEUTRAL":
+            return 0.5
+        return 0.0
 
     @staticmethod
     def _orderflow_score(

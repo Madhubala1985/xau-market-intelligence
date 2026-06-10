@@ -10,10 +10,10 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-INTELLIGENCE-002: IMPLEMENTED — wiring verified (25_WIRING_MATRIX.md), true
-MT5 MTF fetching, Asian/London/NY session logic, dangerous-volatility
-classifier, Adaptive Demo Risk Policy; restart the continuous service and
-collect evidence (user-started)
+FINAL-INTELLIGENCE: IMPLEMENTED — news/macro/futures/M1/calibration layers
+completed or honestly finalized; executable wiring verification passes with
+0 MISSING. The system is feature-complete for the demo evaluation campaign;
+restart the continuous service and collect evidence (user-started)
 
 ## Last Completed Task
 
@@ -107,7 +107,31 @@ INTELLIGENCE-002 (2026-06-10, decision 2026-06-10-08):
 - BACKTEST-001 readiness: src/backtest/calibration.py +
   scripts/calibration_replay.py (threshold variants scored in R on real
   history; recommendation only — never mutates live config).
-- 668 tests pass; pre_demo_safety_check.sh passes.
+
+FINAL-INTELLIGENCE (2026-06-10, decision 2026-06-10-09):
+- NEWS-001 architecture: NewsProvider abstraction; calendar windows carry
+  impact (HIGH/MEDIUM; unknown=HIGH) + gold category; 5 states NEWS_CLEAR /
+  NEWS_BLOCK / NEWS_UNKNOWN / NEWS_HIGH_IMPACT_SOON / NEWS_ACTIVE. HIGH
+  active blocks; MEDIUM active / HIGH soon reduce risk (x0.5 contraction);
+  UNKNOWN fail-closed; open positions always managed. Real feed pending.
+- MACRO-001/FUTURES-001 interim: FileMacroProvider reads the stale-aware
+  operator file configs/macro_context.json (as_of + max_age; stale/missing
+  => UNAVAILABLE, never guessed); gold_pressure (DXY+yields) + futures bias
+  feed confluence confirmation components (0.04 each); macro conflict
+  contracts adaptive risk x0.75. Live feeds pending.
+- M1 refinement LIVE: veto/delay-only after a qualified setup (strong
+  opposing rejection -> skip this cycle); proven unable to create trades.
+- Calibration upgraded: max drawdown (R), false positives, missed
+  sweep-reversal/continuation decomposition, volatility blocks, per-segment
+  expectancies, KEEP/TIGHTEN/LOOSEN/NEED_MORE_DATA verdict + recommended
+  thresholds. Recommendation-only.
+- Executable wiring verification: scripts/verify_wiring.py (real pipeline
+  decision + class introspection) -> reports/runtime/wiring_verification.md:
+  16 LIVE / 1 PARTIAL / 2 UNAVAILABLE_BY_CONFIG / 0 MISSING.
+- Terminal/banner: news 5-state label, external macro=/futures= line, m1=
+  line, phase= in risk line, banner shows providers + thresholds + capital
+  phase.
+- 692 tests pass; pre_demo_safety_check.sh passes.
 
 ## Next Task
 

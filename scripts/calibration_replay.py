@@ -80,17 +80,24 @@ def fetch_mt5(count: int) -> list:
 
 def render(report) -> str:
     lines = ["# Threshold Calibration Replay (BACKTEST-001 readiness)", ""]
+    lines.append(f"- Verdict: **{report.verdict}**")
     lines.append(f"- Recommended: **{report.recommended or 'n/a'}**")
+    if report.recommended_thresholds:
+        lines.append(f"- Recommended thresholds: {report.recommended_thresholds}")
     lines.append(f"- Detail: {report.detail}")
     lines.append("")
-    lines.append("| variant | windows | actionable | approved | W/L/T | "
-                 "win rate | expectancy (R) | near misses |")
-    lines.append("|---|---|---|---|---|---|---|---|")
+    lines.append("| variant | windows | approved | W/L/T | win rate | "
+                 "expectancy (R) | max DD (R) | false pos | missed sweep | "
+                 "missed cont | vol blocks | segments (R) |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for r in report.results:
+        segs = "/".join(f"{x:.2f}" for x in r.segment_expectancies)
         lines.append(
-            f"| {r.variant.name} | {r.windows} | {r.actionable} | "
-            f"{r.approved} | {r.wins}/{r.losses}/{r.timeouts} | "
-            f"{r.win_rate:.0%} | {r.expectancy_r:.2f} | {r.near_misses} |"
+            f"| {r.variant.name} | {r.windows} | {r.approved} | "
+            f"{r.wins}/{r.losses}/{r.timeouts} | {r.win_rate:.0%} | "
+            f"{r.expectancy_r:.2f} | {r.max_drawdown_r:.2f} | "
+            f"{r.false_positives} | {r.missed_sweep_reversals} | "
+            f"{r.missed_continuations} | {r.volatility_blocks} | {segs} |"
         )
     lines += [
         "",

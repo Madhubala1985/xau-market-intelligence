@@ -31,22 +31,35 @@ limitation is visible at runtime (terminal/banner) instead of pretended away.
 | 11 | Tick-volume / orderflow PROXY | LIVE (labelled proxy) | `orderflow/proxy.py` -> pipeline scoring + confluence `orderflow`; never a trade signal (`is_trade_signal=False`) |
 | 12 | Volatility regime | LIVE | `regime/regime_engine.py` (recent-window) + graded chop subtypes (`regime/chop_classifier.py`) |
 | 13 | Dangerous volatility classifier | LIVE (new) | `regime/volatility_classifier.py` -> hard gate in `pipeline.decide`; EXPANSION never blocks alone; `test_volatility_classifier.py`, `test_dangerous_volatility_blocks_despite_full_bearish_evidence` |
-| 14 | News/macro risk | PARTIAL (honest) | manual block file + static calendar (`risk/news_guard.py`), fail-closed UNKNOWN; terminal/banner show CLEAR/BLOCKED/UNKNOWN. Real feed = NEWS-001 |
-| 15 | Futures confirmation | PLACEHOLDER (honest) | engine exists (`orderflow/futures_confirmation.py`) but no live feed; degrades neutral; `MacroContext`/`NullMacroProvider` define the future interface (FUTURES-001/MACRO-001); banner says UNAVAILABLE; `test_macro_context.py` proves no fabrication is possible |
+| 14 | News/macro risk | PARTIAL (honest) | NewsProvider architecture (`risk/news_guard.py`): manual block + StaticCalendarProvider with impact/category; 5 states (CLEAR/BLOCK/UNKNOWN/HIGH_IMPACT_SOON/ACTIVE); HIGH active blocks, MEDIUM/soon reduce risk (adaptive contraction); open positions still managed. Real feed = NEWS-001 |
+| 15 | Futures confirmation | PARTIAL (honest) | `FileMacroProvider` (configs/macro_context.json, stale-aware) feeds the confluence `futures` component; candle engine remains placeholder; UNAVAILABLE_BY_CONFIG when the operator file is absent/stale. Real feed = FUTURES-001 |
 | 16 | Stop placement | LIVE | `trade_management/stop_placement.py` -> `pipeline.decide` step 6; stop mandatory end-to-end (schema+gateway+governor) |
 | 17 | Trailing / break-even | LIVE | `trade_management/position_manager.py` -> `demo_session._manage_positions` -> `gateway.modify_stop` (never widens); `test_break_even_protection_applied_via_gateway` |
 | 18 | Adaptive risk | LIVE | `risk/adaptive_risk.py` -> pipeline sizing + planner hard cap (`demo_session._try_entry` risk_budget); per-phase ceilings per the Adaptive Demo Risk Policy; `test_adaptive_risk.py` (20) |
 | 19 | Opportunity audit | LIVE | `reflection/opportunity_audit.py` -> `trading_service._track_opportunity` (60 active-session no-trade cycles); verdicts NO_TRADE_CORRECT / MISSED_SWEEP_REVERSAL / MISSED_CONTINUATION / POSSIBLY_TOO_STRICT / DATA_INSUFFICIENT / MIXED; `test_opportunity_audit.py` |
 | 20 | Reflection / evaluation loop | LIVE | `reflection/demo_evaluation.py` -> daily rollover reports in `trading_service._write_day_reports` + `scripts/demo_eval_report.py` / `demo_reflection.py`; offline only, no self-mutation |
+| 21 | Macro DXY/yields | PARTIAL (honest) | `FileMacroProvider` + `gold_pressure()` -> confluence `macro` component + adaptive macro-conflict contraction; UNAVAILABLE_BY_CONFIG without the operator file. Real feed = MACRO-001 |
+| 22 | M1 refinement | LIVE (new) | `strategy/m1_refinement.py` -> pipeline veto-or-pass AFTER a setup exists; delay/avoid only, never creates trades (`test_m1_refinement.py`) |
+| 23 | Wiring verification | LIVE (new) | `reflection/wiring_verification.py` + `scripts/verify_wiring.py`: EXECUTED pipeline decision + class introspection; current result 16 LIVE / 1 PARTIAL / 2 UNAVAILABLE_BY_CONFIG / 0 MISSING |
+
+## Executable verification
+
+Run `python scripts/verify_wiring.py` any time — it executes a real pipeline
+decision on synthetic candles and writes
+reports/runtime/wiring_verification.md with per-layer evidence. Exit 2 if any
+layer reads MISSING.
 
 ## Remaining PARTIAL / PLACEHOLDER (honest backlog)
 
-- NEWS-001: real economic-calendar feed (CPI/NFP/FOMC). Until then: manual
-  block + static calendar, fail-closed.
-- MACRO-001: DXY / US-yields context feed through `MacroProvider`.
-- FUTURES-001: gold futures stream for the confirmation engine.
-- BACKTEST-001: threshold calibration on real history — the replay tool is
-  ready (`src/backtest/calibration.py`, `scripts/calibration_replay.py`);
-  the actual data run + walk-forward validation is the pending work.
-- M1 execution refinement is display-only (trigger state); it carries no
-  alignment weight by design until calibrated.
+- NEWS-001: real economic-calendar HTTP feed. Until then: manual block +
+  impact/category static calendar (fail-closed; HIGH blocks, MEDIUM/soon
+  reduce).
+- MACRO-001 / FUTURES-001: live DXY/yields/futures feeds. Until then: the
+  stale-aware operator file configs/macro_context.json (UNAVAILABLE when
+  absent/stale; never guessed).
+- BACKTEST-001: the calibration replay now reports drawdown, false
+  positives, missed sweep/continuation decomposition, per-segment
+  expectancies, and a KEEP/TIGHTEN/LOOSEN/NEED_MORE_DATA verdict; the
+  actual real-history run + walk-forward decision is the pending work.
+- M1 refinement is live as a delay/avoid layer; it still carries no
+  alignment weight (calibrate before weighting).

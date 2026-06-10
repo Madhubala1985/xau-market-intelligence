@@ -152,3 +152,109 @@ def test_shadow_session_passes_known_risky_news_into_pipeline(tmp_path):
     )
     session.decide_once()
     assert captured["news_risk"] is True
+
+# ---------------------------------------------------------------------------
+# NEWS-001: graded states (FINAL-INTELLIGENCE)
+# ---------------------------------------------------------------------------
+
+import json as _json
+from datetime import timedelta as _td
+
+from src.risk.news_guard import (NewsStatus, NewsWindow,
+                                 StaticCalendarProvider)
+
+
+def _write_cal(tmp_path, windows):
+    cal = tmp_path / "news.json"
+    cal.write_text(_json.dumps({"windows": windows}), encoding="utf-8")
+    return cal
+
+
+def _guard(tmp_path, windows):
+    cal = _write_cal(tmp_path, windows)
+    return NewsRiskGuard(block_path=tmp_path / "NB", calendar_path=cal)
+
+
+def test_high_impact_active_blocks_with_status(tmp_path):
+    now = datetime(2026, 6, 10, 12, 30, tzinfo=timezone.utc)
+    state = _guard(tmp_path, [{
+        "start_utc": "2026-06-10T12:00:00+00:00",
+        "end_utc": "2026-06-10T13:00:00+00:00",
+        "label": "CPI", "impact": "HIGH", "category": "CPI",
+    }]).assess(now)
+    assert state.status == NewsStatus.ACTIVE
+    assert state.risky is True and state.blocks_orders
+    assert "CPI" in state.detail
+
+
+def test_medium_impact_active_reduces_instead_of_blocking(tmp_path):
+    now = datetime(2026, 6, 10, 12, 30, tzinfo=timezone.utc)
+    state = _guard(tmp_path, [{
+        "start_utc": "2026-06-10T12:00:00+00:00",
+        "end_utc": "2026-06-10T13:00:00+00:00",
+        "label": "ISM", "impact": "MEDIUM", "category": "ISM_PMI",
+    }]).assess(now)
+    assert state.status == NewsStatus.ACTIVE
+    assert state.risky is False and state.caution is True
+    assert state.blocks_orders is False  # reduced, not blocked
+
+
+def test_high_impact_soon_reduces_risk(tmp_path):
+    now = datetime(2026, 6, 10, 12, 40, tzinfo=timezone.utc)
+    state = _guard(tmp_path, [{
+        "start_utc": "2026-06-10T13:00:00+00:00",
+        "end_utc": "2026-06-10T13:30:00+00:00",
+        "label": "NFP", "impact": "HIGH", "category": "NFP",
+    }]).assess(now)
+    assert state.status == NewsStatus.HIGH_IMPACT_SOON
+    assert state.caution is True and state.risky is False
+    assert "NFP" in state.detail and "min" in state.detail
+
+
+def test_unknown_impact_is_treated_as_high(tmp_path):
+    now = datetime(2026, 6, 10, 12, 30, tzinfo=timezone.utc)
+    state = _guard(tmp_path, [{
+        "start_utc": "2026-06-10T12:00:00+00:00",
+        "end_utc": "2026-06-10T13:00:00+00:00",
+        "label": "mystery", "impact": "banana",
+    }]).assess(now)
+    assert state.status == NewsStatus.ACTIVE and state.risky is True
+
+
+def test_manual_block_and_unknown_statuses(tmp_path):
+    now = datetime(2026, 6, 10, 12, 0, tzinfo=timezone.utc)
+    guard = NewsRiskGuard(block_path=tmp_path / "NB",
+                          calendar_path=tmp_path / "missing.json")
+    assert guard.assess(now).status == NewsStatus.UNKNOWN
+    guard.engage_manual_block("operator")
+    assert guard.assess(now).status == NewsStatus.BLOCK
+    guard.release_manual_block()
+    cal_guard = _guard(tmp_path, [])
+    assert cal_guard.assess(now).status == NewsStatus.CLEAR
+
+
+def test_provider_abstraction_is_injectable(tmp_path):
+    class FakeFeed:
+        def fetch_windows(self, now):
+            return [NewsWindow(start_utc=now - _td(minutes=5),
+                               end_utc=now + _td(minutes=5),
+                               label="FOMC", impact="HIGH", category="FOMC")]
+
+    guard = NewsRiskGuard(block_path=tmp_path / "NB",
+                          calendar_path=tmp_path / "missing.json",
+                          provider=FakeFeed())
+    state = guard.assess(datetime(2026, 6, 10, 18, 0, tzinfo=timezone.utc))
+    assert state.status == NewsStatus.ACTIVE and "FOMC" in state.detail
+
+
+def test_old_calendar_format_still_parses(tmp_path):
+    # No impact/category keys: backward compatible, treated as HIGH.
+    provider = StaticCalendarProvider(_write_cal(tmp_path, [{
+        "start_utc": "2026-06-10T12:00:00+00:00",
+        "end_utc": "2026-06-10T13:00:00+00:00",
+        "label": "legacy",
+    }]))
+    windows = provider.fetch_windows(
+        datetime(2026, 6, 10, 12, 0, tzinfo=timezone.utc)
+    )
+    assert windows is not None and windows[0].impact == "HIGH"

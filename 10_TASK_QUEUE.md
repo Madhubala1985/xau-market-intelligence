@@ -654,3 +654,18 @@ replay tool.
 
 Status:
 Completed in commit INTELLIGENCE-002.
+
+---
+
+## Task FINAL-INTELLIGENCE: Complete News, Macro, Futures, Calibration, M1, Wiring
+
+Goal:
+Finish the remaining intelligence layers honestly: NewsProvider architecture
+with graded states and severity-based block/reduce; stale-aware operator
+macro/futures file feeding confluence confirmation; M1 veto/delay refinement;
+calibration verdicts (KEEP/TIGHTEN/LOOSEN/NEED_MORE_DATA) with drawdown and
+missed-opportunity decomposition; executable wiring verification; terminal
+and banner upgrades.
+
+Status:
+Completed in commit FINAL-INTELLIGENCE.

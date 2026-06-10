@@ -74,3 +74,26 @@ def test_replay_never_mutates_live_thresholds():
     after = (live._chop_override_confluence, live._continuation_confluence,
              live._continuation_displacement)
     assert before == after  # variants run in their OWN pipelines only
+
+
+def test_report_carries_verdict_drawdown_and_missed_decomposition():
+    calibrator = ThresholdCalibrator(window=120, step=24, horizon=24,
+                                     min_trades=1, segments=2)
+    report = calibrator.run(wavy_series(600), DEFAULT_VARIANTS)
+    payload = report.to_dict()
+    assert payload["verdict"] in ("KEEP", "TIGHTEN", "LOOSEN",
+                                  "NEED_MORE_DATA")
+    if payload["verdict"] != "NEED_MORE_DATA":
+        assert payload["recommended_thresholds"] is not None
+    for r in report.results:
+        d = r.to_dict()
+        assert d["max_drawdown_r"] >= 0.0
+        assert d["false_positives"] == d["losses"]
+        assert d["missed_sweep_reversals"] >= 0
+        assert d["missed_continuations"] >= 0
+        assert len(d["segment_expectancies"]) == 2  # walk-forward-ready
+
+
+def test_insufficient_data_verdict_is_need_more_data():
+    report = ThresholdCalibrator().run(wavy_series(50))
+    assert report.verdict == "NEED_MORE_DATA"

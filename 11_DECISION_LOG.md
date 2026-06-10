@@ -2793,3 +2793,90 @@ scripts/generate_evidence_pack.py, package __init__ files, tests.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-10-09
+
+## Date:
+2026-06-10
+
+## Area:
+News / Macro / Futures / Strategy / Calibration / Verification
+
+## Decision:
+FINAL-INTELLIGENCE: complete the remaining intelligence layers honestly and
+prove the wiring executable.
+
+(a) NEWS-001 architecture: NewsProvider abstraction; the static calendar
+    gains impact (HIGH/MEDIUM, unknown=HIGH fail-safe) and gold categories
+    (CPI/PPI/NFP/FOMC/...). Five states: NEWS_CLEAR / NEWS_BLOCK /
+    NEWS_UNKNOWN / NEWS_HIGH_IMPACT_SOON / NEWS_ACTIVE. HIGH active blocks
+    entries; MEDIUM active and HIGH-soon (30-min lead) REDUCE risk (x0.50
+    adaptive contraction); UNKNOWN stays fail-closed; open positions are
+    always still managed. A real HTTP feed remains NEWS-001 (never faked).
+(b) MACRO-001/FUTURES-001 interim: FileMacroProvider reads the operator-
+    maintained, TIMESTAMPED configs/macro_context.json (as_of + max_age;
+    stale/missing/malformed => UNAVAILABLE, never guessed). gold_pressure():
+    DXY+yields rising => bearish-gold; falling => bullish-gold; mixed =>
+    NEUTRAL. Confluence gains macro (0.04) + futures (0.04) components
+    (weights re-normalized); unavailable sits at the neutral 0.5. Macro
+    conflict contracts adaptive risk x0.75. Confirmation only — proven by
+    test that macro cannot create a candidate direction.
+(c) M1 refinement upgraded from display-only: M1RefinementEngine assesses
+    micro rejection/displacement/noise ONLY after a setup exists; its sole
+    power is VETO_DELAY (skip this cycle's entry). Tests prove M1 cannot
+    create trades or override the higher-timeframe stack.
+(d) BACKTEST-001 readiness completed: calibration reports max drawdown (R),
+    false positives, missed sweep-reversal vs continuation decomposition,
+    volatility blocks, per-segment expectancies (walk-forward-ready), and a
+    KEEP / TIGHTEN / LOOSEN / NEED_MORE_DATA verdict with recommended
+    thresholds. Still recommendation-only.
+(e) Executable wiring verification: scripts/verify_wiring.py runs a REAL
+    pipeline decision on synthetic candles + introspects the execution
+    classes; writes per-layer LIVE/PARTIAL/UNAVAILABLE_BY_CONFIG/
+    PLACEHOLDER/MISSING with evidence. Current: 16 LIVE, 1 PARTIAL (news),
+    2 UNAVAILABLE_BY_CONFIG (macro/futures operator file absent), 0 MISSING.
+(f) Terminal: banner gains macro provider status, M1 state, active
+    thresholds, capital phase (+equity); cycles gain external macro=/
+    futures= line, m1= line, phase= in the risk line, and the 5-state news
+    label.
+
+## Evidence:
+692 tests pass (+24): news states (7), macro file provider + confluence/
+adaptive influence (5), M1 refinement (6), calibration verdicts (2), wiring
+verification (4). pre_demo_safety_check.sh passed. Self-audit: no stale
+imports, no duplicate demo/live logic, runners import clean, bounded runner
+still honest off-Windows.
+
+## Alternatives Considered:
+- Scraping a public calendar/quotes site for "real" feeds: rejected —
+  unreliable, ToS-questionable, and silently breakable; the stale-aware
+  operator file is honest and the provider interface is feed-ready.
+- Letting M1 carry alignment weight now: rejected — uncalibrated; veto-only
+  is the safe useful subset.
+- Auto-applying calibration recommendations: rejected outright
+  (04_ADAPTATION_POLICY).
+
+## Risk:
+The operator macro file can be wrong (human error) — bounded: confirmation
+weights total 0.08 and contraction-only on conflict. M1 veto may skip some
+good entries (delay, never loss).
+
+## Mitigation:
+Stale-aware timestamps; all states visible per cycle; calibration tooling
+ready to measure every new threshold on history.
+
+## Files Affected:
+src/risk/news_guard.py, src/orderflow/macro_context.py,
+src/strategy/m1_refinement.py (new), src/strategy/confluence.py,
+src/strategy/pipeline.py, src/risk/adaptive_risk.py,
+src/execution/demo_session.py, src/execution/trading_service.py,
+src/backtest/calibration.py, src/reflection/wiring_verification.py (new),
+scripts/verify_wiring.py (new), scripts/calibration_replay.py,
+scripts/trading_service.py, scripts/generate_evidence_pack.py,
+25_WIRING_MATRIX.md, package __init__ files, tests (3 new files + updates).
+
+## Status:
+Accepted

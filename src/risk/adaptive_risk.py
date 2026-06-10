@@ -106,6 +106,9 @@ class AdaptiveRiskInputs:
     daily_loss_pct: float
     weekly_loss_pct: float
     open_positions: int
+    # FINAL-INTELLIGENCE: graded external conditions (contraction only).
+    news_caution: bool = False    # HIGH-impact event soon / MEDIUM active
+    macro_conflict: bool = False  # DXY/yields pressure against the candidate
 
 
 @dataclass(frozen=True)
@@ -199,6 +202,14 @@ class AdaptiveRiskEngine:
         if inputs.open_positions > 0:
             risk *= 0.50
             reasons.append("contraction x0.50: existing open exposure")
+        if inputs.news_caution:
+            risk *= 0.50
+            reasons.append("contraction x0.50: high-impact news near / "
+                           "medium-impact active")
+        if inputs.macro_conflict:
+            risk *= 0.75
+            reasons.append("contraction x0.75: macro pressure against the "
+                           "candidate")
 
         # -- clamp to [floor, phase ceiling]; ceilings are NEVER exceeded ------
         ceiling = min(_PHASE_CEILING[phase], self._cap)

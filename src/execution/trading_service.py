@@ -100,6 +100,12 @@ class BannerInfo:
         "DXY/yields/futures: UNAVAILABLE (no feed; "
         "NEWS-001/MACRO-001/FUTURES-001 pending; never faked)"
     )
+    # FINAL-INTELLIGENCE: active thresholds + phase shown at startup.
+    thresholds: str = (
+        "confluence(chop-override)=0.65 continuation=0.60 displacement=1.5x"
+    )
+    m1_status: str = "M1 refinement ACTIVE (delay/avoid only; never triggers)"
+    capital_phase: str = "unknown"
 
 
 @dataclass(frozen=True)
@@ -162,6 +168,9 @@ class ProgressPrinter:
         self._line(f"  risk limits:  {info.risk_summary}")
         self._line(f"  news:         {info.news_status}")
         self._line(f"  macro:        {info.macro_status}")
+        self._line(f"  m1:           {info.m1_status}")
+        self._line(f"  thresholds:   {info.thresholds}")
+        self._line(f"  capital:      {info.capital_phase}")
         self._line(f"  kill switch:  {info.kill_switch_status}")
         self._line(f"  journal:      {info.journal_path}")
         self._line(f"  reports:      {info.report_dir}")
@@ -277,16 +286,25 @@ class ProgressPrinter:
                 f"disp={st.get('displacement', '-')} "
                 f"flow={st.get('orderflow', '-')}"
             )
+            self._line(
+                f"  external macro={st.get('macro', 'MACRO_UNAVAILABLE')} "
+                f"futures={st.get('futures', 'FUTURES_UNAVAILABLE')}"
+            )
+        m1 = intel.get("m1")
+        if m1:
+            self._line(f"  m1={m1.get('state')} ({m1.get('reason')})")
+        if confluence:
             regime_reason = intel.get("regime_reason", "")
             subtype = s.regime_subtype or "-"
             risk_tier = s.risk_tier or "-"
             risk_pct = (
                 f"{s.risk_pct:.2%}" if s.risk_pct is not None else "-"
             )
+            phase = (intel.get("adaptive_risk") or {}).get("phase", "-")
             self._line(
                 f"  confluence={confluence.get('score', 0):.2f} "
-                f"risk={risk_tier} {risk_pct} subtype={subtype} "
-                f"regime_why: {regime_reason}"
+                f"risk={risk_tier} {risk_pct} phase={phase} "
+                f"subtype={subtype} regime_why: {regime_reason}"
             )
             missing = confluence.get("missing") or []
             if missing and s.entry_action in ("NONE", "PLAN_BLOCKED",
@@ -510,12 +528,11 @@ class TradingService:
             risk_label = (
                 f"OK(d={risk.daily_loss_pct:.3f},w={risk.weekly_loss_pct:.3f})"
             )
-        if not s.news_known:
-            news_label = "UNKNOWN(blocks)"
-        elif s.news_risky:
-            news_label = "BLOCKED"
-        else:
-            news_label = "CLEAR"
+        news_label = getattr(s, "news_status", "") or (
+            "NEWS_UNKNOWN" if not s.news_known
+            else "NEWS_ACTIVE" if s.news_risky
+            else "NEWS_CLEAR"
+        )
         self._printer.cycle(
             cycle_no, outcome,
             decision_label=decision,

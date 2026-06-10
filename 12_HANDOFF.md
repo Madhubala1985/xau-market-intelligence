@@ -12,7 +12,7 @@ This file allows Claude sessions to resume without losing direction.
 Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task ID:
-INTELLIGENCE-002 (implemented; restart + evidence collection pending —
+FINAL-INTELLIGENCE (implemented; restart + evidence collection pending —
 user-started only)
 
 ## Current Task Goal:
@@ -22,7 +22,18 @@ vary, chop subtypes appear, confluence/risk lines explain every decision,
 and entries occur when (and only when) evidence justifies them.
 
 ## Current Status:
-INTELLIGENCE-002 implemented. 668 tests pass.
+FINAL-INTELLIGENCE implemented. 692 tests pass.
+- News: provider architecture, impact/category calendar, 5 graded states;
+  HIGH blocks, MEDIUM/soon reduce risk; UNKNOWN fail-closed.
+- Macro/futures: stale-aware operator file configs/macro_context.json ->
+  confluence confirmation (never a trigger); UNAVAILABLE when absent/stale.
+- M1 refinement live (veto/delay only; cannot create trades).
+- Calibration verdicts KEEP/TIGHTEN/LOOSEN/NEED_MORE_DATA with drawdown +
+  missed-opportunity decomposition + per-segment expectancies.
+- Executable wiring verification: scripts/verify_wiring.py -> 16 LIVE /
+  1 PARTIAL / 2 UNAVAILABLE_BY_CONFIG / 0 MISSING.
+
+INTELLIGENCE-002 status (previous): implemented; 668 tests then.
 - Wiring verified per layer: 25_WIRING_MATRIX.md (17 LIVE, news PARTIAL,
   futures/macro PLACEHOLDER — honest, never faked).
 - True MT5 MTF: M15/H1/M1 fetched natively; labelled degradation; conflict
@@ -149,11 +160,12 @@ CONTINUOUS-001 status (previous): implemented and committed; 583 tests then.
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, 10_TASK_QUEUE.md,
 23_DEMO_TRADING_RUNBOOK.md, 24_INTELLIGENCE_AUDIT_ROADMAP.md.
 
-INTELLIGENCE-002 is implemented. Guide the user to restart the continuous
-service and review the full reasoning (MTF sources, vol/asian lines,
-adaptive phase budgets) plus any opportunity audits over full sessions.
-Have them run scripts/calibration_replay.py --fetch on the Windows host and
-review reports/runtime/calibration.md. Do not start the service. Do not
-weaken risk (daily 2% / weekly 5% anchors and the per-phase ceilings are
-policy). Threshold changes require BACKTEST-001 walk-forward evidence;
-real feeds are NEWS-001 / MACRO-001 / FUTURES-001.
+FINAL-INTELLIGENCE is implemented; the system is feature-complete for the
+demo evaluation campaign. Guide the user to: (1) optionally maintain
+configs/macro_context.json (timestamped) and the impact/category fields in
+configs/news_windows.json; (2) restart the continuous service and review the
+full reasoning; (3) run scripts/calibration_replay.py --fetch on the Windows
+host and review the verdict; (4) run scripts/verify_wiring.py any time for
+the wiring report. Do not start the service. Do not weaken risk. Remaining
+external work: NEWS-001 / MACRO-001 / FUTURES-001 real feeds and the
+BACKTEST-001 real-history decision.

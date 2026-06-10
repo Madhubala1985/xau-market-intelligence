@@ -43,6 +43,8 @@ from src.risk.adaptive_risk import (
     RiskTier,
 )
 from src.risk.news_guard import (
+    NewsStatus,
+    StaticCalendarProvider,
     NewsRiskGuard,
     NewsRiskState,
     NewsWindow,
