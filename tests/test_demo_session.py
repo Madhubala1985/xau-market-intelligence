@@ -226,7 +226,8 @@ def make_session(tmp_path, *, results=None, flags=None, max_orders=1,
                         max_spread=1.0)
     gateway = ExecutionGateway(
         RiskGovernor(limits), flags or sending_flags(), fake,
-        expected_symbol="XAUUSDM", kill_switch=kill_switch,
+        expected_symbol="XAUUSDM", broker_symbol="XAUUSDm",
+        kill_switch=kill_switch,
     )
     journal = journal or TradeJournal(tmp_path / "demo_journal.jsonl")
     kwargs = dict(
@@ -281,7 +282,9 @@ def test_full_entry_path_sends_one_demo_order_with_stop(tmp_path):
     assert fake.order_send.call_count == 1
     request = fake.order_send.call_args.args[0]
     assert request["sl"] == pytest.approx(2299.0)  # stop-loss attached
-    assert request["symbol"] == "XAUUSDM"
+    # the request must carry the EXACT broker symbol case, not the canonical
+    # form — MT5 symbols are case-sensitive (defect found by CONTINUOUS-001)
+    assert request["symbol"] == "XAUUSDm"
     # Journaled with the MT5 ticket for reconciliation.
     records = journal.records()
     assert len(records) == 1

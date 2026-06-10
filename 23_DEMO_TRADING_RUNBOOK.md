@@ -129,3 +129,58 @@ Review order:
 3. reports/runtime/demo_reflection.md (what to backtest vs fix),
 4. logs/demo_trade_journal.jsonl (tickets, P&L),
 5. MT5 Toolbox -> Trade/History tabs must match the journal.
+
+## Continuous Trading Service (CONTINUOUS-001, Windows PowerShell)
+
+The MAIN way to run the system. It trades the MT5 account configured in
+.env (currently Exness DEMO, so orders are demo orders) and keeps running
+until you stop it. All commands from the repository root.
+
+1. Preflight (also runs automatically at every service start):
+
+    py -3.12 scripts\demo_preflight.py
+
+2. Continuous dry-run rehearsal (identical loop, sending disabled):
+
+    py -3.12 scripts\trading_service.py --profile continuous --dry-run --stdout-progress
+
+3. Continuous MT5 execution on the .env account (sending requires the .env
+   flags: TRADING_MODE=DEMO, REAL_TRADING_ENABLED=false,
+   ALLOW_DEMO_ORDERS=true, ALLOW_MT5_ORDER_SEND=true, ALLOW_REAL_ORDERS=false):
+
+    py -3.12 scripts\trading_service.py --profile continuous --stdout-progress
+
+4. Stop safely (service halts at the next check; Ctrl+C also stops cleanly):
+
+    New-Item -ItemType File control\KILL_SWITCH
+
+5. Resume after review (remove the switch, start the service again):
+
+    Remove-Item control\KILL_SWITCH
+    py -3.12 scripts\trading_service.py --profile continuous --stdout-progress
+
+6. Evaluation report (daily service_eval_* are written automatically; this
+   evaluates a bounded session report):
+
+    py -3.12 scripts\demo_eval_report.py
+
+7. Reflection report:
+
+    py -3.12 scripts\demo_reflection.py
+
+8. View the latest journal / reports from PowerShell:
+
+    Get-Content logs\demo_trade_journal.jsonl -Tail 20
+    Get-Content logs\service_heartbeat.jsonl -Tail 5
+    Get-Content reports\runtime\trading_service.md
+    Get-ChildItem reports\runtime\service_eval_*.md | Sort-Object Name | Select-Object -Last 1 | Get-Content
+
+Where trades appear: MT5 terminal -> Toolbox -> Trade tab (open positions)
+and History tab (closed trades). Every sent order prints its ticket in the
+terminal and journals it (notes="ticket=<n>").
+
+What you see immediately after start: the startup banner (service name,
+profile, masked login, account type, server, symbol, mode, risk limits,
+news, kill switch, journal/report paths, stop instructions) followed by a
+"[cycle 1]" progress block within one poll interval. While the market is
+closed you see "MARKET CLOSED (...) — waiting" lines instead of silence.

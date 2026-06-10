@@ -52,7 +52,10 @@ class SessionProfile:
 
     name: str
     description: str
-    duration_minutes: float
+    # None = no fixed duration: the profile is for the CONTINUOUS trading
+    # service, which runs until kill switch / risk shutdown / operator stop.
+    # Bounded session runners must refuse a None-duration profile.
+    duration_minutes: Optional[float]
     poll_seconds: float = 30.0
     # None = no artificial session cap; the risk policy governs.
     max_orders: Optional[int] = None
@@ -64,10 +67,12 @@ class SessionProfile:
     max_spread_price: float = POLICY_MAX_SPREAD_PRICE
 
     def __post_init__(self) -> None:
-        if not (0 < self.duration_minutes <= _MAX_DURATION_MINUTES):
+        if self.duration_minutes is not None and not (
+            0 < self.duration_minutes <= _MAX_DURATION_MINUTES
+        ):
             raise ValueError(
                 f"profile {self.name!r}: duration_minutes must be in "
-                f"(0, {_MAX_DURATION_MINUTES}]"
+                f"(0, {_MAX_DURATION_MINUTES}] or None (continuous service)"
             )
         if self.poll_seconds <= 0:
             raise ValueError(f"profile {self.name!r}: poll_seconds must be > 0")
@@ -184,6 +189,18 @@ PROFILES: Dict[str, SessionProfile] = {
                 "ceiling): policy-governed."
             ),
             duration_minutes=480,
+            poll_seconds=60,
+            max_orders=None,
+        ),
+        SessionProfile(
+            name="continuous",
+            description=(
+                "Continuous MT5 trading service (the MAIN mode): no fixed "
+                "duration, no artificial order cap; runs until kill switch, "
+                "risk shutdown, or operator stop. Pauses while the market is "
+                "closed. Use scripts/trading_service.py."
+            ),
+            duration_minutes=None,
             poll_seconds=60,
             max_orders=None,
         ),

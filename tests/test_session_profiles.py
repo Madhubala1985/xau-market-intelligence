@@ -25,7 +25,19 @@ from src.execution.session_profiles import (
 
 
 def test_registry_offers_the_evaluation_profiles():
-    assert set(PROFILES) == {"smoke", "evaluation", "london", "newyork", "full_day"}
+    assert set(PROFILES) == {
+        "smoke", "evaluation", "london", "newyork", "full_day", "continuous",
+    }
+
+
+def test_continuous_profile_is_unbounded_and_policy_governed():
+    continuous = get_profile("continuous")
+    assert continuous.duration_minutes is None  # no fixed session length
+    assert continuous.max_orders is None        # risk policy governs
+    # and still policy-bounded on every risk limit
+    limits = continuous.risk_limits("XAUUSDM")
+    assert limits.max_trades_per_day == POLICY_MAX_TRADES_PER_DAY
+    assert limits.max_daily_loss == POLICY_MAX_DAILY_LOSS
 
 
 def test_only_smoke_has_an_artificial_one_order_cap():

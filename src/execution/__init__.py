@@ -38,6 +38,7 @@ from src.execution.demo_planner import (
 )
 from src.execution.demo_session import (
     CONFIRMATION_TOKEN,
+    CycleOutcome,
     CycleStat,
     DemoSessionReport,
     SessionEvent,
@@ -47,6 +48,18 @@ from src.execution.session_profiles import (
     PROFILES,
     SessionProfile,
     get_profile,
+)
+from src.execution.market_hours import (
+    MarketSchedule,
+    MarketState,
+)
+from src.execution.trading_service import (
+    BannerInfo,
+    ProgressPrinter,
+    ServiceReport,
+    StopReason,
+    TradingService,
+    mask_login,
 )
 
 __all__ = [
@@ -87,4 +100,14 @@ __all__ = [
     "SessionProfile",
     "PROFILES",
     "get_profile",
+    # Continuous trading service (CONTINUOUS-001)
+    "CycleOutcome",
+    "MarketSchedule",
+    "MarketState",
+    "TradingService",
+    "ServiceReport",
+    "ProgressPrinter",
+    "BannerInfo",
+    "StopReason",
+    "mask_login",
 ]

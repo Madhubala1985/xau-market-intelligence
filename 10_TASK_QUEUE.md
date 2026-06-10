@@ -583,3 +583,35 @@ Stop condition:
 
 Status:
 Completed in commit DEMO-EVAL.
+
+---
+
+## Task CONTINUOUS-001: Continuous MT5 Trading Service
+
+Goal:
+One continuous XAU/USD MT5 trading service as the MAIN mode: start once,
+connect to the .env account, run the DecisionPipeline continuously, execute
+approved trades through planner -> governor -> gateway, reconcile positions,
+manage stops, pause while the market is closed, resume on open, and report
+daily — until kill switch, risk shutdown, fatal error, or Ctrl+C.
+
+Rules:
+- ONE execution stack (no demo-only/live-only duplication); .env decides the
+  account (currently Exness DEMO), execution flags decide sending.
+- No fixed 1-hour duration, no artificial one-order cap; the risk policy
+  governs trade frequency. Smoke/dry-run remain optional tools.
+- Full terminal observability: startup banner + per-cycle progress; no
+  credentials printed (login masked); orders print MT5 tickets.
+- Daily evaluation + reflection reports at UTC rollover.
+
+Tests:
+- no fixed duration / no artificial cap, market-closed wait + resume,
+  restart reconciliation + close detection, kill switch / weekly-loss
+  shutdown / Ctrl+C clean stops, daily-loss pause, rollover reports, banner
+  and progress output, dry-run cannot send, credential hygiene.
+
+Stop condition:
+- all tests pass, docs updated, commit CONTINUOUS-001.
+
+Status:
+Completed in commit CONTINUOUS-001.

@@ -75,6 +75,39 @@ def _pos_int(value: Any) -> Optional[int]:
     return out if out > 0 else None
 
 
+# MT5 account trade modes (fallbacks when the client lacks the constants).
+_TRADE_MODE_DEMO = 0
+_TRADE_MODE_CONTEST = 1
+_TRADE_MODE_REAL = 2
+
+
+def verify_demo_account(client: Any) -> str:
+    """Verify the logged-in account is non-real. Raises RuntimeError on REAL.
+
+    Returns a short, credential-free label (DEMO / CONTEST). Readiness gate:
+    REAL accounts stay refused until the real-money phase is manually
+    approved (CLAUDE.md). Shared by every runner that touches the terminal.
+    """
+    info = client.account_info() if hasattr(client, "account_info") else None
+    if info is None:
+        raise RuntimeError(
+            "account_info() returned no data; cannot verify demo account"
+        )
+    demo = getattr(client, "ACCOUNT_TRADE_MODE_DEMO", _TRADE_MODE_DEMO)
+    contest = getattr(client, "ACCOUNT_TRADE_MODE_CONTEST", _TRADE_MODE_CONTEST)
+    real = getattr(client, "ACCOUNT_TRADE_MODE_REAL", _TRADE_MODE_REAL)
+    trade_mode = getattr(info, "trade_mode", None)
+    if trade_mode == real:
+        raise RuntimeError("account trade_mode is REAL — refused (demo only)")
+    if trade_mode == demo:
+        return "DEMO"
+    if trade_mode == contest:
+        return "CONTEST"
+    raise RuntimeError(
+        f"account trade_mode {trade_mode!r} is not a known non-real mode"
+    )
+
+
 @dataclass(frozen=True)
 class BrokerPosition:
     """A read-only snapshot of one open MT5 position (no credentials).

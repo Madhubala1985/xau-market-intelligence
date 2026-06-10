@@ -345,3 +345,34 @@ validation, validated news protection, real-mode limits 0.25%/0.5%/1.5% with
 2-loss shutdown, manual approval). DEMO-EVAL adds the evidence machinery:
 serious policy-governed sessions + evaluation/reflection reports are now the
 required artifacts for "sustained demo evidence".
+
+---
+
+# 8. CONTINUOUS-001 audit notes — 2026-06-10 (fourth pass)
+
+## F-14. Order requests carried the canonical symbol, not the broker case
+- **Class:** Proven Defect (FIXED — found by the new service tests, BEFORE
+  any live order was attempted)
+- **Evidence:** ExecutionGateway._build_request used decision.symbol
+  (canonical "XAUUSDM"). MT5 symbols are case-sensitive; Exness lists
+  "XAUUSDm", so the very first real demo order would have been rejected by
+  the terminal (and the fake-broker test that asserted the canonical case
+  encoded the defect as expected behavior).
+- **Fix:** the gateway takes broker_symbol (exact case) for order requests;
+  all checks still compare canonical forms; both runners pass
+  settings.symbol. modify_stop already used the position's exact case.
+- **Lesson recorded:** every value sent TO the terminal must use the exact
+  broker case; canonical forms are for internal comparison only.
+
+## Service-level status
+- The system's MAIN mode is now the continuous service
+  (scripts/trading_service.py): no fixed duration, no artificial order cap,
+  market-closed pausing with heartbeats, daily evaluation/reflection
+  rollover, weekly-loss shutdown, kill-switch + Ctrl+C clean stops, full
+  terminal observability with masked account data.
+- One execution stack confirmed: the service drives
+  SupervisedDemoSession.run_cycle(); there is no demo-only or live-only
+  duplicate path. Real mode remains refused (flags + account verification);
+  the future transition is configuration + readiness gates, not a rewrite.
+- F-11 (zones/premium-discount unwired), F-12 (no futures feed), F-13 (no
+  dedicated dangerous-volatility classifier) remain open and backtest-gated.

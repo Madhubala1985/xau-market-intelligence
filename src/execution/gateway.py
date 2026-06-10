@@ -158,6 +158,7 @@ class ExecutionGateway:
         client: Optional[Any] = None,
         *,
         expected_symbol: str = "XAUUSD",
+        broker_symbol: Optional[str] = None,
         magic: int = 0,
         deviation: int = 20,
         kill_switch: Optional[Any] = None,
@@ -166,6 +167,10 @@ class ExecutionGateway:
         self._flags = flags or ExecutionFlags()  # safe default: sends nothing
         self._client = client
         self._expected_symbol = expected_symbol.strip().upper()
+        # MT5 symbols are case-sensitive (Exness: "XAUUSDm"). Checks compare
+        # canonical (upper) forms, but the order REQUEST must carry the exact
+        # broker case or the terminal rejects it.
+        self._broker_symbol = (broker_symbol or "").strip() or None
         self._magic = magic
         self._deviation = deviation
         # Manual halt (DEMO-001): anything with a truthy .engaged blocks sending.
@@ -363,7 +368,8 @@ class ExecutionGateway:
         # NOTE: contains no credentials (login/password/server) by construction.
         return {
             "action": getattr(mt5, "TRADE_ACTION_DEAL", 1),
-            "symbol": decision.symbol,
+            # exact broker case (e.g. "XAUUSDm"), never the canonical form
+            "symbol": self._broker_symbol or decision.symbol,
             "volume": volume,
             "type": order_type,
             "price": decision.entry_price,

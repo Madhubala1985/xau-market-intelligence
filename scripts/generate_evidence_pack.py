@@ -251,6 +251,14 @@ _TABLE: Dict[str, dict] = {
         layer="execution",
         summary="policy-bounded session risk profiles (DEMO-EVAL; can only tighten)",
         test_file="test_session_profiles.py", test_note="", **_PURE_SHADOW_READY),
+    "src.execution.market_hours": dict(
+        layer="execution",
+        summary="XAU market-hours schedule for closed-market pausing (CONTINUOUS-001)",
+        test_file="test_market_hours.py", test_note="", **_PURE_SHADOW_READY),
+    "src.execution.trading_service": dict(
+        layer="execution",
+        summary="continuous trading service loop + live terminal progress (CONTINUOUS-001)",
+        test_file="test_trading_service.py", test_note="", **_MT5_BOUNDARY),
     "src.reflection.demo_evaluation": dict(
         layer="reflection",
         summary="post-session evaluation + reflection reports (DEMO-EVAL; offline)",

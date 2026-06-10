@@ -6,84 +6,82 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 12: Live Demo Readiness
+Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-DEMO-EVAL: IMPLEMENTED — serious demo evaluation engine ready; first
-policy-governed supervised evaluation session pending (user-started)
+CONTINUOUS-001: IMPLEMENTED — continuous MT5 trading service is the MAIN
+mode; first continuous run on the Windows MT5 host pending (user-started)
 
 ## Last Completed Task
 
-P0-P11 roadmap completed.
-INT-001, RISK-001, LIVE-VERIFY-001, WINMT5-001, WINMT5-LIVE-001 completed.
-LIVE-001/LIVE-002: live MT5 read-only data -> DecisionPipeline -> shadow
-journal, supervised session reporting. Windows proof CLEARED (2026-06-10).
-DEMO-001: 13-gate demo execution preflight; manual kill switch.
-AUDIT-001: intelligence audit; RiskStateTracker + price-unit spread scoring.
-DEMO-002-BLOCKERS: DemoTradePlanner (tier -> sizer -> pyramiding -> governor),
-position reconciliation (fail-closed), BE/trailing proposals, NewsRiskGuard.
-DEMO-002: SupervisedDemoSession + runner; close detection with real P&L;
-journal collapse semantics; lot-step snapping.
-DEMO-EVAL (2026-06-10): serious demo evaluation + reflection workflow:
-- Session risk profiles (src/execution/session_profiles.py): smoke /
-  evaluation / london / newyork / full_day. Profiles configure duration,
-  polling, session order cap, and the governor/planner RiskLimits; they can
-  TIGHTEN 03_RISK_POLICY demo limits, never loosen them (validated at
-  construction).
-- NO artificial order cap in evaluation modes: max_orders=None means the risk
-  policy (3 trades/day, 2%/5% loss limits, 1 position + 1 protected add-on),
-  confidence tiers, regime, and setup quality govern. max_orders=1 survives
-  only in the smoke profile.
-- Dry-run defect fixed: it now rehearses the FULL planner -> gateway path;
-  approved plans are counted as orders_simulated (ORDER_SIMULATED) and can
-  never reach order_send. Previously max_orders=0 blocked before planning.
-- Mode separation: DEMO_LIVE (real MT5 demo orders, tickets journaled) vs
-  DRY_RUN (simulated) in the session report; shadow stays LiveShadowSession.
-- Per-cycle CycleStats (regime/session/HTF bias/confidence/spread/news/risk/
-  entry action) recorded for post-session analysis.
-- Post-session intelligence: scripts/demo_eval_report.py (totals,
-  distributions, no-trade reasons, news/risk blocks, P&L, max drawdown,
-  win/loss, mistakes, findings classified PROVEN_DEFECT /
-  HIGH_CONFIDENCE_DEFECT / HYPOTHESIS / OBSERVATION / DESIGN_IMPROVEMENT) and
-  scripts/demo_reflection.py (did well / too strict / too loose / missed /
-  avoided correctly / backtest-first / fix-now). Offline; no self-mutation.
-- Gold-intelligence audit recorded (24_INTELLIGENCE_AUDIT_ROADMAP.md §6):
-  F-11 zones/premium-discount engines NOT wired into the pipeline (Design
-  Improvement, backtest first), F-12 futures confirmation has no live feed,
-  F-13 no dedicated dangerous-volatility classifier (implicit gates only).
-
-## Windows Validation Proof (2026-06-10)
-
-live_shadow_run --cycles 5 COMPLETED; live_shadow_session 5 min COMPLETED;
-demo_preflight Ready: True. LIVE-001/LIVE-002/DEMO-001 proof CLEARED.
+P0-P11 roadmap, INT-001, RISK-001, LIVE-VERIFY-001, WINMT5-001,
+WINMT5-LIVE-001, LIVE-001, LIVE-002, DEMO-001, AUDIT-001,
+DEMO-002-BLOCKERS, DEMO-002, DEMO-EVAL completed (see 11_DECISION_LOG.md).
+CONTINUOUS-001 (2026-06-10, decision 2026-06-10-06):
+- ONE continuous MT5 trading service (scripts/trading_service.py +
+  src/execution/trading_service.py): starts once, connects to the MT5
+  account configured in .env (currently Exness DEMO -> demo orders), runs
+  the DecisionPipeline continuously, executes approved trades through the
+  SAME planner -> governor -> gateway stack (TradingService drives
+  SupervisedDemoSession.run_cycle(); zero duplicated execution logic),
+  reconciles positions and detects closes from MT5 history every cycle,
+  manages break-even/trailing stops continuously.
+- No fixed duration, no artificial order cap: risk policy governs (3
+  trades/day, 2% daily pauses entries until UTC rollover [DAY_PAUSED], 5%
+  weekly STOPS the service [RISK_SHUTDOWN]). Stops cleanly on kill switch,
+  weekly-loss shutdown, Ctrl+C, or fatal error.
+- Market-closed handling: MarketSchedule (weekend Fri 21:00 -> Sun 22:05
+  UTC + daily break 21:00 -> 22:05 UTC) plus tick-staleness ground truth;
+  prints MARKET CLOSED / FEED STALE, heartbeats to
+  logs/service_heartbeat.jsonl, resumes automatically.
+- Terminal observability: startup banner (masked login, account type
+  verified non-real, server, symbol, mode, risk limits, news, kill switch,
+  paths, stop instructions) + per-cycle progress (market state, bid/ask/
+  spread, regime, HTF bias, decision + exact no-trade reason, confidence,
+  positions with floating P&L, orders sent/simulated, trades today, daily
+  P&L, risk/news/kill state, next poll). Sent orders print their MT5
+  ticket + Toolbox/Trade-tab hint.
+- Daily rollover writes service_eval_YYYYMMDD + service_reflection_YYYYMMDD
+  (same evaluator as DEMO-EVAL); trading_service.md/.json written on stop.
+- PROVEN DEFECT F-14 FIXED before any live order: the gateway built
+  order_send requests with the canonical symbol ("XAUUSDM") — MT5 symbols
+  are case-sensitive, the terminal would have rejected it. Requests now
+  carry the exact broker case ("XAUUSDm"); verify_demo_account is shared in
+  src/broker/mt5_data_adapter.py (REAL accounts refused).
+- 583 tests pass; pre_demo_safety_check.sh passes.
 
 ## Next Task
 
-User runs on the Windows MT5 host (PowerShell), in order:
-1. python scripts/demo_preflight.py                     (13 gates PASS)
-2. python scripts/demo_session_run.py --dry-run --profile evaluation
-   (verdict CLEAN, orders_simulated >= 0, zero orders_sent)
-3. python scripts/demo_session_run.py --confirm "START SUPERVISED DEMO" --profile smoke
-   (first real-order evidence: max ONE order)
-4. python scripts/demo_eval_report.py ; python scripts/demo_reflection.py
-5. If CLEAN: --profile evaluation (1h, policy-governed), then london /
-   newyork / full_day sessions; evaluation + reflection after each.
-Kill switch any time: New-Item -ItemType File control\KILL_SWITCH
+User runs on the Windows MT5 host (PowerShell):
+1. py -3.12 scripts\demo_preflight.py                       (13 gates PASS)
+2. py -3.12 scripts\trading_service.py --profile continuous --dry-run --stdout-progress
+   (watch a few cycles; verdicts/plans visible; zero orders; Ctrl+C to stop)
+3. Set the demo execution flags in .env, then:
+   py -3.12 scripts\trading_service.py --profile continuous --stdout-progress
+   (supervise initially; orders appear in MT5 Toolbox/Trade tab)
+4. Stop: New-Item -ItemType File control\KILL_SWITCH
+   Resume: Remove-Item control\KILL_SWITCH ; restart the service
+5. Review reports/runtime/trading_service.md, daily service_eval_* /
+   service_reflection_*, logs/demo_trade_journal.jsonl.
+Bounded sessions (scripts/demo_session_run.py) and shadow mode remain
+available as validation tools.
 
 ## Current Execution Mode
 
-DEMO_EVAL_READY (demo order path implemented and gated; user-started only)
+CONTINUOUS_SERVICE_READY (gated by .env flags + fresh preflight + kill
+switch; user-started only)
 
 ## Real Trading
 
-FORBIDDEN
+FORBIDDEN (REAL accounts refused at start; real flags abort the gateway)
 
 ## Demo Trading
 
-ALLOWED only via scripts/demo_session_run.py with the exact confirmation
-token, fresh READY preflight, env flags set, news source present, kill switch
-absent. Supervised sessions only; the user starts every session manually.
+ALLOWED via scripts/trading_service.py (continuous, MAIN mode) or
+scripts/demo_session_run.py (bounded sessions) — both require a fresh READY
+preflight, the .env execution flags for sending, an available news source,
+and an absent kill switch.
 
 ## Paper / Shadow Trading
 
@@ -92,16 +90,16 @@ ALLOWED: scripts/live_shadow_run.py (journals only, never sends)
 ## Environment Status
 
 - .env.example exists; .env is local only and ignored by git.
-- Demo MT5 credentials only in .env; real credentials forbidden.
-- WSL cannot import MetaTrader5; sessions run on the Windows MT5 host.
-- Off-Windows the runners report an honest ENVIRONMENT_ISSUE (exit 2).
-- Post-session reports (demo_eval_report.py, demo_reflection.py) are offline
-  file readers and run on Windows or WSL.
+- The service trades the account configured in .env (currently Exness
+  DEMO); credentials are never printed (login masked in the banner).
+- WSL cannot import MetaTrader5; the service runs on the Windows MT5 host
+  (off-Windows it reports an honest ENVIRONMENT_ISSUE, exit 2).
+- Post-session report scripts run anywhere (offline file readers).
 
 ## Safety Notes
 
 - Do not commit .env. Do not print credentials.
 - Do not enable real trading (REAL_TRADING_ENABLED / ALLOW_REAL_ORDERS).
 - ExecutionGateway remains the only order pathway; RiskGovernor final
-  authority; risk profiles can only tighten policy.
-- Claude never starts a supervised session; the user does.
+  authority; profiles can only tighten 03_RISK_POLICY.
+- Claude never starts the service; the user does.

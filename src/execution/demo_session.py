@@ -62,7 +62,11 @@ from src.journal.journal import TradeJournal
 from src.risk.governor import RiskContext
 from src.risk.leverage_sizing import AccountSnapshot
 from src.risk.news_guard import NewsRiskGuard
-from src.risk.state_tracker import RiskStateTracker, collapse_records
+from src.risk.state_tracker import (
+    RiskStateSnapshot,
+    RiskStateTracker,
+    collapse_records,
+)
 from src.strategy.pipeline import DecisionPipeline, PipelineInput, PipelineResult
 from src.trade_management.position_manager import PositionProtectionManager
 
@@ -129,6 +133,29 @@ class CycleStat:
             "entry_action": self.entry_action,
             "entry_detail": self.entry_detail,
         }
+
+
+@dataclass(frozen=True)
+class CycleOutcome:
+    """Everything one cycle produced (credential-free).
+
+    Returned by run_cycle() so the continuous trading service (CONTINUOUS-001)
+    can drive THIS exact execution stack — same planner, governor, gateway,
+    journal — and render live terminal progress without duplicating logic.
+    """
+
+    stat: CycleStat
+    bid: float
+    ask: float
+    positions: Tuple[BrokerPosition, ...]
+    reconciliation_clean: bool
+    risk: "RiskStateSnapshot"
+    events: Tuple[SessionEvent, ...]  # only the events of THIS cycle
+    orders_sent_total: int
+    orders_simulated_total: int
+    violations_total: int
+    decisions_total: int
+    sent_ticket: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -255,6 +282,12 @@ class SupervisedDemoSession:
         self._violations = 0
         self._halted = False
         self._halt_reason = ""
+        # last-cycle snapshots (filled by _cycle; consumed by run_cycle)
+        self._last_bid = 0.0
+        self._last_ask = 0.0
+        self._last_positions: List[BrokerPosition] = []
+        self._last_risk_state: Optional[RiskStateSnapshot] = None
+        self._last_sent_ticket: Optional[int] = None
 
     # -- session loop --------------------------------------------------------
     def run(
@@ -318,7 +351,49 @@ class SupervisedDemoSession:
             cycle_stats=tuple(self._cycle_stats),
         )
 
-    # -- one cycle -------------------------------------------------------------
+    # -- public counters (read-only; used by the continuous service) ----------
+    @property
+    def orders_sent(self) -> int:
+        return self._orders_sent
+
+    @property
+    def orders_simulated(self) -> int:
+        return self._orders_simulated
+
+    @property
+    def decisions_logged(self) -> int:
+        return self._decisions_logged
+
+    @property
+    def violations(self) -> int:
+        return self._violations
+
+    # -- one cycle (public: the continuous service drives this directly) ------
+    def run_cycle(self) -> CycleOutcome:
+        """Run ONE full cycle and return everything it produced.
+
+        Same execution stack as run(): data -> close detection ->
+        reconciliation -> pipeline -> stop protection -> planner -> gateway.
+        The caller (continuous service) owns looping, pausing, and stopping.
+        """
+        events_before = len(self._events)
+        self._last_sent_ticket = None
+        reconciliation = self._cycle()
+        return CycleOutcome(
+            stat=self._cycle_stats[-1],
+            bid=self._last_bid,
+            ask=self._last_ask,
+            positions=tuple(self._last_positions),
+            reconciliation_clean=reconciliation.clean,
+            risk=self._last_risk_state,
+            events=tuple(self._events[events_before:]),
+            orders_sent_total=self._orders_sent,
+            orders_simulated_total=self._orders_simulated,
+            violations_total=self._violations,
+            decisions_total=self._decisions_logged,
+            sent_ticket=self._last_sent_ticket,
+        )
+
     def _cycle(self) -> ReconciliationReport:
         now = self._now()
         exec_candles = self._adapter.fetch_candles(self._exec_tf, self._exec_count)
@@ -328,6 +403,8 @@ class SupervisedDemoSession:
         spread_price = round(tick.spread, 6)
         broker = self._adapter.fetch_broker_state(now)
         positions = self._adapter.fetch_positions()
+        self._last_bid, self._last_ask = tick.bid, tick.ask
+        self._last_positions = positions
 
         # Close detection BEFORE reconciliation: a stopped-out position is a
         # normal lifecycle event, not an orphan — IF its P&L is recoverable.
@@ -339,6 +416,7 @@ class SupervisedDemoSession:
             self._event("RECONCILE", f"NOT CLEAN: {reconciliation.detail}")
 
         risk_state = self._risk_state.snapshot(now, broker.balance)
+        self._last_risk_state = risk_state
         news = self._news_guard.assess(now)
 
         result = self._pipeline.decide(
@@ -588,6 +666,7 @@ class SupervisedDemoSession:
 
         if exec_result.status is ExecutionStatus.FILLED and exec_result.sent:
             self._orders_sent += 1
+            self._last_sent_ticket = exec_result.order_ticket
             record = TradeRecord(
                 record_id=f"T-{decision.decision_id}",
                 created_at_utc=now,

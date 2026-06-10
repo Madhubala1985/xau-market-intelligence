@@ -50,12 +50,6 @@ OUT_DIR = REPO_ROOT / "reports" / "runtime"
 ENV_PATH = REPO_ROOT / ".env"
 JOURNAL_PATH = REPO_ROOT / "logs" / "live_shadow_journal.jsonl"
 
-# MT5 ACCOUNT_TRADE_MODE_* fallback values (documented constants).
-_TRADE_MODE_DEMO = 0
-_TRADE_MODE_CONTEST = 1
-_TRADE_MODE_REAL = 2
-
-
 def load_env_safely(dotenv_path: Path = ENV_PATH) -> str:
     """Load .env into os.environ without printing any value."""
     if not dotenv_path.is_file():
@@ -89,25 +83,9 @@ def try_import_mt5():
         return None, f"MetaTrader5 not importable: {exc.__class__.__name__}"
 
 
-def verify_demo_account(client) -> str:
-    """Verify the logged-in account is non-real. Raises RuntimeError on REAL.
-
-    Returns a short, credential-free label (DEMO / CONTEST).
-    """
-    info = client.account_info() if hasattr(client, "account_info") else None
-    if info is None:
-        raise RuntimeError("account_info() returned no data; cannot verify demo account")
-    demo = getattr(client, "ACCOUNT_TRADE_MODE_DEMO", _TRADE_MODE_DEMO)
-    contest = getattr(client, "ACCOUNT_TRADE_MODE_CONTEST", _TRADE_MODE_CONTEST)
-    real = getattr(client, "ACCOUNT_TRADE_MODE_REAL", _TRADE_MODE_REAL)
-    trade_mode = getattr(info, "trade_mode", None)
-    if trade_mode == real:
-        raise RuntimeError("account trade_mode is REAL — refused (demo only)")
-    if trade_mode == demo:
-        return "DEMO"
-    if trade_mode == contest:
-        return "CONTEST"
-    raise RuntimeError(f"account trade_mode {trade_mode!r} is not a known non-real mode")
+# verify_demo_account moved to src/broker/mt5_data_adapter.py so every runner
+# (shadow, bounded session, continuous service) shares ONE readiness gate.
+from src.broker.mt5_data_adapter import verify_demo_account  # noqa: E402,F401
 
 
 # --------------------------------------------------------------------------

@@ -2473,3 +2473,110 @@ tests/test_demo_evaluation.py (new), tests/test_demo_session.py,
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-10-06
+
+## Date:
+2026-06-10
+
+## Area:
+Execution / Architecture / Operations
+
+## Decision:
+CONTINUOUS-001: one continuous MT5 trading service is now the MAIN way to run
+the system; bounded sessions and dry-runs are validation tools.
+
+(a) ONE execution stack, no demo/live forks: TradingService owns only the
+    OUTER loop; every cycle is SupervisedDemoSession.run_cycle() — the same
+    data -> DecisionPipeline -> DemoTradePlanner -> RiskGovernor ->
+    ExecutionGateway -> journal path as bounded sessions. Which account is
+    traded is decided by .env (currently Exness DEMO, so orders are demo
+    orders); whether orders are SENT is decided by the .env execution flags
+    (without them, the identical loop runs as a dry-run with simulated plans).
+(b) No fixed duration and no artificial order cap: the service runs until
+    kill switch, weekly-loss risk shutdown, operator Ctrl+C, or a fatal
+    error. Trade frequency is governed by the risk policy. The DAILY loss
+    limit pauses entries until the next UTC day (DAY_PAUSED; the governor
+    blocks, open positions remain managed) — only the WEEKLY limit stops the
+    service (03_RISK_POLICY shutdown rule).
+(c) Market-closed handling: schedule-based classification (MarketSchedule,
+    weekend + daily break, UTC) plus tick-staleness as feed ground truth.
+    Closed/stale states print clearly, heartbeat to
+    logs/service_heartbeat.jsonl, and resume automatically. No crash, no
+    journal spam.
+(d) Terminal observability: a startup banner (service, profile, MASKED
+    login, account type verified non-real, server, symbol, mode, risk
+    limits, news, kill switch, journal/report paths, stop instructions) and
+    per-cycle progress (cycle no, market state, bid/ask/spread, regime, HTF
+    bias, decision + exact reason, confidence/uncertainty, positions with
+    floating P&L, orders sent/simulated, trades today, daily P&L, risk/news/
+    kill state, next poll). Orders print their MT5 ticket plus a Toolbox/
+    Trade-tab hint.
+(e) Daily rollover writes service_eval_YYYYMMDD and
+    service_reflection_YYYYMMDD reports from the day's cycle stats + journal
+    (same evaluator as DEMO-EVAL); a final service report is written on stop.
+(f) PROVEN DEFECT found by the new tests and FIXED: ExecutionGateway built
+    order_send requests from the CANONICAL symbol ("XAUUSDM"); MT5 symbols
+    are case-sensitive, so the live terminal would have rejected the very
+    first order. The gateway now takes broker_symbol (exact case, e.g.
+    "XAUUSDm") for the request while checks keep comparing canonical forms.
+    verify_demo_account moved to src/broker/mt5_data_adapter.py as the ONE
+    shared readiness gate (REAL accounts refused until manual approval).
+(g) Operator enablement model: the service requires a fresh READY preflight
+    on every start; sending requires the .env execution flags; the DEMO-002
+    confirmation token remains an internal construction invariant supplied by
+    the runner after its own gating (per the explicit operational direction
+    that the service starts once and keeps running).
+
+## Reason:
+A serious performance evaluation needs day-scale, unattended-capable runtime
+with full observability — not hourly restarts. The risk policy, not session
+plumbing, must decide how much the system trades.
+
+## Evidence:
+tests/test_trading_service.py (15): banner + per-cycle progress, runs past
+the old 8h ceiling, governor (not a cap) limits orders to 3/day, market
+closed waits + heartbeats + resumes, stale feed waits, restart reconciles a
+journaled position and detects a close that happened while down (real P&L),
+kill switch / weekly-loss shutdown / Ctrl+C stop cleanly with reports, daily
+loss pauses without stopping, fatal errors reported, daily rollover writes
+evaluation + reflection, dry-run cannot reach order_send, no credentials in
+terminal/reports/heartbeat (login masked). tests/test_market_hours.py (6).
+Full suite: 583 passed. pre_demo_safety_check.sh passed.
+
+## Alternatives Considered:
+- A separate "live service" implementation next to the session: rejected —
+  duplicated execution logic is exactly what the architecture must avoid.
+- Stopping the service at the DAILY loss limit: rejected — it forces a
+  manual restart every losing day; the governor already blocks entries and
+  open positions still need stop management. Weekly limit stops the service.
+- Requiring a per-start confirmation token on the CLI: rejected for the
+  continuous runner — enablement lives in .env flags + fresh preflight +
+  kill switch; the token remains enforced at session construction.
+
+## Risk:
+Long unattended runs accumulate state; a wrong market schedule could pause
+trading during open hours (opportunity cost, never a safety risk) or run
+no-trade cycles while closed (validator rejects stale data anyway).
+
+## Mitigation:
+Tick staleness overrides the schedule on the open side; heartbeats and the
+banner make state visible; kill switch halts at the next check; preflight is
+fresh on every start; daily reports surface anomalies within one day.
+
+## Files Affected:
+src/execution/trading_service.py (new), src/execution/market_hours.py (new),
+src/execution/demo_session.py, src/execution/session_profiles.py,
+src/execution/gateway.py, src/execution/__init__.py,
+src/broker/mt5_data_adapter.py, scripts/trading_service.py (new),
+scripts/demo_session_run.py, scripts/live_shadow_run.py,
+scripts/generate_evidence_pack.py, tests/test_trading_service.py (new),
+tests/test_market_hours.py (new), tests/test_demo_session.py,
+tests/test_session_profiles.py, 10_TASK_QUEUE.md, 23_DEMO_TRADING_RUNBOOK.md,
+24_INTELLIGENCE_AUDIT_ROADMAP.md
+
+## Status:
+Accepted

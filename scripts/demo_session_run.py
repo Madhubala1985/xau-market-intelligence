@@ -214,6 +214,10 @@ def main() -> int:
     except ValueError as exc:
         print(f"REFUSED: {exc}")
         return 2
+    if profile.duration_minutes is None:
+        print("REFUSED: this runner is for BOUNDED sessions; the continuous "
+              "profile runs via scripts/trading_service.py")
+        return 2
 
     env_load = load_env_safely()
     payload: Dict[str, object] = {
@@ -292,7 +296,8 @@ def main() -> int:
         limits = profile.risk_limits(canonical)
         gateway = ExecutionGateway(
             RiskGovernor(limits), flags, client,
-            expected_symbol=canonical, kill_switch=kill_switch,
+            expected_symbol=canonical, broker_symbol=settings.symbol,
+            kill_switch=kill_switch,
         )
         session = SupervisedDemoSession(
             adapter=adapter,
