@@ -247,6 +247,14 @@ _TABLE: Dict[str, dict] = {
         layer="execution",
         summary="demo execution preflight gates (DEMO-001; places no orders)",
         test_file="test_demo_preflight.py", test_note="", **_MT5_BOUNDARY),
+    "src.execution.session_profiles": dict(
+        layer="execution",
+        summary="policy-bounded session risk profiles (DEMO-EVAL; can only tighten)",
+        test_file="test_session_profiles.py", test_note="", **_PURE_SHADOW_READY),
+    "src.reflection.demo_evaluation": dict(
+        layer="reflection",
+        summary="post-session evaluation + reflection reports (DEMO-EVAL; offline)",
+        test_file="test_demo_evaluation.py", test_note="", **_PURE_SHADOW_READY),
 }
 
 

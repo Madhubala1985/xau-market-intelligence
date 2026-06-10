@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DEMO-002 runner: supervised MT5 demo trading session (Windows host only).
+"""DEMO-002 / DEMO-EVAL runner: supervised MT5 demo session (Windows host only).
 
 THE ONLY script that can lead to demo orders. Hard requirements before any
 cycle runs:
@@ -13,7 +13,22 @@ cycle runs:
   5. control/KILL_SWITCH stops the session at the next cycle.
 
 Without --confirm (or with --dry-run) order sending stays DISABLED: the full
-loop runs, plans are evaluated and reported, nothing reaches order_send.
+loop runs, plans are evaluated through planner -> gateway and counted as
+SIMULATED orders, nothing reaches order_send.
+
+Session profiles (--profile) configure duration, polling, and order limits,
+bounded by 03_RISK_POLICY.md (a profile can tighten policy, never loosen it):
+
+  smoke       10 min, max ONE order (the only artificial cap; smoke runs only)
+  evaluation  60 min, policy-governed order count (DEFAULT, serious eval)
+  london      4 h, start at London open, policy-governed
+  newyork     4 h, start at New York open, policy-governed
+  full_day    8 h (hard ceiling), policy-governed
+
+"Policy-governed" means how much the session trades is decided by the risk
+policy (max 3 trades/day, 2% daily / 5% weekly loss, single position plus at
+most one protected add-on), confidence tiers, regime, and setup quality —
+NOT by an artificial per-session order cap.
 
 Real trading is forbidden: settings/flags that request real mode abort the run.
 No credential values are printed or written to any report.
@@ -22,11 +37,14 @@ Output: reports/runtime/demo_session.md + .json
 Journal: logs/demo_trade_journal.jsonl
 
 Usage (Windows MT5 host, PowerShell):
-    # dry run first (no orders possible):
-    python scripts/demo_session_run.py --dry-run --duration-minutes 10
+    # dry-run rehearsal (no orders possible, full loop + plans):
+    python scripts/demo_session_run.py --dry-run --profile evaluation
 
-    # first supervised run (max ONE order):
-    python scripts/demo_session_run.py --confirm "START SUPERVISED DEMO" --duration-minutes 60 --max-orders 1
+    # smoke run (max ONE order):
+    python scripts/demo_session_run.py --confirm "START SUPERVISED DEMO" --profile smoke
+
+    # serious 1-hour supervised evaluation (policy-governed):
+    python scripts/demo_session_run.py --confirm "START SUPERVISED DEMO" --profile evaluation
 """
 
 from __future__ import annotations
@@ -59,8 +77,9 @@ from src.execution.gateway import (  # noqa: E402
 from src.execution.kill_switch import KillSwitch  # noqa: E402
 from src.execution.live_shadow import make_live_pipeline  # noqa: E402
 from src.execution.preflight import DemoPreflight  # noqa: E402
+from src.execution.session_profiles import PROFILES, get_profile  # noqa: E402
 from src.journal.journal import TradeJournal  # noqa: E402
-from src.risk.governor import RiskGovernor, RiskLimits  # noqa: E402
+from src.risk.governor import RiskGovernor  # noqa: E402
 from src.risk.news_guard import NewsRiskGuard  # noqa: E402
 
 OUT_DIR = REPO_ROOT / "reports" / "runtime"
@@ -103,6 +122,7 @@ def render_markdown(payload: Dict[str, object]) -> str:
     lines.append(f"- Verdict: **{payload.get('verdict', 'n/a')}**")
     lines.append(f"- Symbol: {payload.get('symbol')}")
     lines.append(f"- Mode: {payload.get('mode')}")
+    lines.append(f"- Profile: {payload.get('profile', 'n/a')}")
     lines.append("- Real trading: **FORBIDDEN**")
     if payload.get("detail"):
         lines.append(f"- Detail: {payload['detail']}")
@@ -112,7 +132,8 @@ def render_markdown(payload: Dict[str, object]) -> str:
         lines.append("## Session summary")
         lines.append("")
         for key in ("started_at_utc", "ended_at_utc", "cycles", "decisions_logged",
-                    "orders_sent", "orders_rejected", "entries_blocked",
+                    "max_orders", "orders_sent", "orders_simulated",
+                    "orders_rejected", "entries_blocked",
                     "stop_updates", "violations", "halt_reason"):
             lines.append(f"- {key}: {report.get(key)}")
         recon = report.get("final_reconciliation")
@@ -140,24 +161,67 @@ def write_report(payload: Dict[str, object], name: str) -> Dict[str, Path]:
     return {"markdown": md_path, "json": json_path}
 
 
+_UNSET = object()  # argparse runs `type` on STRING defaults; an object skips it
+
+
+def parse_max_orders(value: str):
+    """Parse --max-orders: an integer cap, or 'policy'/'none' for no cap."""
+    text = value.strip().lower()
+    if text in ("policy", "none"):
+        return None
+    count = int(text)
+    if count < 0:
+        raise argparse.ArgumentTypeError("--max-orders must be >= 0")
+    return count
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--confirm", default="",
                         help=f"exact confirmation token: {CONFIRMATION_TOKEN!r}")
     parser.add_argument("--dry-run", action="store_true",
-                        help="full loop with order sending DISABLED")
-    parser.add_argument("--duration-minutes", type=float, required=True)
-    parser.add_argument("--poll-seconds", type=float, default=30.0)
-    parser.add_argument("--max-orders", type=int, default=1)
+                        help="full loop with order sending DISABLED; approved "
+                             "plans are counted as SIMULATED orders")
+    parser.add_argument("--profile", default="evaluation",
+                        choices=sorted(PROFILES),
+                        help="session risk profile (policy-bounded); "
+                             "default: evaluation")
+    parser.add_argument("--duration-minutes", type=float, default=None,
+                        help="override the profile duration")
+    parser.add_argument("--poll-seconds", type=float, default=None,
+                        help="override the profile poll interval")
+    parser.add_argument("--max-orders", type=parse_max_orders, default=_UNSET,
+                        help="override the profile session order cap: an "
+                             "integer, or 'policy' for no artificial cap")
+    parser.add_argument("--max-open-positions", type=int, default=None,
+                        help="override the profile max open positions "
+                             "(policy bound still applies)")
     parser.add_argument("--report-name", default="demo_session")
     parser.add_argument("--stdout", action="store_true")
     args = parser.parse_args()
+
+    profile = get_profile(args.profile)
+    try:
+        profile = profile.with_overrides(
+            duration_minutes=args.duration_minutes,
+            poll_seconds=args.poll_seconds,
+            max_orders=(args.max_orders if args.max_orders is not _UNSET
+                        else profile.max_orders),
+            max_open_positions=args.max_open_positions,
+        )
+    except ValueError as exc:
+        print(f"REFUSED: {exc}")
+        return 2
 
     env_load = load_env_safely()
     payload: Dict[str, object] = {
         "task": "DEMO-002", "env_load": env_load,
         "symbol": str(os.environ.get("MT5_SYMBOL", "XAUUSD")).strip() or "XAUUSD",
         "mode": "DRY_RUN" if args.dry_run else "SUPERVISED_DEMO",
+        "profile": profile.name,
+        "max_orders": profile.max_orders,
     }
 
     # Confirmation gating (before anything touches MT5).
@@ -221,16 +285,20 @@ def main() -> int:
 
         # Execution flags: env-driven for the confirmed run, hard-disabled
         # for --dry-run. Real mode aborts inside the gateway/session anyway.
+        # A dry run keeps the profile's order limits so it rehearses the
+        # exact loop the live run will execute; approved plans surface as
+        # SIMULATED orders and never reach order_send.
         flags = ExecutionFlags() if args.dry_run else load_execution_flags(os.environ)
-        limits = RiskLimits(expected_symbol=canonical, max_open_trades=2,
-                            max_spread=1.0)
+        limits = profile.risk_limits(canonical)
         gateway = ExecutionGateway(
             RiskGovernor(limits), flags, client,
             expected_symbol=canonical, kill_switch=kill_switch,
         )
         session = SupervisedDemoSession(
             adapter=adapter,
-            pipeline=make_live_pipeline(canonical),
+            pipeline=make_live_pipeline(
+                canonical, max_spread_price=profile.max_spread_price
+            ),
             planner=DemoTradePlanner(limits=limits),
             gateway=gateway,
             journal=TradeJournal(JOURNAL_PATH),
@@ -239,11 +307,12 @@ def main() -> int:
             preflight=preflight,
             news_guard=news_guard,
             kill_switch=kill_switch,
-            max_orders=0 if args.dry_run else args.max_orders,
+            max_orders=profile.max_orders,
+            profile_name=profile.name,
         )
         report = session.run(
-            duration_seconds=args.duration_minutes * 60.0,
-            poll_seconds=args.poll_seconds,
+            duration_seconds=profile.duration_minutes * 60.0,
+            poll_seconds=profile.poll_seconds,
         )
         payload["report"] = report.to_dict()
         payload["verdict"] = report.verdict

@@ -531,3 +531,118 @@ def test_report_contains_no_credentials(tmp_path):
     blob = _json.dumps(report.to_dict())
     assert SECRET_PASSWORD not in blob
     assert LOGIN_VALUE not in blob
+
+# ---------------------------------------------------------------------------
+# DEMO-EVAL: policy-governed limits, dry-run rehearsal, cycle stats
+# ---------------------------------------------------------------------------
+
+from dataclasses import replace as _dc_replace
+
+
+def approved_result_with_id(i: int) -> PipelineResult:
+    base = approved_result()
+    decision = base.decision.model_copy(update={"decision_id": f"D-{i}"})
+    return _dc_replace(base, decision=decision)
+
+
+def closing_sleep(fake, pnl=+10.0):
+    """Between cycles, close every open fake position with the given P&L."""
+    def _sleep(_seconds):
+        for ticket in list(fake.positions):
+            fake.close_position(ticket, pnl)
+    return _sleep
+
+
+def test_no_artificial_cap_policy_governs_order_count(tmp_path):
+    """max_orders=None: order count is bounded by the RISK POLICY (3/day),
+    not by a hardcoded one-order session cap."""
+    fake = FakeMT5Trading()
+    results = [approved_result_with_id(i) for i in range(1, 6)]
+    session, fake, journal, _ = make_session(
+        tmp_path, results=results, fake=fake, max_orders=None,
+        sleep=closing_sleep(fake),
+    )
+    report = session.run(duration_seconds=1000.0, poll_seconds=1.0, max_cycles=5)
+
+    # Exactly the policy's max_trades_per_day fills, never more.
+    assert report.orders_sent == 3
+    assert report.max_orders is None
+    # The 4th/5th attempts were blocked by the GOVERNOR, not a session cap.
+    assert not any("max_orders" in e.detail for e in report.events)
+    assert any(
+        e.kind == "PLAN_BLOCKED" and "RISK_BLOCKED" in e.detail
+        for e in report.events
+    )
+    # All three closes were detected with real P&L.
+    closed = [r for r in journal.records() if r.outcome is TradeOutcome.WIN]
+    assert len(closed) == 3
+
+
+def test_smoke_cap_remains_available_for_smoke_runs(tmp_path):
+    session, fake, _, _ = make_session(
+        tmp_path, results=[approved_result_with_id(1), approved_result_with_id(2)],
+        max_orders=1,
+    )
+    report = session.run(duration_seconds=100.0, poll_seconds=1.0, max_cycles=2)
+    assert report.orders_sent == 1
+    assert any(
+        e.kind == "ENTRY_BLOCKED" and "max_orders=1" in e.detail
+        for e in report.events
+    )
+
+
+def test_dry_run_rehearses_full_entry_path_without_order_send(tmp_path):
+    """DRY_RUN must exercise planner -> gateway and count SIMULATED orders;
+    nothing reaches order_send and nothing is journaled as an open trade."""
+    session, fake, journal, _ = make_session(
+        tmp_path, results=[approved_result()], flags=ExecutionFlags(),
+        max_orders=None,
+    )
+    report = session.run(duration_seconds=1.0, poll_seconds=1.0, max_cycles=1)
+    assert report.mode == "DRY_RUN"
+    assert report.orders_simulated == 1
+    assert report.orders_sent == 0
+    fake.order_send.assert_not_called()
+    assert any(e.kind == "ORDER_SIMULATED" for e in report.events)
+    assert journal.records() == []
+
+
+def test_dry_run_rehearses_the_smoke_cap(tmp_path):
+    """Simulated orders count against the session cap, so a dry run shows the
+    exact cap behavior the live run will have."""
+    session, fake, _, _ = make_session(
+        tmp_path,
+        results=[approved_result_with_id(1), approved_result_with_id(2)],
+        flags=ExecutionFlags(), max_orders=1,
+    )
+    report = session.run(duration_seconds=100.0, poll_seconds=1.0, max_cycles=2)
+    assert report.orders_simulated == 1
+    fake.order_send.assert_not_called()
+    assert any(
+        e.kind == "ENTRY_BLOCKED" and "max_orders=1" in e.detail
+        for e in report.events
+    )
+
+
+def test_cycle_stats_capture_evaluation_data(tmp_path):
+    session, _, _, _ = make_session(
+        tmp_path, results=[approved_result(), no_trade_result()],
+        max_orders=None, profile_name="evaluation",
+    )
+    report = session.run(duration_seconds=100.0, poll_seconds=1.0, max_cycles=2)
+    assert report.profile == "evaluation"
+    assert report.mode == "DEMO_LIVE"
+    assert len(report.cycle_stats) == 2
+    first, second = report.cycle_stats
+    assert first.direction == "LONG"
+    assert first.approved is True
+    assert first.confidence == pytest.approx(0.75)
+    assert first.entry_action == "SENT"
+    assert first.news_known is True
+    assert first.spread_price == pytest.approx(0.18)
+    assert second.entry_action == "NONE"
+    assert second.stage == "HYPOTHESIS"
+    payload = report.to_dict()
+    assert len(payload["cycle_stats"]) == 2
+    assert payload["mode"] == "DEMO_LIVE"
+    assert payload["orders_simulated"] == 0

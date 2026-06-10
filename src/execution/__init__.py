@@ -38,9 +38,15 @@ from src.execution.demo_planner import (
 )
 from src.execution.demo_session import (
     CONFIRMATION_TOKEN,
+    CycleStat,
     DemoSessionReport,
     SessionEvent,
     SupervisedDemoSession,
+)
+from src.execution.session_profiles import (
+    PROFILES,
+    SessionProfile,
+    get_profile,
 )
 
 __all__ = [
@@ -71,9 +77,14 @@ __all__ = [
     "TradePlan",
     "PlanCheck",
     "confidence_tier",
-    # Supervised demo session (DEMO-002)
+    # Supervised demo session (DEMO-002 / DEMO-EVAL)
     "SupervisedDemoSession",
     "DemoSessionReport",
     "SessionEvent",
+    "CycleStat",
     "CONFIRMATION_TOKEN",
+    # Session risk profiles (DEMO-EVAL)
+    "SessionProfile",
+    "PROFILES",
+    "get_profile",
 ]

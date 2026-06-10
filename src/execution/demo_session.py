@@ -1,4 +1,4 @@
-"""Supervised MT5 demo trading session (Task DEMO-002).
+"""Supervised MT5 demo trading session (Tasks DEMO-002 / DEMO-EVAL).
 
 The ONLY component that may lead to a demo order being sent — and it still
 cannot send anything itself: every order goes through DemoTradePlanner (sizing
@@ -21,10 +21,25 @@ Per cycle:
  6. stop protection: break-even/trailing proposals applied ONLY via
     gateway.modify_stop (never widens, kill-switch aware),
  7. entry: planner plan -> gateway execute; a FILLED order is journaled with
-    its MT5 ticket (notes="ticket=<n>") for future reconciliation,
- 8. max_orders cap (default 1 for the first supervised run).
+    its MT5 ticket (notes="ticket=<n>") for future reconciliation.
 
-Every step is recorded as a SessionEvent for the session report.
+Order limits (DEMO-EVAL): `max_orders=None` (the default) imposes NO
+artificial per-session cap — how much the session trades is governed by the
+risk policy (max trades/day, daily/weekly loss, open-position and duplicate
+checks), confidence tiers, regime, and setup quality. An integer cap remains
+available for smoke runs (session profile "smoke" sets 1).
+
+Modes (separated honestly in the report):
+- DEMO_LIVE: gateway flags enable demo sending; FILLED orders are real MT5
+  demo orders with broker tickets.
+- DRY_RUN: sending disabled; approved plans still flow planner -> gateway and
+  are counted as `orders_simulated` (rehearsal of the same code path, nothing
+  reaches order_send and nothing is journaled as an open trade).
+Shadow analysis (no gateway at all) lives in LiveShadowSession, not here.
+
+Every step is recorded as a SessionEvent, and every cycle adds a CycleStat
+(regime, session, confidence, spread, news/risk state, entry action) so the
+post-session evaluation and reflection reports can analyze the session.
 """
 
 from __future__ import annotations
@@ -72,34 +87,88 @@ class SessionEvent:
 
 
 @dataclass(frozen=True)
+class CycleStat:
+    """Per-cycle evaluation data (credential-free) for post-session analysis."""
+
+    time_utc: datetime
+    stage: str
+    direction: str
+    approved: bool
+    reason: str
+    spread_price: float
+    confidence: Optional[float] = None
+    uncertainty: Optional[float] = None
+    regime: Optional[str] = None
+    session: Optional[str] = None
+    htf_bias: Optional[str] = None
+    news_known: bool = False
+    news_risky: bool = False
+    risk_action: Optional[str] = None
+    # What the entry path did this cycle:
+    # NONE (not actionable/approved) | SENT | SIMULATED | REJECTED |
+    # PLAN_BLOCKED | ENTRY_BLOCKED | CAP_REACHED
+    entry_action: str = "NONE"
+    entry_detail: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "time_utc": self.time_utc.isoformat(),
+            "stage": self.stage,
+            "direction": self.direction,
+            "approved": self.approved,
+            "reason": self.reason,
+            "spread_price": self.spread_price,
+            "confidence": self.confidence,
+            "uncertainty": self.uncertainty,
+            "regime": self.regime,
+            "session": self.session,
+            "htf_bias": self.htf_bias,
+            "news_known": self.news_known,
+            "news_risky": self.news_risky,
+            "risk_action": self.risk_action,
+            "entry_action": self.entry_action,
+            "entry_detail": self.entry_detail,
+        }
+
+
+@dataclass(frozen=True)
 class DemoSessionReport:
     """Summary of one supervised demo session (credential-free)."""
 
     symbol: str
+    mode: str  # DEMO_LIVE | DRY_RUN
     started_at_utc: datetime
     ended_at_utc: datetime
     cycles: int
     decisions_logged: int
     entries_blocked: int
-    orders_sent: int
+    orders_sent: int        # real MT5 demo orders (FILLED, ticket captured)
+    orders_simulated: int   # DRY_RUN approvals (sending disabled rehearsal)
     orders_rejected: int
     stop_updates: int
     violations: int
     verdict: str  # CLEAN | HALTED_BY_KILL_SWITCH | ATTENTION_REQUIRED
     halt_reason: str
     final_reconciliation: Optional[dict]
+    profile: str = ""
+    max_orders: Optional[int] = None
     events: Tuple[SessionEvent, ...] = field(default_factory=tuple)
+    cycle_stats: Tuple[CycleStat, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict:
         return {
             "task": "DEMO-002",
             "symbol": self.symbol,
+            "mode": self.mode,
+            "profile": self.profile,
+            "max_orders": self.max_orders,
             "started_at_utc": self.started_at_utc.isoformat(),
             "ended_at_utc": self.ended_at_utc.isoformat(),
             "cycles": self.cycles,
             "decisions_logged": self.decisions_logged,
             "entries_blocked": self.entries_blocked,
             "orders_sent": self.orders_sent,
+            "orders_simulated": self.orders_simulated,
             "orders_rejected": self.orders_rejected,
             "stop_updates": self.stop_updates,
             "violations": self.violations,
@@ -107,6 +176,7 @@ class DemoSessionReport:
             "halt_reason": self.halt_reason,
             "final_reconciliation": self.final_reconciliation,
             "events": [e.to_dict() for e in self.events],
+            "cycle_stats": [c.to_dict() for c in self.cycle_stats],
         }
 
 
@@ -128,7 +198,8 @@ class SupervisedDemoSession:
         kill_switch: KillSwitch,
         reconciler: Optional[PositionReconciler] = None,
         protection: Optional[PositionProtectionManager] = None,
-        max_orders: int = 1,
+        max_orders: Optional[int] = None,
+        profile_name: str = "",
         risk_pct: float = 0.005,
         exec_timeframe: Timeframe = Timeframe.M5,
         exec_count: int = 300,
@@ -149,8 +220,8 @@ class SupervisedDemoSession:
             )
         if gateway.flags.real_requested:
             raise ValueError("real trading is forbidden; gateway requests real mode")
-        if max_orders < 0:
-            raise ValueError("max_orders must be >= 0")
+        if max_orders is not None and max_orders < 0:
+            raise ValueError("max_orders must be >= 0 (or None: policy-governed)")
         self._adapter = adapter
         self._pipeline = pipeline
         self._planner = planner
@@ -162,6 +233,7 @@ class SupervisedDemoSession:
         self._reconciler = reconciler or PositionReconciler()
         self._protection = protection or PositionProtectionManager()
         self._max_orders = max_orders
+        self._profile_name = profile_name
         self._risk_pct = risk_pct
         self._exec_tf = exec_timeframe
         self._exec_count = exec_count
@@ -173,7 +245,9 @@ class SupervisedDemoSession:
         self._now = now
         # session counters
         self._events: List[SessionEvent] = []
+        self._cycle_stats: List[CycleStat] = []
         self._orders_sent = 0
+        self._orders_simulated = 0
         self._orders_rejected = 0
         self._stop_updates = 0
         self._entries_blocked = 0
@@ -220,12 +294,16 @@ class SupervisedDemoSession:
         verdict = self._verdict(last_reconciliation)
         return DemoSessionReport(
             symbol=self._symbol,
+            mode=(
+                "DEMO_LIVE" if self._gateway.flags.demo_send_enabled else "DRY_RUN"
+            ),
             started_at_utc=started,
             ended_at_utc=ended,
             cycles=cycles,
             decisions_logged=self._decisions_logged,
             entries_blocked=self._entries_blocked,
             orders_sent=self._orders_sent,
+            orders_simulated=self._orders_simulated,
             orders_rejected=self._orders_rejected,
             stop_updates=self._stop_updates,
             violations=self._violations,
@@ -234,7 +312,10 @@ class SupervisedDemoSession:
             final_reconciliation=(
                 last_reconciliation.to_dict() if last_reconciliation else None
             ),
+            profile=self._profile_name,
+            max_orders=self._max_orders,
             events=tuple(self._events),
+            cycle_stats=tuple(self._cycle_stats),
         )
 
     # -- one cycle -------------------------------------------------------------
@@ -291,11 +372,51 @@ class SupervisedDemoSession:
         self._manage_positions(positions, exec_candles)
 
         # Entry path.
+        entry_action, entry_detail = "NONE", ""
         if decision.direction in (Direction.LONG, Direction.SHORT) and result.approved:
-            self._try_entry(
+            entry_action, entry_detail = self._try_entry(
                 decision, result, broker, spread_price, positions,
                 reconciliation, news, risk_state, now,
             )
+
+        context = result.context
+        self._cycle_stats.append(
+            CycleStat(
+                time_utc=now,
+                stage=result.stage.value,
+                direction=decision.direction.value,
+                approved=bool(result.approved),
+                reason=result.reason,
+                spread_price=spread_price,
+                confidence=(
+                    result.confidence.confidence
+                    if result.confidence is not None else None
+                ),
+                uncertainty=(
+                    result.confidence.uncertainty
+                    if result.confidence is not None else None
+                ),
+                regime=(
+                    context.regime.value
+                    if context is not None and context.regime is not None else None
+                ),
+                session=(
+                    context.session.value
+                    if context is not None and context.session is not None else None
+                ),
+                htf_bias=(
+                    context.htf_bias.value
+                    if context is not None and context.htf_bias is not None else None
+                ),
+                news_known=news.known,
+                news_risky=news.risky,
+                risk_action=(
+                    result.risk.action.value if result.risk is not None else None
+                ),
+                entry_action=entry_action,
+                entry_detail=entry_detail,
+            )
+        )
         return reconciliation
 
     # -- close detection ---------------------------------------------------------
@@ -390,18 +511,26 @@ class SupervisedDemoSession:
         news,
         risk_state,
         now: datetime,
-    ) -> None:
-        if self._orders_sent >= self._max_orders:
+    ) -> Tuple[str, str]:
+        """Run the planner -> gateway entry path; returns (action, detail).
+
+        The session-level cap applies only when max_orders is an integer
+        (smoke runs). Real sends and dry-run simulations both count against
+        it, so a dry-run rehearses the same cap behavior the live run has.
+        """
+        if (
+            self._max_orders is not None
+            and self._orders_sent + self._orders_simulated >= self._max_orders
+        ):
             self._entries_blocked += 1
-            self._event(
-                "ENTRY_BLOCKED",
-                f"session max_orders={self._max_orders} reached; manage-only",
-            )
-            return
+            detail = f"session max_orders={self._max_orders} reached; manage-only"
+            self._event("ENTRY_BLOCKED", detail)
+            return "CAP_REACHED", detail
         if broker.balance is None or broker.balance <= 0 or broker.leverage is None:
             self._entries_blocked += 1
-            self._event("ENTRY_BLOCKED", "account balance/leverage unknown")
-            return
+            detail = "account balance/leverage unknown"
+            self._event("ENTRY_BLOCKED", detail)
+            return "ENTRY_BLOCKED", detail
 
         account = AccountSnapshot(
             balance=broker.balance,
@@ -433,11 +562,9 @@ class SupervisedDemoSession:
         )
         if not plan.approved:
             self._entries_blocked += 1
-            self._event(
-                "PLAN_BLOCKED",
-                f"{[c.value for c in plan.failed_checks]}: {plan.reasons[0]}",
-            )
-            return
+            detail = f"{[c.value for c in plan.failed_checks]}: {plan.reasons[0]}"
+            self._event("PLAN_BLOCKED", detail)
+            return "PLAN_BLOCKED", detail
 
         # The planner's lot already encodes tier + governor budget; the
         # gateway re-runs the governor with size_factor_hint=1.0 so the
@@ -483,28 +610,32 @@ class SupervisedDemoSession:
                 notes=_TICKET_NOTE.format(ticket=exec_result.order_ticket),
             )
             self._journal.log_record(record)
-            self._event(
-                "ORDER_SENT",
+            detail = (
                 f"ticket={exec_result.order_ticket} lot={plan.lot_size} "
                 f"tier={plan.tier.value} addon={plan.is_addon} "
-                f"sl={decision.stop_loss}",
+                f"sl={decision.stop_loss}"
             )
-        elif exec_result.status is ExecutionStatus.DRY_RUN:
-            self._event(
-                "ORDER_DRY_RUN",
+            self._event("ORDER_SENT", detail)
+            return "SENT", detail
+        if exec_result.status is ExecutionStatus.DRY_RUN:
+            self._orders_simulated += 1
+            detail = (
                 f"approved plan lot={plan.lot_size} tier={plan.tier.value}; "
-                f"sending disabled (dry run)",
+                f"sending disabled (dry run)"
             )
-        elif exec_result.sent:
+            self._event("ORDER_SIMULATED", detail)
+            return "SIMULATED", detail
+        if exec_result.sent:
             self._orders_rejected += 1
             self._event("ORDER_REJECTED", exec_result.reason)
-        else:
-            self._entries_blocked += 1
-            self._event(
-                "ENTRY_BLOCKED",
-                f"gateway blocked: {[c.value for c in exec_result.failed_checks]} "
-                f"({exec_result.reason})",
-            )
+            return "REJECTED", exec_result.reason
+        self._entries_blocked += 1
+        detail = (
+            f"gateway blocked: {[c.value for c in exec_result.failed_checks]} "
+            f"({exec_result.reason})"
+        )
+        self._event("ENTRY_BLOCKED", detail)
+        return "ENTRY_BLOCKED", detail
 
     # -- helpers -----------------------------------------------------------------
     def _as_decision(self, result: PipelineResult, now: datetime) -> TradeDecision:

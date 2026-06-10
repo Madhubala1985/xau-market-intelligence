@@ -2367,3 +2367,109 @@ tests/test_demo_preflight.py
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-10-05
+
+## Date:
+2026-06-10
+
+## Area:
+Execution / Risk / Reflection / Architecture
+
+## Decision:
+DEMO-EVAL: the supervised demo session is now a serious, policy-governed
+evaluation engine; the one-order session cap is demoted to an optional
+smoke-test parameter.
+
+(a) Session risk profiles (src/execution/session_profiles.py): smoke /
+    evaluation / london / newyork / full_day. A profile configures duration,
+    polling, session order cap, and the RiskLimits handed to the governor and
+    planner. Construction-time validation guarantees a profile can TIGHTEN
+    the 03_RISK_POLICY demo limits but never loosen them, so configurability
+    cannot become a risk bypass.
+(b) max_orders is now Optional: None (the serious-evaluation default) means
+    NO artificial per-session cap — order count is governed by the risk
+    policy (3 trades/day, 2% daily / 5% weekly loss, single position plus at
+    most one protected add-on), confidence tiers, regime, and setup quality.
+    max_orders=1 survives only in the smoke profile.
+(c) Dry-run defect fixed: the runner previously forced max_orders=0, which
+    blocked the entry path BEFORE the planner — a dry run never rehearsed
+    the path it claimed to validate. Dry-run now keeps the profile limits;
+    approved plans flow planner -> gateway, are counted as orders_simulated
+    (ORDER_SIMULATED events), count against the session cap exactly like
+    real sends, and never reach order_send (flags stay disabled).
+(d) Mode separation is explicit and never mixed: DEMO_LIVE (real MT5 demo
+    orders, tickets journaled) vs DRY_RUN (simulated approvals) in the
+    session report; shadow analysis remains LiveShadowSession. The
+    evaluation report separates trades_real / trades_simulated / decisions.
+(e) Per-cycle CycleStats (regime, session, HTF bias, confidence, spread,
+    news state, risk action, entry action) are recorded in the session
+    report as the evidence base for post-session analysis.
+(f) Post-session intelligence (src/reflection/demo_evaluation.py +
+    scripts/demo_eval_report.py + scripts/demo_reflection.py): evaluation
+    report (totals, distributions, no-trade reasons, news/risk blocks,
+    realized P&L, max drawdown, win/loss, mistakes) with findings classified
+    as PROVEN_DEFECT / HIGH_CONFIDENCE_DEFECT / HYPOTHESIS / OBSERVATION /
+    DESIGN_IMPROVEMENT, and a reflection report (did well / too strict /
+    too loose / missed opportunities / avoided correctly / backtest-first /
+    fix-now). Both are offline file readers; no live self-mutation. Untaken
+    trades are honestly HYPOTHESIS (no hindsight data), routed to "backtest
+    before changing".
+(g) Demo-to-real path stays configuration-shaped: the same session, planner,
+    gateway, journal, reconciliation, and stop management run in every mode;
+    real mode remains refused at construction/gateway/flags and would later
+    arrive via approved configuration + readiness gates, not a rewrite.
+
+## Reason:
+The first supervised run was designed around max ONE order, which is correct
+as a first-evidence step but useless for evaluating real demo performance.
+The evaluation engine must produce statistically meaningful sessions while
+keeping every risk rule intact — the cap moves into configuration, the risk
+policy stays the authority.
+
+## Evidence:
+tests/test_session_profiles.py (12): registry, policy-bound construction and
+overrides, smoke-only cap. tests/test_demo_evaluation.py (10): totals,
+distributions, P&L/win-rate/max-drawdown, mode separation, classification
+correctness, untradeable-market recognition, cap-too-strict surfacing,
+hypothesis routing, credential-free rendering. tests/test_demo_session.py
+(+5): policy governs order count with max_orders=None (exactly 3 fills, 4th
+blocked by the GOVERNOR, not a cap), smoke cap intact, dry-run rehearses the
+full entry path without order_send and respects the cap, cycle stats
+recorded. Full suite: 559 passed. pre_demo_safety_check.sh passed.
+
+## Alternatives Considered:
+- Keeping max_orders=1 default and asking the operator to always pass a
+  bigger number: rejected — the artificial cap would stay the system's
+  design center and dry-runs would keep rehearsing nothing.
+- Raising policy limits (trades/day) for evaluation sessions: rejected —
+  03_RISK_POLICY is the authority; evaluation throughput comes from session
+  length, not looser risk.
+- Journaling simulated dry-run orders as TradeRecords: rejected — fake OPEN
+  records would poison reconciliation (orphan_journal) and loss tracking;
+  simulations live in the session report only.
+
+## Risk:
+Longer policy-governed sessions can take up to 3 real demo trades/day;
+the operator supervises, the kill switch halts at the next cycle, and the
+daily/weekly loss limits operate on real journaled P&L.
+
+## Mitigation:
+Smoke profile first; dry-run rehearsal of the same profile; news fail-closed;
+preflight required fresh on every start; reflection/evaluation reports after
+every session before any longer run.
+
+## Files Affected:
+src/execution/session_profiles.py (new), src/execution/demo_session.py,
+src/execution/__init__.py, src/reflection/demo_evaluation.py (new),
+src/reflection/__init__.py, scripts/demo_session_run.py,
+scripts/demo_eval_report.py (new), scripts/demo_reflection.py (new),
+scripts/generate_evidence_pack.py, tests/test_session_profiles.py (new),
+tests/test_demo_evaluation.py (new), tests/test_demo_session.py,
+10_TASK_QUEUE.md, 23_DEMO_TRADING_RUNBOOK.md, 24_INTELLIGENCE_AUDIT_ROADMAP.md
+
+## Status:
+Accepted

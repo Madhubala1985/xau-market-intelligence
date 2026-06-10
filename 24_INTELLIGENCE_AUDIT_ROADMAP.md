@@ -257,3 +257,91 @@ switch, journal, validator, settings/adapter/connectivity, and policies 03/13/
 correctness (structure/liquidity/sweep math) was accepted on the strength of
 existing unit tests; replay validation on real XAUUSDm data (LIVE-002 +
 backtest replay) is the designated proving ground for those.
+
+---
+
+# 6. DEMO-EVAL audit — 2026-06-10 (third pass)
+
+Scope: turn DEMO-002 from a one-order toy test into a serious demo evaluation
+engine without weakening risk; audit the gold-movement intelligence honestly.
+
+## 6.1 Fixed in this pass
+
+### F-8. The one-order cap was wired as the system's design center
+- **Class:** Design defect (FIXED)
+- **Evidence:** SupervisedDemoSession defaulted max_orders=1 and the runner
+  hardcoded RiskLimits; no configuration layer existed.
+- **Fix:** policy-bounded session profiles (smoke/evaluation/london/newyork/
+  full_day); max_orders=None (policy-governed) is the serious default; the
+  artificial cap survives only in the smoke profile. Profiles can tighten
+  03_RISK_POLICY, never loosen it (construction-time validation + tests).
+
+### F-9. Dry-run never rehearsed the entry path it claimed to validate
+- **Class:** High-Confidence Defect (FIXED)
+- **Evidence:** the runner forced max_orders=0 for --dry-run, so every cycle
+  hit the session cap BEFORE the planner; sizing/pyramiding/governor/gateway
+  logic was never exercised in rehearsal.
+- **Fix:** dry-run keeps the profile limits; approved plans flow planner ->
+  gateway, surface as ORDER_SIMULATED / orders_simulated, count against the
+  cap like real sends, and (flags disabled) can never reach order_send.
+
+### F-10. No post-session intelligence existed
+- **Class:** Design gap (FIXED)
+- **Fix:** CycleStats per cycle; SessionEvaluator + reflection builder
+  (src/reflection/demo_evaluation.py); scripts demo_eval_report.py and
+  demo_reflection.py. Findings use the standard classifications; untaken
+  trades are HYPOTHESIS (no hindsight), routed to backtest-first. Offline
+  only — no live self-mutation (04_ADAPTATION_POLICY).
+
+## 6.2 Gold-movement intelligence factor map (honest status)
+
+| Factor | Status | Where |
+|---|---|---|
+| XAU volatility | WIRED (regime classes + ATR in stops/trailing); no dedicated tradable-vs-dangerous volatility classifier beyond regime+spread | regime_engine, stop_placement, trailing |
+| Spread | WIRED (governor price-unit max + execution-quality scoring, F-2) | governor, pipeline |
+| Session behavior | WIRED (Asian/London/NY/overlap classification, kill-zone scoring) | sessions, pipeline |
+| London/NY activity | WIRED (kill-zone confidence) + new london/newyork profiles | session_profiles |
+| Liquidity sweeps | WIRED — the core setup driver (confirmed aligned sweep-reclaim) | sweep, pipeline |
+| BOS/CHOCH | WIRED (structure bias feeds scoring) | market_structure |
+| FVG / order blocks / premium-discount | **NOT WIRED** — implemented + tested (zones.py, premium_discount.py) but absent from DecisionPipeline | see F-11 |
+| HTF bias | WIRED (daily/H4) | htf_bias |
+| Regime | WIRED | regime_engine |
+| News / macro risk | WIRED fail-closed; sources are manual block + static calendar only (no live feed — honest, F-5) | news_guard |
+| Stop placement | WIRED (beyond invalidation, ATR + liquidity buffer) | stop_placement |
+| Trailing / break-even | WIRED (proposals -> gateway.modify_stop, never widens) | position_manager, gateway |
+| Risk state | WIRED (journal-driven daily/weekly loss, streaks, F-1) | state_tracker |
+| Futures confirmation | Engine wired but EFFECTIVELY INACTIVE live: no futures feed exists, PipelineInput.futures_candles is always None (degrades gracefully by design) | see F-12 |
+
+## 6.3 Open findings (recorded, not silently implemented)
+
+### F-11. Zone/premium-discount intelligence is not in the live decision path
+- **Class:** Design Improvement (backtest before changing)
+- **Evidence:** src/structure/zones.py and premium_discount.py are referenced
+  nowhere outside their tests; setups rely on sweep-reclaim + HTF bias only.
+- **Why not fixed now:** wiring them changes live trade selection; the
+  adaptation policy requires backtest evidence before strategy changes. The
+  standing finding is emitted into every evaluation report so it cannot be
+  forgotten.
+
+### F-12. Futures confirmation has no live data source
+- **Class:** Observation
+- **Impact:** confidence never gets the futures boost/contradiction signal in
+  live sessions; engine degrades to neutral as designed. Needs a data source
+  decision before it can matter.
+
+### F-13. No dedicated dangerous-volatility classifier
+- **Class:** Hypothesis (backtest before changing)
+- **Evidence:** 03_RISK_POLICY distinguishes tradable vs dangerous
+  volatility; today this emerges implicitly from regime (CHOPPY/NEWS_RISK
+  score 0) + spread gates + stop-distance sizing limits, not from an explicit
+  classifier (erratic candles, feed instability, irrational stop distance).
+- **Next:** evaluate on collected demo sessions whether the implicit gates
+  block dangerous windows adequately before adding a classifier.
+
+# 7. Updated gate map — before real money (unchanged in substance)
+
+All previous real-money gates stand (multi-week demo evidence, walk-forward
+validation, validated news protection, real-mode limits 0.25%/0.5%/1.5% with
+2-loss shutdown, manual approval). DEMO-EVAL adds the evidence machinery:
+serious policy-governed sessions + evaluation/reflection reports are now the
+required artifacts for "sustained demo evidence".

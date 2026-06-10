@@ -549,3 +549,37 @@ Stop condition:
 - supervised demo session completed,
 - journal and reflection report created,
 - commit DEMO-002.
+
+---
+
+## Task DEMO-EVAL: Serious Demo Evaluation and Reflection Workflow
+
+Goal:
+Finish the supervised demo session as a serious performance-evaluation engine
+on real Exness MT5 demo execution (XAUUSDm), with the same architecture that
+will later support real mode through configuration and readiness gates.
+
+Rules:
+- Demo only; real trading forbidden.
+- Order limits configurable by session risk profile, never hardcoded to one;
+  profiles may tighten 03_RISK_POLICY demo limits, never loosen them.
+- max_orders=1 survives only as the smoke-test profile.
+- Dry-run must rehearse the full planner -> gateway path (simulated orders).
+- Reports must separate shadow decisions, dry-run simulated orders, and real
+  MT5 demo orders.
+- Post-session evaluation + reflection reports required; findings classified
+  Proven Defect / High-Confidence Defect / Hypothesis / Observation /
+  Design Improvement; no live self-mutation.
+
+Tests:
+- profile policy bounds, no artificial cap in evaluation mode, policy-driven
+  order limits, dry-run simulation, cycle stats, evaluation/reflection report
+  correctness, performance metrics, credential hygiene.
+
+Stop condition:
+- all tests pass,
+- docs updated (CURRENT_STATE, HANDOFF, DECISION_LOG, AUDIT ROADMAP, RUNBOOK),
+- commit DEMO-EVAL.
+
+Status:
+Completed in commit DEMO-EVAL.
