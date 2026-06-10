@@ -437,3 +437,98 @@ def test_no_credentials_in_terminal_reports_or_heartbeat(tmp_path):
     # the banner shows only a masked login
     assert mask_login(LOGIN_VALUE) in out
     assert mask_login("12345678") == "******78"
+
+# ---------------------------------------------------------------------------
+# INTELLIGENCE-001: terminal reasoning + opportunity audit
+# ---------------------------------------------------------------------------
+
+from src.data.enums import SessionType
+from src.regime.chop_classifier import ChopAssessment, ChopSubtype
+from src.regime.htf_bias import HtfBias
+from src.regime.regime_engine import Regime
+from src.risk.adaptive_risk import AdaptiveRiskDecision, CapitalPhase, RiskTier
+from src.strategy.confluence import ConfluenceReport, MtfAlignment
+from src.strategy.pipeline import PipelineContext, PipelineResult, PipelineStage
+from src.structure.market_structure import Bias
+
+
+def rich_no_trade_result():
+    """A NO_TRADE cycle carrying the full INTELLIGENCE-001 reasoning."""
+    mtf = MtfAlignment(d1=Bias.BEARISH, h4=Bias.BEARISH, h1=Bias.BEARISH,
+                       m15=None, m5=Bias.BEARISH, direction=Direction.SHORT,
+                       score=0.78, reason="t")
+    confluence = ConfluenceReport(
+        direction=Direction.SHORT, score=0.52, components={},
+        missing=("fvg", "order_block"),
+        statuses={"sweep": "PENDING", "bos_choch": "BOS:BEARISH",
+                  "fvg": "NONE", "order_block": "NONE",
+                  "premium_discount": "PREMIUM", "displacement": "1.2x",
+                  "orderflow": "BEARISH"},
+        reason="t",
+    )
+    chop = ChopAssessment(
+        subtype=ChopSubtype.LIQUIDITY_CHOP_WITH_SWEEP, tradeable=True,
+        reason="sweep pending confirmation", drift_ratio=0.2,
+        displacement_ratio=1.2, wick_ratio=0.4,
+    )
+    adaptive = AdaptiveRiskDecision(
+        risk_pct=0.0018, tier=RiskTier.DEFENSIVE, phase=CapitalPhase.PHASE_1,
+        reasons=("contraction: weak evidence",),
+    )
+    context = PipelineContext(
+        session=SessionType.LONDON, htf_bias=HtfBias.BEARISH,
+        regime=Regime.CHOPPY, structure_bias=Bias.BEARISH, has_setup=False,
+        regime_reason="3 structure direction flips", chop=chop, mtf=mtf,
+        confluence=confluence, displacement_ratio=1.2,
+    )
+    return PipelineResult(
+        stage=PipelineStage.HYPOTHESIS, approved=False,
+        reason="regime CHOPPY blocks new trades (LIQUIDITY_CHOP_WITH_SWEEP "
+               "tradeable but confluence 0.52 < 0.65)",
+        context=context, adaptive_risk=adaptive,
+    )
+
+
+def test_terminal_shows_full_reasoning_fields(tmp_path):
+    service, *_ , stream = make_service(
+        tmp_path, results=[rich_no_trade_result()], max_cycles=1,
+    )
+    service.run()
+    out = stream.getvalue()
+    assert "MTF d1=BEARISH h4=BEARISH h1=BEARISH m15=- m5=BEARISH" in out
+    assert "score=0.78 -> SHORT" in out
+    assert "intel sweep=PENDING bos=BOS:BEARISH fvg=NONE ob=NONE" in out
+    assert "pd=PREMIUM" in out and "flow=BEARISH" in out
+    assert "confluence=0.52 risk=DEFENSIVE 0.18%" in out
+    assert "subtype=LIQUIDITY_CHOP_WITH_SWEEP" in out
+    assert "regime_why: 3 structure direction flips" in out
+    # NO_TRADE explains exactly what evidence is missing
+    assert "needed: stronger fvg, order_block" in out
+    assert "tradeable but confluence 0.52 < 0.65" in out
+
+
+def test_opportunity_audit_triggers_after_long_no_trade(tmp_path):
+    results = [rich_no_trade_result() for _ in range(4)]
+    service, *_ , stream = make_service(tmp_path, results=results, max_cycles=4)
+    service._audit_cycles = 3
+    report = service.run()
+    assert report.cycles == 4
+    out = stream.getvalue()
+    assert "OPPORTUNITY AUDIT" in out
+    audits = sorted((tmp_path / "reports").glob("opportunity_audit_*"))
+    assert audits  # md + json written
+    blob = (tmp_path / "reports").joinpath(audits[0].name).read_text(
+        encoding="utf-8"
+    )
+    assert "Opportunity Audit" in blob or '"task"' in blob
+
+
+def test_quiet_sessions_do_not_trigger_the_audit(tmp_path):
+    # context-free no-trades (session unknown) must not accuse the gates
+    service, *_ , stream = make_service(
+        tmp_path, results=[no_trade_result()] * 4, max_cycles=4,
+    )
+    service._audit_cycles = 2
+    service.run()
+    assert "OPPORTUNITY AUDIT" not in stream.getvalue()
+    assert not list((tmp_path / "reports").glob("opportunity_audit_*"))

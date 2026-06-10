@@ -214,11 +214,18 @@ def test_pipeline_never_executes_orders():
         assert not any(banned in m.lower() for m in methods)
 
 
-def test_high_risk_setup_blocked_by_governor():
+def test_oversized_risk_cap_cannot_inflate_actual_risk():
+    """INTELLIGENCE-001: PipelineInput.risk_pct is a CAP, not the requested
+    risk. Even when the caller passes an oversized cap (5%), the adaptive
+    risk engine decides the budget and it can never exceed the policy cap."""
+    from src.risk.adaptive_risk import POLICY_RISK_CAP
+
     candles = rising(30)
     entry = candles[-1].close
     pipeline = DecisionPipeline(bullish_engines(level_price=entry - 5))
-    # risk_pct above the governor's per-trade cap -> sizing blocks -> lot 0 -> governor blocks.
     result = pipeline.decide(base_input(candles, broker=big_broker(), risk_pct=0.05))
-    assert result.approved is False
-    assert result.risk.action is RiskAction.BLOCK
+    assert result.adaptive_risk is not None
+    assert result.adaptive_risk.risk_pct <= POLICY_RISK_CAP
+    # the trade may proceed, but only at the adaptive (policy-capped) budget
+    if result.approved:
+        assert result.decision.stop_loss is not None

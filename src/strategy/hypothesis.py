@@ -29,8 +29,8 @@ from src.data.schemas import TradeDecision
 from src.regime.htf_bias import HtfBias
 from src.regime.regime_engine import Regime
 
-# Regimes in which no new trade hypothesis may be formed.
-_BLOCKING_REGIMES = frozenset({Regime.NO_TRADE, Regime.NEWS_RISK, Regime.CHOPPY})
+# Regimes that ALWAYS block a new trade hypothesis: data/news safety gates.
+_ALWAYS_BLOCKING_REGIMES = frozenset({Regime.NO_TRADE, Regime.NEWS_RISK})
 
 
 @dataclass(frozen=True)
@@ -50,6 +50,13 @@ class HypothesisInput:
     setup_type: Optional[str] = None
     confidence: float = 0.5
     uncertainty: float = 0.3
+    # Graded regime gate (INTELLIGENCE-001): CHOPPY is no longer a blind hard
+    # block. The pipeline decomposes chop into subtypes and may set this True
+    # ONLY when the subtype is tradeable AND confluence is strong. None keeps
+    # the conservative default (CHOPPY blocks). NO_TRADE / NEWS_RISK regimes
+    # block regardless of this flag — it cannot weaken the safety gates.
+    regime_allows: Optional[bool] = None
+    regime_detail: str = ""
 
 
 class TradeHypothesisEngine:
@@ -64,9 +71,16 @@ class TradeHypothesisEngine:
         # 1) Gates that block any directional hypothesis.
         if inp.htf_bias is HtfBias.NO_TRADE:
             return self._terminal(inp, Direction.NO_TRADE, "HTF bias is NO_TRADE")
-        if inp.regime in _BLOCKING_REGIMES:
+        if inp.regime in _ALWAYS_BLOCKING_REGIMES:
+            # Safety gates: never overridable, regardless of confluence.
             return self._terminal(
                 inp, Direction.NO_TRADE, f"regime {inp.regime.value} blocks new trades"
+            )
+        if inp.regime is Regime.CHOPPY and inp.regime_allows is not True:
+            detail = f" ({inp.regime_detail})" if inp.regime_detail else ""
+            return self._terminal(
+                inp, Direction.NO_TRADE,
+                f"regime CHOPPY blocks new trades{detail}",
             )
         if inp.htf_bias is HtfBias.NEUTRAL:
             return self._terminal(inp, Direction.WAIT, "HTF bias neutral; wait")

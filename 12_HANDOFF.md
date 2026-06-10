@@ -12,15 +12,35 @@ This file allows Claude sessions to resume without losing direction.
 Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task ID:
-CONTINUOUS-001 (implemented; first continuous run pending — user-started only)
+INTELLIGENCE-001 (implemented; restart + evidence collection pending —
+user-started only)
 
 ## Current Task Goal:
-Operate the continuous MT5 trading service on the Windows MT5 host against
-the .env account (Exness DEMO -> real MT5 demo orders on XAUUSDm), collect
-multi-day evidence via the daily evaluation/reflection reports.
+Run the upgraded continuous service through full London/NY sessions and
+collect evidence that the graded intelligence behaves as designed: regimes
+vary, chop subtypes appear, confluence/risk lines explain every decision,
+and entries occur when (and only when) evidence justifies them.
 
 ## Current Status:
-CONTINUOUS-001 implemented and committed. 583 tests pass.
+INTELLIGENCE-001 implemented. 634 tests pass.
+- Live-evidence audit root causes FIXED: regime now classifies the recent
+  ~5h window (was: whole 25h window -> near-permanent CHOPPY); CHOPPY is a
+  graded gate (tradeable subtype + confluence >= 0.65), not a blind block;
+  NEWS_RISK/NO_TRADE still always block.
+- New live-path engines: ChopClassifier (6 subtypes), MtfAlignmentEngine
+  (D1/H4/H1/M15/M5; H1+M15 aggregated honestly from M5), ConfluenceEngine
+  (sweep/BOS-CHOCH/FVG/OB/premium-discount/displacement/session/spread/
+  orderflow, with missing-evidence reporting), AdaptiveRiskEngine (capital
+  phases, evidence-driven, policy-cap-clamped, contraction-only on adverse
+  signals), sweepless BOS-continuation setup with swing invalidation.
+- Terminal per cycle: MTF row, intel row, confluence + risk tier/% + chop
+  subtype + regime reason, "needed: stronger ..." on NO_TRADE.
+- Opportunity audit after 60 active-session no-trade cycles
+  (reports/runtime/opportunity_audit_*).
+- Unchanged safety: stop mandatory, governor final authority, gateway only
+  order path, news fail-closed, demo-only, 0.5% policy cap intact.
+
+CONTINUOUS-001 status (previous): implemented and committed; 583 tests then.
 - scripts/trading_service.py is the MAIN runner: starts once, fresh
   preflight every start, continuous loop until kill switch / weekly-loss
   risk shutdown / Ctrl+C / fatal error. Daily loss limit = DAY_PAUSED
@@ -117,7 +137,9 @@ CONTINUOUS-001 implemented and committed. 583 tests pass.
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, 10_TASK_QUEUE.md,
 23_DEMO_TRADING_RUNBOOK.md, 24_INTELLIGENCE_AUDIT_ROADMAP.md.
 
-CONTINUOUS-001 is implemented. Guide the user through the continuous-service
-operator steps on the Windows MT5 host and review the daily reports with
-them. Do not start the service. Do not weaken risk. Strategy changes
-(F-11/F-13) require backtest evidence first.
+INTELLIGENCE-001 is implemented. Guide the user to restart the continuous
+service, review the new per-cycle reasoning and any opportunity audits with
+them, and evaluate whether the graded gates behave correctly over full
+sessions. Do not start the service. Do not weaken risk. Threshold changes
+(chop override 0.65, continuation 0.60, displacement 1.5x) require
+BACKTEST-001 evidence first; a real news feed is NEWS-001.

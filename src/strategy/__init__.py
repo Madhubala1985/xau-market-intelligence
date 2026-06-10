@@ -10,6 +10,12 @@ from src.strategy.scoring import (
     ConfidenceResult,
     ScoreRecommendation,
 )
+from src.strategy.confluence import (
+    ConfluenceEngine,
+    ConfluenceReport,
+    MtfAlignment,
+    MtfAlignmentEngine,
+)
 from src.strategy.pipeline import (
     DecisionPipeline,
     PipelineContext,

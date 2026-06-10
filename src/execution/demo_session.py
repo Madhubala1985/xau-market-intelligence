@@ -113,6 +113,14 @@ class CycleStat:
     # PLAN_BLOCKED | ENTRY_BLOCKED | CAP_REACHED
     entry_action: str = "NONE"
     entry_detail: str = ""
+    # INTELLIGENCE-001: graded reasoning, surfaced per cycle.
+    regime_subtype: Optional[str] = None
+    mtf_direction: Optional[str] = None
+    mtf_score: Optional[float] = None
+    confluence_score: Optional[float] = None
+    risk_tier: Optional[str] = None
+    risk_pct: Optional[float] = None
+    intel: dict = field(default_factory=dict)  # full reasoning detail (JSON-safe)
 
     def to_dict(self) -> dict:
         return {
@@ -132,6 +140,13 @@ class CycleStat:
             "risk_action": self.risk_action,
             "entry_action": self.entry_action,
             "entry_detail": self.entry_detail,
+            "regime_subtype": self.regime_subtype,
+            "mtf_direction": self.mtf_direction,
+            "mtf_score": self.mtf_score,
+            "confluence_score": self.confluence_score,
+            "risk_tier": self.risk_tier,
+            "risk_pct": self.risk_pct,
+            "intel": dict(self.intel),
         }
 
 
@@ -458,6 +473,12 @@ class SupervisedDemoSession:
             )
 
         context = result.context
+        chop = getattr(context, "chop", None) if context is not None else None
+        mtf = getattr(context, "mtf", None) if context is not None else None
+        confluence = (
+            getattr(context, "confluence", None) if context is not None else None
+        )
+        adaptive = getattr(result, "adaptive_risk", None)
         self._cycle_stats.append(
             CycleStat(
                 time_utc=now,
@@ -493,9 +514,49 @@ class SupervisedDemoSession:
                 ),
                 entry_action=entry_action,
                 entry_detail=entry_detail,
+                regime_subtype=(chop.subtype.value if chop is not None else None),
+                mtf_direction=(
+                    mtf.direction.value
+                    if mtf is not None and mtf.direction is not None else None
+                ),
+                mtf_score=(mtf.score if mtf is not None else None),
+                confluence_score=(
+                    confluence.score if confluence is not None else None
+                ),
+                risk_tier=(adaptive.tier.value if adaptive is not None else None),
+                risk_pct=(adaptive.risk_pct if adaptive is not None else None),
+                intel=self._intel_of(context, adaptive),
             )
         )
         return reconciliation
+
+    @staticmethod
+    def _intel_of(context, adaptive) -> dict:
+        """Full per-cycle reasoning detail (JSON-safe, credential-free)."""
+        if context is None:
+            return {}
+        intel: dict = {
+            "regime_reason": getattr(context, "regime_reason", ""),
+            "setup_kind": getattr(context, "setup_kind", ""),
+            "displacement_ratio": round(
+                getattr(context, "displacement_ratio", 0.0), 3
+            ),
+        }
+        chop = getattr(context, "chop", None)
+        if chop is not None:
+            intel["chop"] = chop.to_dict()
+        mtf = getattr(context, "mtf", None)
+        if mtf is not None:
+            intel["mtf"] = mtf.to_dict()
+        confluence = getattr(context, "confluence", None)
+        if confluence is not None:
+            intel["confluence"] = confluence.to_dict()
+        price_zone = getattr(context, "price_zone", None)
+        if price_zone is not None:
+            intel["price_zone"] = price_zone.value
+        if adaptive is not None:
+            intel["adaptive_risk"] = adaptive.to_dict()
+        return intel
 
     # -- close detection ---------------------------------------------------------
     def _detect_closes(self, positions: List[BrokerPosition], now: datetime) -> None:
@@ -619,6 +680,13 @@ class SupervisedDemoSession:
             leverage=broker.leverage,
         )
         has_setup = bool(result.context and result.context.has_setup)
+        # Adaptive risk budget (INTELLIGENCE-001): the evidence-driven budget
+        # tightens the planner's hard cap; it can never loosen it.
+        adaptive = getattr(result, "adaptive_risk", None)
+        risk_budget = (
+            account.balance * adaptive.risk_pct
+            if adaptive is not None and adaptive.risk_pct > 0 else None
+        )
         plan = self._planner.plan(
             decision,
             result.confidence,
@@ -637,6 +705,7 @@ class SupervisedDemoSession:
             },
             fresh_setup=has_setup,
             continuation_supported=has_setup,
+            risk_budget=risk_budget,
         )
         if not plan.approved:
             self._entries_blocked += 1

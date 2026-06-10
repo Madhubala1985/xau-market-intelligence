@@ -2580,3 +2580,115 @@ tests/test_session_profiles.py, 10_TASK_QUEUE.md, 23_DEMO_TRADING_RUNBOOK.md,
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-10-07
+
+## Date:
+2026-06-10
+
+## Area:
+Strategy / Regime / Risk / Reflection / Observability
+
+## Decision:
+INTELLIGENCE-001: wire gold confluence, MTF alignment, and adaptive risk into
+the LIVE decision path; replace the blind CHOPPY hard block with graded logic.
+
+Root causes found by the live-evidence audit (170+ no-trade cycles):
+(R1) PROVEN: RegimeEngine counted structure flips over the WHOLE 300-candle
+     (25h) M5 window with choppy_flips=2 — live markets were near-permanently
+     CHOPPY. Fixed: regime classifies the RECENT window (regime_window=60,
+     ~5h M5).
+(R2) PROVEN: TradeHypothesisEngine hard-blocked CHOPPY with no grading.
+     Fixed: graded gate — NO_TRADE/NEWS_RISK still always block; CHOPPY
+     blocks unless the chop subtype is tradeable AND confluence >= 0.65.
+(R3) HIGH-CONFIDENCE: conf=0.66/unc=0.67 were stuck because the regime
+     component pinned at 0 and component disagreement saturated the
+     uncertainty formula; with graded regime scoring the inputs now move.
+(R4) PROVEN (wiring): zones (FVG/OB/supply-demand), premium/discount, and
+     displacement existed but were absent from DecisionPipeline; H1/M15 did
+     not exist in the live path; risk was statically 0.5%.
+
+What was built:
+(a) ChopClassifier (src/regime/chop_classifier.py): DANGEROUS_CHOP and
+    LOW_QUALITY_CHOP hard-block; LIQUIDITY_CHOP_WITH_SWEEP,
+    TRAP_REVERSAL_FROM_CHOP, BREAKOUT_EXPANSION_FROM_CHOP,
+    CONTINUATION_AFTER_CHOP become candidates gated by confluence.
+(b) MtfAlignmentEngine: D1/H4/H1/M15 structure bias + M5 execution state ->
+    weighted alignment score + supported direction. H1/M15 are HONEST
+    aggregations of the live M5 feed (None when insufficient — never faked).
+(c) ConfluenceEngine: graded [0,1] scoring of mtf, sweep, BOS/CHOCH, FVG,
+    order block, premium/discount, displacement, session, spread, orderflow
+    proxy; reports component statuses AND what evidence is missing.
+(d) AdaptiveRiskEngine (src/risk/adaptive_risk.py): evidence-driven budget
+    with capital phases ($2k->10k->15k->25k+). Expands ONLY on strong
+    combined evidence (max x1.65 on base), contracts multiplicatively on
+    losses/drawdown/uncertainty/spread/exposure; news-unclear or untradeable
+    regime = zero budget. HARD-CLAMPED to the 03_RISK_POLICY 0.5% cap — the
+    cap is now a ceiling, not the default. No martingale is structurally
+    possible (contractions are <= 1 multiplicative). The budget feeds BOTH
+    the pipeline sizer and the DemoTradePlanner hard cap (min-ed in; can
+    only tighten).
+(e) Second setup type: sweepless BOS-continuation (aligned structural break
+    + displacement >= 1.5x + confluence >= 0.60 + swing-based invalidation).
+    Sweep-reclaim remains the primary setup. Stop-loss stays mandatory
+    everywhere.
+(f) Terminal reasoning per cycle: MTF row (d1/h4/h1/m15/m5 + score ->
+    direction), intel row (sweep/BOS/FVG/OB/premium-discount/displacement/
+    orderflow statuses), confluence + adaptive risk tier/% + chop subtype +
+    regime reason, and for NO_TRADE the exact missing evidence ("needed:
+    stronger fvg, order_block").
+(g) Opportunity audit (src/reflection/opportunity_audit.py): after 60
+    consecutive active-session cycles without an entry the service writes a
+    classified report (verdict NO_TRADE_CORRECT / POSSIBLY_TOO_STRICT /
+    MIXED; classifications now include MARKET_ARTIFACT).
+
+## Reason:
+The system was structurally passive: one regime label suppressed entire
+trading sessions regardless of evidence, one setup type existed, and risk
+ignored evidence quality entirely. The mission requires selective aggression:
+graded evidence gates instead of binary blocks — without weakening any
+safety layer (hypothesis invariants, governor, gateway, news fail-close all
+unchanged or tightened).
+
+## Evidence:
+tests/test_chop_classifier.py (9), tests/test_confluence.py (12),
+tests/test_adaptive_risk.py (14), tests/test_intelligence_pipeline.py (9),
+tests/test_opportunity_audit.py (4), tests/test_trading_service.py (+3).
+Full suite: 634 passed. pre_demo_safety_check.sh passed.
+
+## Alternatives Considered:
+- Tuning choppy_flips / window only: rejected as the sole fix — it reduces
+  false CHOPPY but keeps the binary block; graded confluence is the design
+  goal.
+- Raising the 0.5% policy cap for the growth objective: rejected — the
+  policy is the authority; faster compounding must come from opportunity
+  quality and session length, and any cap change needs validated evidence.
+- Letting confluence authorize trades directly: rejected — confluence gates
+  candidates; hypothesis invariants and the Risk Governor remain the only
+  authorities.
+
+## Risk:
+More entries will occur than before (that is the point). Heuristic
+thresholds (0.65 chop override, 0.60 continuation, displacement 1.5x) are
+reasoned but not yet backtest-calibrated.
+
+## Mitigation:
+Adaptive budget contracts on every adverse signal and on weak evidence;
+demo-only execution; opportunity audits and daily evaluation/reflection
+reports surface over/under-trading within a day; thresholds are constructor
+parameters ready for backtest calibration (next task).
+
+## Files Affected:
+src/regime/chop_classifier.py (new), src/strategy/confluence.py (new),
+src/risk/adaptive_risk.py (new), src/reflection/opportunity_audit.py (new),
+src/strategy/pipeline.py, src/strategy/hypothesis.py,
+src/execution/demo_session.py, src/execution/demo_planner.py,
+src/execution/trading_service.py, src/reflection/demo_evaluation.py,
+package __init__ files, scripts/generate_evidence_pack.py, tests (5 new
+files + updates).
+
+## Status:
+Accepted

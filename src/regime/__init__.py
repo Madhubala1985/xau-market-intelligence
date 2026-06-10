@@ -5,6 +5,11 @@ from src.regime.htf_bias import (
     HtfBias,
     HtfBiasEngine,
 )
+from src.regime.chop_classifier import (
+    ChopAssessment,
+    ChopClassifier,
+    ChopSubtype,
+)
 from src.regime.regime_engine import (
     Regime,
     RegimeEngine,

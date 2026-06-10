@@ -13,6 +13,11 @@ from src.reflection.reflection import (
     RecordMistakes,
     ReflectionEngine,
 )
+from src.reflection.opportunity_audit import (
+    OpportunityAudit,
+    build_opportunity_audit,
+    render_opportunity_audit_markdown,
+)
 from src.reflection.demo_evaluation import (
     Finding,
     FindingClass,
@@ -45,4 +50,8 @@ __all__ = [
     "build_reflection",
     "render_evaluation_markdown",
     "render_reflection_markdown",
+    # Opportunity audit (INTELLIGENCE-001)
+    "OpportunityAudit",
+    "build_opportunity_audit",
+    "render_opportunity_audit_markdown",
 ]

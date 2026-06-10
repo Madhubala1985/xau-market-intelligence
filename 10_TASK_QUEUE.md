@@ -615,3 +615,26 @@ Stop condition:
 
 Status:
 Completed in commit CONTINUOUS-001.
+
+---
+
+## Task INTELLIGENCE-001: Wire Gold Confluence, MTF Alignment, and Adaptive Risk
+
+Goal:
+Turn the continuous runner into an adaptive trading intelligence: graded
+CHOPPY subtypes instead of a blind hard block, real D1/H4/H1/M15/M5
+alignment, FVG/order-block/premium-discount/displacement wired into the live
+DecisionPipeline, an evidence-driven adaptive risk budget (policy-capped),
+full per-cycle terminal reasoning, and an automatic opportunity audit after
+long no-trade stretches.
+
+Rules:
+- Selective aggression only: graded confluence gates, never forced trades.
+- DANGEROUS/LOW_QUALITY chop, NEWS_RISK, NO_TRADE keep hard-blocking.
+- Stop-loss and structural invalidation stay mandatory.
+- Adaptive risk can only stay under the 03_RISK_POLICY cap; contraction-only
+  on losses/drawdown/uncertainty (no martingale structurally).
+- No fake data: missing timeframes/feeds read as absent, never invented.
+
+Status:
+Completed in commit INTELLIGENCE-001.

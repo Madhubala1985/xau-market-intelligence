@@ -376,3 +376,58 @@ required artifacts for "sustained demo evidence".
   the future transition is configuration + readiness gates, not a rewrite.
 - F-11 (zones/premium-discount unwired), F-12 (no futures feed), F-13 (no
   dedicated dangerous-volatility classifier) remain open and backtest-gated.
+
+---
+
+# 9. INTELLIGENCE-001 audit — 2026-06-10 (fifth pass)
+
+Trigger: 170+ continuous live cycles, zero trades, every cycle
+"regime=CHOPPY ... decision=NO_TRADE", while the 5M chart showed a clean
+bearish expansion through London/NY.
+
+## 9.1 Answers to the critical audit questions
+
+- Was regime classification correct? NO — Proven Defect: flips counted over
+  the whole 25h window (choppy_flips=2) made CHOPPY near-permanent. Regime
+  now classifies the recent ~5h window.
+- Was CHOPPY too dominant? YES — and it was also a blind hard block in the
+  hypothesis engine (Proven Defect, fixed with the graded gate).
+- Wrong timeframe? Partially — regime used the full M5 history; H1/M15 did
+  not exist at all in the live path (now honest aggregations of M5).
+- Ignoring London/NY expansion / bearish HTF / directional 5M movement /
+  sweep+continuation / MTF? YES on all counts: there was no MTF engine, no
+  continuation setup, no displacement input, and CHOPPY blocked before any
+  of it could matter. All wired now.
+- Were conf=0.66/unc=0.67 meaningful? Barely — stuck because the regime
+  component pinned at 0 and disagreement saturated the uncertainty formula.
+  Inputs now vary with graded regime/confluence.
+- Should CHOPPY be decomposed? DONE: 6 subtypes; 2 hard-block, 4 candidate.
+
+## 9.2 Gold-intelligence wiring status after this pass
+
+WIRED INTO THE LIVE PATH: sweeps, buy/sell-side liquidity, BOS, CHOCH, FVG,
+order blocks, supply/demand, premium/discount, displacement, session
+behavior (kill zones + per-cycle session), volatility regime + chop
+subtypes, spread regime, tick-volume/orderflow PROXY (clearly labelled,
+never a signal), MTF alignment D1/H4/H1/M15/M5, structural invalidation,
+stop placement, BE/trailing, journal-driven risk state, adaptive risk.
+
+PARTIAL / RECORDED, NOT FAKED:
+- F-12 futures confirmation: still no live feed (engine degrades neutral).
+- News/macro: manual block + static calendar only; terminal shows
+  CLEAR/BLOCKED/UNKNOWN. Future task NEWS-001: real macro feed (CPI, NFP,
+  FOMC, DXY, yields) — must not be faked until a real source exists.
+- Asian-range-specific logic: session highs/lows flow through the liquidity
+  map; an explicit Asian-range model is a Design Improvement (backtest).
+- 1M execution refinement: not implemented (M5 remains the exec frame).
+- Thresholds (chop override 0.65, continuation 0.60, displacement 1.5x)
+  are reasoned defaults — Hypothesis until backtest-calibrated (BACKTEST-001
+  candidate).
+
+## 9.3 Risk redesign status
+
+Static 0.5% risk removed as the brain: AdaptiveRiskEngine decides from
+evidence + account state, capital-phase aware, hard-clamped to the policy
+cap; contraction-only on adverse signals (no martingale structurally).
+03_RISK_POLICY remains the ceiling and the authority; raising the cap
+requires validated multi-week evidence and a manual policy change.

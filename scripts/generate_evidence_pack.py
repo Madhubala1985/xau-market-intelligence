@@ -150,6 +150,22 @@ _TABLE: Dict[str, dict] = {
     "src.strategy.scoring": dict(
         layer="strategy", summary="confidence/uncertainty scoring",
         test_file="test_scoring.py", test_note="", **_PURE_SHADOW_READY),
+    "src.regime.chop_classifier": dict(
+        layer="regime",
+        summary="CHOPPY decomposition into graded subtypes (INTELLIGENCE-001)",
+        test_file="test_chop_classifier.py", test_note="", **_PURE_SHADOW_READY),
+    "src.strategy.confluence": dict(
+        layer="strategy",
+        summary="MTF alignment + graded confluence scoring (INTELLIGENCE-001)",
+        test_file="test_confluence.py", test_note="", **_PURE_SHADOW_READY),
+    "src.risk.adaptive_risk": dict(
+        layer="risk",
+        summary="evidence-driven adaptive risk budget, policy-capped (INTELLIGENCE-001)",
+        test_file="test_adaptive_risk.py", test_note="", **_PURE_SHADOW_READY),
+    "src.reflection.opportunity_audit": dict(
+        layer="reflection",
+        summary="long no-trade opportunity audit (INTELLIGENCE-001; offline)",
+        test_file="test_opportunity_audit.py", test_note="", **_PURE_SHADOW_READY),
     "src.strategy.pipeline": dict(
         layer="strategy", summary="DecisionPipeline orchestration (no execution)",
         test_file="test_pipeline.py", test_note="", **_PURE_SHADOW_READY),

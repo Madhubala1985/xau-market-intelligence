@@ -54,6 +54,10 @@ from src.reflection.demo_evaluation import (
     render_evaluation_markdown,
     render_reflection_markdown,
 )
+from src.reflection.opportunity_audit import (
+    build_opportunity_audit,
+    render_opportunity_audit_markdown,
+)
 from src.risk.state_tracker import collapse_records
 
 SERVICE_NAME = "XAU/USD Adaptive Liquidity Intelligence — Continuous MT5 Service"
@@ -189,6 +193,7 @@ class ProgressPrinter:
             f"  regime={s.regime or 'n/a'} bias={s.htf_bias or 'n/a'} "
             f"session={s.session or 'n/a'} conf={conf} unc={unc}"
         )
+        self._intel_lines(s)
         self._line(f"  decision={decision_label} reason: {s.reason}")
         if s.entry_action not in ("NONE",):
             self._line(f"  entry: {s.entry_action} — {s.entry_detail}")
@@ -219,6 +224,47 @@ class ProgressPrinter:
         )
         self._line()
 
+    def _intel_lines(self, s) -> None:
+        """Per-cycle reasoning: what the model is actually thinking."""
+        intel = getattr(s, "intel", None) or {}
+        mtf = intel.get("mtf")
+        if mtf:
+            tf = lambda k: mtf.get(k) or "-"  # noqa: E731
+            self._line(
+                f"  MTF d1={tf('d1')} h4={tf('h4')} h1={tf('h1')} "
+                f"m15={tf('m15')} m5={tf('m5')} score={mtf.get('score', 0):.2f} "
+                f"-> {mtf.get('direction') or 'NO_TRADE'}"
+            )
+        confluence = intel.get("confluence")
+        if confluence:
+            st = confluence.get("statuses", {})
+            self._line(
+                f"  intel sweep={st.get('sweep', '-')} "
+                f"bos={st.get('bos_choch', '-')} fvg={st.get('fvg', '-')} "
+                f"ob={st.get('order_block', '-')} "
+                f"pd={st.get('premium_discount', '-')} "
+                f"disp={st.get('displacement', '-')} "
+                f"flow={st.get('orderflow', '-')}"
+            )
+            regime_reason = intel.get("regime_reason", "")
+            subtype = s.regime_subtype or "-"
+            risk_tier = s.risk_tier or "-"
+            risk_pct = (
+                f"{s.risk_pct:.2%}" if s.risk_pct is not None else "-"
+            )
+            self._line(
+                f"  confluence={confluence.get('score', 0):.2f} "
+                f"risk={risk_tier} {risk_pct} subtype={subtype} "
+                f"regime_why: {regime_reason}"
+            )
+            missing = confluence.get("missing") or []
+            if missing and s.entry_action in ("NONE", "PLAN_BLOCKED",
+                                              "ENTRY_BLOCKED"):
+                self._line(
+                    "  needed: stronger " + ", ".join(missing)
+                    + " (these scored < 0.5 this cycle)"
+                )
+
     def market_closed(self, now: datetime, state: str, next_open: datetime,
                       check_seconds: float) -> None:
         self._line(
@@ -239,6 +285,13 @@ class ProgressPrinter:
             f"[{now.isoformat()}] DAY_PAUSED — daily loss limit reached; the "
             f"governor blocks new entries until the next UTC day; open "
             f"positions remain managed"
+        )
+
+    def opportunity_audit(self, now: datetime, verdict: str, detail: str,
+                          filename: str) -> None:
+        self._line(
+            f"[{now.isoformat()}] OPPORTUNITY AUDIT: {verdict} — {detail} "
+            f"(reports/runtime/{filename})"
         )
 
     def stopped(self, reason: str, detail: str) -> None:
@@ -263,6 +316,7 @@ class TradingService:
         tick_age: Optional[Callable[[datetime], Optional[float]]] = None,
         closed_poll_seconds: float = 60.0,
         max_cycles: Optional[int] = None,
+        opportunity_audit_cycles: int = 60,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -288,6 +342,12 @@ class TradingService:
         self._day_events: List[dict] = []
         self._current_day = None
         self._closed_checks = 0
+        # Long no-trade opportunity audit (INTELLIGENCE-001): after this many
+        # consecutive ACTIVE-session cycles without an entry, audit whether
+        # no-trade was correct and write a classified report.
+        self._audit_cycles = opportunity_audit_cycles
+        self._no_trade_streak = 0
+        self._audits_written = 0
 
     # -- main loop ---------------------------------------------------------------
     def run(self) -> ServiceReport:
@@ -322,6 +382,7 @@ class TradingService:
                 cycles += 1
                 self._accumulate(outcome)
                 self._print_cycle(cycles, outcome, now)
+                self._track_opportunity(outcome, now)
 
                 # Risk shutdown: the WEEKLY loss limit stops the service
                 # (03_RISK_POLICY shutdown rule). The DAILY limit pauses
@@ -445,6 +506,32 @@ class TradingService:
                     and day_start <= r.closed_at_utc <= now:
                 total += r.pnl
         return total
+
+    # -- opportunity audit (INTELLIGENCE-001) -----------------------------------
+    def _track_opportunity(self, outcome: CycleOutcome, now: datetime) -> None:
+        s = outcome.stat
+        if s.entry_action in ("SENT", "SIMULATED"):
+            self._no_trade_streak = 0
+            return
+        if (s.session or "") not in ("LONDON", "NEW_YORK", "LONDON_NY_OVERLAP"):
+            return  # quiet sessions do not accuse the gates of passivity
+        self._no_trade_streak += 1
+        if self._no_trade_streak < self._audit_cycles:
+            return
+        window = self._day_stats[-self._audit_cycles:]
+        audit = build_opportunity_audit(window)
+        stamp = now.strftime("%Y%m%dT%H%M")
+        self._report_dir.mkdir(parents=True, exist_ok=True)
+        (self._report_dir / f"opportunity_audit_{stamp}.md").write_text(
+            render_opportunity_audit_markdown(audit), encoding="utf-8"
+        )
+        (self._report_dir / f"opportunity_audit_{stamp}.json").write_text(
+            json.dumps(audit.to_dict(), indent=2) + "\n", encoding="utf-8"
+        )
+        self._audits_written += 1
+        self._printer.opportunity_audit(now, audit.verdict, audit.detail,
+                                        f"opportunity_audit_{stamp}.md")
+        self._no_trade_streak = 0  # re-arm for the next stretch
 
     # -- daily rollover + reports ---------------------------------------------
     def _maybe_rollover(self, now: datetime) -> None:

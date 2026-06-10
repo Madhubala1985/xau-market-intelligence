@@ -147,6 +147,7 @@ class DemoTradePlanner:
         risk_inputs: Optional[dict] = None,
         fresh_setup: bool = False,
         continuation_supported: bool = False,
+        risk_budget: Optional[float] = None,
     ) -> TradePlan:
         tier = confidence_tier(confidence)
         risk_inputs = risk_inputs or {}
@@ -188,7 +189,11 @@ class DemoTradePlanner:
 
         # Gate 4 (F-3): leverage-aware sizing, tier cap TIGHTENED by the
         # governor's per-trade budget (tightest rule wins; never loosened).
+        # An adaptive risk budget (INTELLIGENCE-001) can only tighten further:
+        # it is min()-ed in, so no evidence score can exceed the policy cap.
         governor_budget = account.balance * self._limits.max_risk_per_trade
+        if risk_budget is not None and risk_budget > 0:
+            governor_budget = min(governor_budget, risk_budget)
         sizing = self._sizer.size(
             decision, account, tier,
             mode=TradingMode.DEMO,

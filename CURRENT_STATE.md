@@ -10,8 +10,9 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-CONTINUOUS-001: IMPLEMENTED — continuous MT5 trading service is the MAIN
-mode; first continuous run on the Windows MT5 host pending (user-started)
+INTELLIGENCE-001: IMPLEMENTED — graded confluence, MTF alignment, and
+adaptive risk are wired into the live decision path; restart the continuous
+service and collect evidence (user-started)
 
 ## Last Completed Task
 
@@ -49,23 +50,52 @@ CONTINUOUS-001 (2026-06-10, decision 2026-06-10-06):
   are case-sensitive, the terminal would have rejected it. Requests now
   carry the exact broker case ("XAUUSDm"); verify_demo_account is shared in
   src/broker/mt5_data_adapter.py (REAL accounts refused).
-- 583 tests pass; pre_demo_safety_check.sh passes.
+
+INTELLIGENCE-001 (2026-06-10, decision 2026-06-10-07) — live-evidence audit
+of 170+ no-trade CHOPPY cycles found and fixed the root causes:
+- PROVEN: regime classified the whole 25h M5 window (flips>=2 => CHOPPY
+  almost always) — now classifies the recent ~5h window; PROVEN: the
+  hypothesis engine hard-blocked CHOPPY — now a graded gate (tradeable chop
+  subtype + confluence >= 0.65 may pass; NEWS_RISK/NO_TRADE never).
+- ChopClassifier subtypes: DANGEROUS_CHOP / LOW_QUALITY_CHOP (hard block);
+  LIQUIDITY_CHOP_WITH_SWEEP / TRAP_REVERSAL_FROM_CHOP /
+  BREAKOUT_EXPANSION_FROM_CHOP / CONTINUATION_AFTER_CHOP (candidates).
+- MtfAlignmentEngine: D1/H4/H1/M15/M5 (H1+M15 honest M5 aggregations) ->
+  alignment score + direction; can direct when the old D1+H4 combo is
+  neutral; never upgrades the NO_TRADE data-safety state.
+- ConfluenceEngine: graded scoring of sweep, BOS/CHOCH, FVG, order blocks,
+  premium/discount, displacement, session, spread, orderflow proxy, MTF —
+  with per-component statuses and explicit missing-evidence reporting.
+- Second setup type: sweepless BOS-continuation (displacement >= 1.5x +
+  confluence >= 0.60 + swing invalidation). Sweep-reclaim remains primary.
+- AdaptiveRiskEngine replaces static 0.5%: capital phases ($2k->10k->15k->
+  25k+), expansion only on strong evidence (max x1.65 of base), multiplicative
+  contraction on losses/drawdown/uncertainty/spread/exposure, zero budget on
+  unclear news or untradeable regime, HARD-CLAMPED to the 0.5% policy cap.
+  Budget feeds both the pipeline sizer and the planner hard cap (tighten-only).
+- Terminal now shows per cycle: MTF row, intel row (sweep/BOS/FVG/OB/PD/
+  displacement/flow), confluence + risk tier/% + chop subtype + regime
+  reason, and for NO_TRADE the exact missing evidence.
+- Opportunity audit: after 60 active-session cycles without an entry, a
+  classified report (NO_TRADE_CORRECT / POSSIBLY_TOO_STRICT / MIXED) is
+  written to reports/runtime/opportunity_audit_*.md/json.
+- 634 tests pass; pre_demo_safety_check.sh passes.
 
 ## Next Task
 
-User runs on the Windows MT5 host (PowerShell):
-1. py -3.12 scripts\demo_preflight.py                       (13 gates PASS)
-2. py -3.12 scripts\trading_service.py --profile continuous --dry-run --stdout-progress
-   (watch a few cycles; verdicts/plans visible; zero orders; Ctrl+C to stop)
-3. Set the demo execution flags in .env, then:
-   py -3.12 scripts\trading_service.py --profile continuous --stdout-progress
-   (supervise initially; orders appear in MT5 Toolbox/Trade tab)
-4. Stop: New-Item -ItemType File control\KILL_SWITCH
-   Resume: Remove-Item control\KILL_SWITCH ; restart the service
-5. Review reports/runtime/trading_service.md, daily service_eval_* /
-   service_reflection_*, logs/demo_trade_journal.jsonl.
-Bounded sessions (scripts/demo_session_run.py) and shadow mode remain
-available as validation tools.
+User restarts the continuous service on the Windows MT5 host (PowerShell):
+1. Stop the running service if any: New-Item -ItemType File control\KILL_SWITCH
+   then Remove-Item control\KILL_SWITCH once stopped.
+2. py -3.12 scripts\trading_service.py --profile continuous --stdout-progress
+   (or --dry-run first to watch the new reasoning without orders)
+3. Collect evidence over full London+NY sessions:
+   - per-cycle MTF/intel/confluence/risk lines (regimes should now vary,
+     conf/unc should move, chop subtypes visible),
+   - any ORDER SENT tickets vs MT5 Toolbox/Trade tab,
+   - reports/runtime/opportunity_audit_*.md if long no-trade stretches recur,
+   - daily service_eval_* / service_reflection_* reports.
+4. Next implementation candidates: BACKTEST-001 (calibrate the 0.65/0.60/
+   1.5x thresholds on historical XAUUSDm data), NEWS-001 (real macro feed).
 
 ## Current Execution Mode
 
