@@ -411,7 +411,12 @@ def conflicted_alignment():
     )
 
 
-def test_ltf_consensus_conflict_stands_down():
+def test_ltf_consensus_conflict_never_fades_with_the_stale_candidate():
+    """With D3 (2026-06-12-02) the unanimous-LTF + displacement scenario
+    flips the candidate to the trend direction BEFORE guard 2 is reached:
+    the fresh bearish BOS can no longer be faded — the model hunts LONG
+    setups instead (here none qualify, but the override is explicit).
+    Guard 2 remains in the code as defense-in-depth."""
     m5 = m5_rally(3.0)
     pipe = smc_pipeline(
         structure=structure_result(events=(
@@ -421,8 +426,9 @@ def test_ltf_consensus_conflict_stands_down():
     )
     result = pipe.decide(pipeline_input(m5, m1=m1_with_local_swing()))
     assert not result.approved
-    assert "LTF_CONSENSUS_CONFLICT" in result.reason
-    assert "sweep-reclaim" in result.reason
+    smc = result.context.challenge
+    assert "TREND_DAY_OVERRIDE->LONG" in smc["htf_context"]
+    assert smc["direction"] == "LONG"  # no bearish fade was considered
 
 
 def test_fresh_sweep_reclaim_may_still_fade_a_trend(monkeypatch):
@@ -443,3 +449,76 @@ def test_fresh_sweep_reclaim_may_still_fade_a_trend(monkeypatch):
     # anchor qualifies exactly as before
     assert result.approved, result.reason
     assert result.context.challenge["smc_anchor"] == "SWEEP_DISPLACEMENT"
+
+
+# -- D3 (decision 2026-06-12-02): trend-day consensus overrides a stale HTF veto -----
+
+def m1_rising(entry_zone=3364.6, *, start=START):
+    closes = [entry_zone + d for d in
+              (-1.0, -0.6, -0.2, 0.2, -0.2, -0.6, 0.1, 0.8, 1.2, 1.6,
+               1.8, 2.0)]
+    return make_candles(closes, timeframe="M1", minutes=1,
+                        start=start + timedelta(hours=3, minutes=43))
+
+
+def test_trend_day_consensus_overrides_stale_htf_veto():
+    """Live defect 2026-06-11: D1+H4 weights (0.55 bearish) kept the
+    candidate SHORT all day against a unanimous bullish intraday stack on
+    a +145 USD trend day — four fades, zero longs. With unanimous
+    H1/M15/M5 + confirming displacement the consensus direction becomes
+    the candidate; all other gates unchanged."""
+    m5 = m5_rally(3.0)
+    pipe = smc_pipeline(
+        structure=structure_result(
+            events=(bos_event(index=len(m5) - 1, price=3364.0,
+                              bias=Bias.BULLISH),),
+            final_bias=Bias.BULLISH,
+        ),
+        mtf=MtfAlignment(
+            d1=Bias.BEARISH, h4=Bias.BEARISH, h1=Bias.BULLISH,
+            m15=Bias.BULLISH, m5=Bias.BULLISH,
+            direction=Direction.SHORT, score=0.55, reason="stale HTF veto",
+        ),
+    )
+    result = pipe.decide(pipeline_input(m5, m1=m1_rising()))
+    assert result.approved, result.reason
+    assert result.decision.direction is Direction.LONG
+    assert "TREND_DAY_OVERRIDE->LONG" in result.context.challenge["htf_context"]
+
+
+def test_no_override_without_unanimous_ltf():
+    """m5 disagreeing breaks unanimity: the candidate stays SHORT and the
+    bullish-BOS anchor cannot exist for it -> no trade, no override."""
+    m5 = m5_rally(3.0)
+    pipe = smc_pipeline(
+        structure=structure_result(
+            events=(bos_event(index=len(m5) - 1, price=3364.0,
+                              bias=Bias.BULLISH),),
+        ),
+        mtf=MtfAlignment(
+            d1=Bias.BEARISH, h4=Bias.BEARISH, h1=Bias.BULLISH,
+            m15=Bias.BULLISH, m5=Bias.BEARISH,
+            direction=Direction.SHORT, score=0.55, reason="mixed",
+        ),
+    )
+    result = pipe.decide(pipeline_input(m5, m1=m1_rising()))
+    assert not result.approved
+    assert "TREND_DAY_OVERRIDE" not in result.context.challenge["htf_context"]
+
+
+def test_no_override_without_confirming_displacement():
+    """A quiet drift (no displacement) never overrides the HTF direction."""
+    m5 = m5_rally(0.2)  # tiny final body: displacement < 1.3x
+    pipe = smc_pipeline(
+        structure=structure_result(
+            events=(bos_event(index=len(m5) - 1, price=3364.0,
+                              bias=Bias.BULLISH),),
+        ),
+        mtf=MtfAlignment(
+            d1=Bias.BEARISH, h4=Bias.BEARISH, h1=Bias.BULLISH,
+            m15=Bias.BULLISH, m5=Bias.BULLISH,
+            direction=Direction.SHORT, score=0.55, reason="stale HTF veto",
+        ),
+    )
+    result = pipe.decide(pipeline_input(m5, m1=m1_rising()))
+    assert "TREND_DAY_OVERRIDE" not in result.context.challenge["htf_context"]

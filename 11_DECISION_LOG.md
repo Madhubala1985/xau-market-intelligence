@@ -3548,3 +3548,47 @@ src/strategy/smc_execution.py, tests/test_smc_execution.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-12-02
+
+## Date:
+2026-06-12
+
+## Area:
+Strategy candidate selection (DEMO ONLY)
+
+## Decision:
+SMC-EXECUTION-005 (D3): a CONFIRMED intraday trend overrides a stale
+higher-timeframe veto in candidate selection — the constructive twin of
+the 2026-06-12-01 stand-down. When H1+M15+M5 are unanimous AND
+displacement >= 1.3x confirms them, the consensus direction becomes the
+candidate (TREND_DAY_OVERRIDE printed in htf_context); EVERY other gate
+(kill zone/liquidity, fresh anchor in the candidate direction, local
+trigger, tactical stop, anchor freshness) applies unchanged.
+
+Live evidence (2026-06-11, MT5-verified): four counter-trend SHORTs,
+net -60.01, ZERO long attempts on a +145 USD institutional buying day —
+D1(0.30)+H4(0.25) weights (0.55 bearish) vetoed the unanimous bullish
+H1/M15/M5 stack from open to close. The two post-D2 sweep fades (the
+only allowed counter-trend class) went BREAKEVEN and -15.27 — fading a
+confirmed trend day was structurally the only available trade and it
+was the wrong class of trade.
+
+Consequence: on confirmed trend days the candidate flips to the trend,
+so counter-trend sweep fades are not constructed (the D2 guard-2 path
+becomes defense-in-depth). On HTF-aligned days behavior is unchanged.
+
+## Risk:
+This ENABLES trades (continuation entries) rather than only blocking —
+justified by the owner's mandate and the one-directional live evidence;
+quality is still enforced by the full A+B+C+D gate stack, the anchor
+freshness guard, and the unchanged loss brakes.
+
+## Files Affected:
+src/strategy/smc_execution.py, tests/test_smc_execution.py.
+
+## Status:
+Accepted

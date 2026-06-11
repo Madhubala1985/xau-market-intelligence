@@ -219,10 +219,39 @@ class SmcExecutionPipeline:
 
         # -- Gate A: higher-timeframe context --------------------------------
         candidate = mtf.direction or self._htf_direction(htf_bias)
+        # D3 (decision 2026-06-12-02): a CONFIRMED intraday trend overrides
+        # a stale higher-timeframe veto — the constructive twin of the
+        # LTF_CONSENSUS_CONFLICT stand-down. Live evidence 2026-06-11: four
+        # counter-trend shorts (net -60) and zero longs on a +145 USD
+        # institutional buying day because D1+H4 weights (0.55) vetoed the
+        # unanimous bullish H1/M15/M5 stack all day. When H1+M15+M5 are
+        # unanimous AND displacement >= CONFLICT_DISPLACEMENT confirms
+        # them, the consensus direction becomes the candidate; every other
+        # gate (kill zone/liquidity, fresh anchor, trigger, tactical stop)
+        # still applies unchanged.
+        trend_override = ""
+        for cons_bias, cons_dir in (
+            (Bias.BULLISH, Direction.LONG),
+            (Bias.BEARISH, Direction.SHORT),
+        ):
+            if (
+                all(b is cons_bias for b in (mtf.h1, mtf.m15, mtf.m5))
+                and disp_direction is cons_dir
+                and displacement >= CONFLICT_DISPLACEMENT
+                and candidate is not cons_dir
+            ):
+                candidate = cons_dir
+                trend_override = (
+                    f" TREND_DAY_OVERRIDE->{cons_dir.value} "
+                    f"(H1/M15/M5 unanimous {cons_bias.value}, "
+                    f"disp {displacement:.1f}x)"
+                )
+                break
         htf_context = (
             f"d1={self._b(mtf.d1)} h4={self._b(mtf.h4)} h1={self._b(mtf.h1)} "
             f"m15={self._b(mtf.m15)} m5={self._b(mtf.m5)} "
             f"mtf_score={mtf.score:.2f} htf_bias={htf_bias.value}"
+            f"{trend_override}"
         )
 
         smc = {
