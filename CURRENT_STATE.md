@@ -10,15 +10,18 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-OPERATIONAL-INTELLIGENCE-001: IMPLEMENTED — warmstart context report,
-adaptive exposure governor, DIRECTIONAL_CHOP_BREAKDOWN, raw-confluence
-threshold display, growth_evaluation profile. Restart the continuous service
-with --profile growth_evaluation and collect evidence (user-started).
+DEMO-CHALLENGE-001: IMPLEMENTED — FINAL LAST-CHANCE aggressive XAUUSDm
+momentum profile `--profile demo_challenge` (DEMO ONLY): fixed lots
+0.05/0.10, tactical M1/M5 local stops, fresh entry scan every candle,
+add-ons only into floating profit, max 3 open, owner-directed survival
+envelope (3%/trade worst case, daily 5% pause, weekly 10% stop). The
+institutional model is untouched and remains the default. User starts the
+service on the Windows MT5 host:
+py -3.12 scripts\trading_service.py --profile demo_challenge --stdout-progress
 
-Previously: SIZING-001: IMPLEMENTED — the "invalid lot size 0.0" Proven Defect is fixed
-with milestone-aware adaptive lot sizing (min-lot promotion bounded by the
-phase ceiling, full sizing diagnostics, threshold profiles). Restart the
-continuous service and collect evidence (user-started)
+Previously: OPERATIONAL-INTELLIGENCE-001: IMPLEMENTED — warmstart context
+report, adaptive exposure governor, DIRECTIONAL_CHOP_BREAKDOWN,
+raw-confluence threshold display, growth_evaluation profile.
 
 ## Last Completed Task
 
@@ -185,25 +188,69 @@ OPERATIONAL-INTELLIGENCE-001 (2026-06-10, decision 2026-06-10-11):
   "missing", never blocking).
 - 726 tests pass; pre_demo_safety_check.sh passes.
 
+DEMO-CHALLENGE-001 (2026-06-11, decision 2026-06-11-01):
+- WHY (live evidence): 570+ cycles, direction read correctly, ZERO trades;
+  dominant blocker STOP_TOO_WIDE_FOR_ACCOUNT repeated for hours from a
+  stale HTF/structural stop while fresh M1/M5 local structure formed every
+  candle. Owner directed ONE final aggressive demo attempt as a SEPARATE
+  profile; nothing institutional was rewritten or deleted.
+- NEW decision layer behind the SAME safety stack (session -> gateway ->
+  journal/reconciliation/trailing): src/strategy/challenge_momentum.py
+  (momentum read M15/M5/M1, breakout / pullback-rejection / continuation
+  triggers, TACTICAL stop from current local swings/rejection/pullback +
+  ATR/spread buffer, 8 USD hard ceiling — no local stop => skip with the
+  exact reason, never a structural stop) and
+  src/execution/challenge_planner.py (fixed lots 0.05 NORMAL / 0.10 STRONG
+  parsed from the journaled setup_type; low liquidity demotes 0.10->0.05;
+  survival-cap demotion then skip; 0.01 ONLY on margin refusal; add-ons
+  same-direction only while EVERY open trade is in floating profit; blocked
+  after a losing trade, against direction, or beyond 3 open; NEWS_UNKNOWN
+  neutral — only an actual news RISK blocks).
+- Owner-directed demo_challenge envelope (session_profiles carve-out,
+  construction-locked to the ONE profile named demo_challenge): 3.0% worst
+  case per trade, daily 5% pauses entries (DAY_PAUSED), weekly 10% stops
+  the service, 10 trades/day, 3 open max, spread cap 1.0. Real-money policy
+  untouched; every other profile still validates against the standard demo
+  bounds.
+- Terminal per cycle: profile=demo_challenge, fresh_entry_scan,
+  new_candle_detected, local_structure_updated, momentum candidate/state,
+  m15/m5 bias + displacement, entry_plan, tactical_stop
+  price/distance/source, lot_decision, first_trade_profit_state,
+  add_on_allowed, challenge_why.
+- 753 tests pass (+27: profile/envelope, fixed lots, low-liquidity demote,
+  tactical-stop-or-skip, macro/futures/news-unknown neutrality, add-on
+  rules, max 3 open, no hedge/martingale, kill switch, exact XAUUSDm case,
+  full-session end-to-end 0.10-lot order); pre_demo_safety_check.sh passes.
+
 ## Next Task
 
-User restarts the continuous service on the Windows MT5 host (PowerShell):
+User starts the DEMO-CHALLENGE run on the Windows MT5 host (PowerShell):
 1. Stop the running service if any: New-Item -ItemType File control\KILL_SWITCH
    then Remove-Item control\KILL_SWITCH once stopped.
-2. py -3.12 scripts\trading_service.py --profile continuous --stdout-progress
-   (or --dry-run first to watch the new reasoning without orders)
-3. Collect evidence over full London+NY sessions:
+2. Optional rehearsal (identical loop, nothing sent):
+   py -3.12 scripts\trading_service.py --profile demo_challenge --dry-run --stdout-progress
+3. Live demo run:
+   py -3.12 scripts\trading_service.py --profile demo_challenge --stdout-progress
+4. Watch per cycle: momentum candidate/state, entry_plan, tactical_stop
+   price/distance/source, lot_decision 0.05/0.10, first_trade_profit_state,
+   add_on_allowed, and the exact WAIT reason when no trade is taken.
+5. Stop any time: New-Item -ItemType File control\KILL_SWITCH
+
+Institutional evidence collection (unchanged, optional):
+1. py -3.12 scripts\trading_service.py --profile continuous --stdout-progress
+   (or --profile growth_evaluation; --dry-run first to watch reasoning)
+2. Collect evidence over full London+NY sessions:
    - MTF row shows all six frames + sources (no "degraded" lines expected on
      the Windows host), vol=/asian= lines, conflict lines when mixed,
    - adaptive risk lines show phase-based budgets (0.10%-0.80% typical),
    - any ORDER SENT tickets vs MT5 Toolbox/Trade tab,
    - opportunity_audit_* verdicts on no-trade stretches,
    - daily service_eval_* / service_reflection_* reports.
-4. Run the calibration replay on real history (Windows):
+3. Run the calibration replay on real history (Windows):
    py -3.12 scripts\calibration_replay.py --fetch --count 4000
    Review reports/runtime/calibration.md; threshold changes only via a
    reviewed task with walk-forward (BACKTEST-001).
-5. Honest backlog: NEWS-001 (real calendar), MACRO-001 (DXY/yields),
+4. Honest backlog: NEWS-001 (real calendar), MACRO-001 (DXY/yields),
    FUTURES-001 (gold futures feed).
 
 ## Current Execution Mode

@@ -9,20 +9,44 @@ This file allows Claude sessions to resume without losing direction.
 # Current Project State
 
 ## Current Phase:
-Phase 12: Live Demo Readiness — continuous service operational
+Phase 12: Live Demo Readiness — continuous service operational; FINAL
+LAST-CHANCE demo_challenge experiment ready
 
 ## Current Task ID:
-OPERATIONAL-INTELLIGENCE-001 (implemented; restart with
---profile growth_evaluation pending — user-started only)
+DEMO-CHALLENGE-001 (implemented; user starts the run —
+--profile demo_challenge, user-started only)
 
 ## Current Task Goal:
-Run the upgraded continuous service through full London/NY sessions and
-collect evidence that the graded intelligence behaves as designed: regimes
-vary, chop subtypes appear, confluence/risk lines explain every decision,
-and entries occur when (and only when) evidence justifies them.
+Run the aggressive fixed-lot momentum profile on the Exness MT5 DEMO
+account and observe whether the system actually captures XAUUSD momentum:
+fresh entry scan every candle, tactical M1/M5 stops instead of structural
+stops, 0.05/0.10 fixed lots, same-direction add-ons only into floating
+profit, full per-cycle reasoning in the terminal.
 
 ## Current Status:
-OPERATIONAL-INTELLIGENCE-001 implemented. 726 tests pass.
+DEMO-CHALLENGE-001 implemented. 753 tests pass; safety check passes.
+- New decision layer behind the UNCHANGED safety stack: the momentum
+  pipeline (src/strategy/challenge_momentum.py) and the fixed-lot planner
+  (src/execution/challenge_planner.py) are swapped in ONLY when
+  --profile demo_challenge; session/gateway/journal/reconciliation/
+  trailing/kill switch identical; the institutional model is untouched
+  and remains the default.
+- Momentum logic: M15+M5 alignment OR M5 displacement with M1 agreement;
+  triggers breakout / pullback_rejection / continuation; STRONG => 0.10,
+  NORMAL => 0.05; low liquidity demotes 0.10->0.05 (never blocks alone).
+- TACTICAL stop only: nearest valid local M1/M5 swing / rejection wick /
+  pullback extreme + ATR/spread buffer, hard ceiling 8 USD; no valid local
+  stop => skip with "waiting for local swing stop" (structural stops are
+  NEVER substituted; STOP_TOO_WIDE_FOR_ACCOUNT cannot recur here).
+- Add-ons: same direction only, every open trade in floating profit,
+  none after a losing trade, max 3 open, no hedging — else exact reason.
+- News: only an actual RISK state blocks (NEWS_BLOCK file / HIGH-impact
+  active); NEWS_UNKNOWN and missing macro/futures are NEUTRAL.
+- Owner-directed envelope (decision 2026-06-11-01, locked to this ONE
+  profile): 3%/trade worst case, daily 5% pauses entries, weekly 10% stops
+  the service, 10 trades/day, 3 open max. Real-money policy untouched.
+
+OPERATIONAL-INTELLIGENCE-001 status (previous): implemented; 726 tests then.
 - Warmstart context report at startup; raw-confluence (4-dec) + margin +
   alt-profile display; DIRECTIONAL_CHOP_BREAKDOWN for MTF-backed moves;
   AdaptiveExposureGovernor (0/0/1/3/6 by conditions, profile-bounded);
@@ -98,20 +122,23 @@ CONTINUOUS-001 status (previous): implemented and committed; 583 tests then.
   symbol case ("XAUUSDm"); canonical forms are comparison-only.
   verify_demo_account shared in src/broker/mt5_data_adapter.py.
 
-## Operator steps (Windows PowerShell):
+## Operator steps (Windows PowerShell) — DEMO-CHALLENGE run:
 1. Maintain configs/news_windows.json (empty list = explicit all-clear);
    control/NEWS_BLOCK for manual blocks. Verify control/KILL_SWITCH absent.
 2. py -3.12 scripts\demo_preflight.py            -> all 13 gates PASS
-3. py -3.12 scripts\trading_service.py --profile continuous --dry-run --stdout-progress
-   -> watch the banner + a few cycles; Ctrl+C stops cleanly
+3. Optional rehearsal (identical loop, nothing sent):
+   py -3.12 scripts\trading_service.py --profile demo_challenge --dry-run --stdout-progress
 4. Ensure .env flags: TRADING_MODE=DEMO, REAL_TRADING_ENABLED=false,
    ALLOW_DEMO_ORDERS=true, ALLOW_MT5_ORDER_SEND=true, ALLOW_REAL_ORDERS=false
-5. py -3.12 scripts\trading_service.py --profile continuous --stdout-progress
-   -> supervise initially; trades appear in MT5 Toolbox/Trade tab
+5. py -3.12 scripts\trading_service.py --profile demo_challenge --stdout-progress
+   -> supervise; trades appear in MT5 Toolbox/Trade tab; every cycle prints
+   momentum candidate/state, entry_plan, tactical_stop, lot_decision,
+   first_trade_profit_state, add_on_allowed, and the exact WAIT reason
 6. Stop: New-Item -ItemType File control\KILL_SWITCH
    Resume: Remove-Item control\KILL_SWITCH ; restart the service
 7. Review daily service_eval_* / service_reflection_* and
-   logs/demo_trade_journal.jsonl; collect multi-day evidence.
+   logs/demo_trade_journal.jsonl; the institutional profiles
+   (continuous / growth_evaluation) remain available unchanged.
 
 ## After evidence:
 - Multi-week continuous-demo evidence feeds the real-money gate map
@@ -134,18 +161,19 @@ CONTINUOUS-001 status (previous): implemented and committed; 583 tests then.
 
 # Next Exact Steps
 
-1. User runs the operator steps above on the Windows MT5 host.
-2. Record evidence (banner output, first cycles, tickets vs MT5 Toolbox,
-   daily reports) and commit outcome notes.
-3. Any strategy change (F-11/F-13) goes through backtest + walk-forward
-   first. No risk loosening.
+1. User runs the DEMO-CHALLENGE operator steps above on the Windows MT5
+   host (dry-run first if desired, then live demo).
+2. Record evidence (per-cycle challenge lines, ORDER SENT tickets vs MT5
+   Toolbox, journal records, daily reports) and commit outcome notes.
+3. If the experiment misbehaves: engage control\KILL_SWITCH; the
+   institutional profiles remain available unchanged.
 
 ---
 
 # Allowed Files
 
-- scripts/, src/execution/, src/broker/, src/reflection/, tests/,
-  reports/runtime/
+- scripts/, src/execution/, src/strategy/, src/broker/, src/reflection/,
+  tests/, reports/runtime/
 - CURRENT_STATE.md, 12_HANDOFF.md, 11_DECISION_LOG.md
 
 ---
@@ -176,14 +204,18 @@ CONTINUOUS-001 status (previous): implemented and committed; 583 tests then.
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, 10_TASK_QUEUE.md,
 23_DEMO_TRADING_RUNBOOK.md, 24_INTELLIGENCE_AUDIT_ROADMAP.md.
 
-SIZING-001 is implemented on top of FINAL-INTELLIGENCE; the system is
-feature-complete for the demo evaluation campaign and the sizing path is
-proven end-to-end (promoted 0.01-lot order with exact XAUUSDm case in the
-fake-broker test). Guide the user to: (1) optionally maintain
-configs/macro_context.json (timestamped) and the impact/category fields in
-configs/news_windows.json; (2) restart the continuous service and review the
-full reasoning; (3) run scripts/calibration_replay.py --fetch on the Windows
-host and review the verdict; (4) run scripts/verify_wiring.py any time for
-the wiring report. Do not start the service. Do not weaken risk. Remaining
-external work: NEWS-001 / MACRO-001 / FUTURES-001 real feeds and the
-BACKTEST-001 real-history decision.
+DEMO-CHALLENGE-001 is implemented (decision 2026-06-11-01): the FINAL
+LAST-CHANCE aggressive momentum profile `--profile demo_challenge` — fixed
+lots 0.05/0.10, tactical M1/M5 local stops (never structural), fresh entry
+scan every candle, add-ons only into floating profit, max 3 open, daily 5%
+pause / weekly 10% stop. It swaps ONLY the decision layer
+(src/strategy/challenge_momentum.py + src/execution/challenge_planner.py);
+session/gateway/journal safety is identical and the institutional model is
+untouched. 753 tests pass. Guide the user to run
+`py -3.12 scripts\trading_service.py --profile demo_challenge
+--stdout-progress` on the Windows MT5 host (optionally --dry-run first) and
+to collect the per-cycle challenge reasoning plus the trade journal as
+evidence. Do not start the service. Do not enable real trading. The
+demo_challenge envelope is reserved for that one profile; do not extend it.
+Remaining external work: NEWS-001 / MACRO-001 / FUTURES-001 real feeds and
+the BACKTEST-001 real-history decision.

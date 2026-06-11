@@ -241,6 +241,7 @@ class ProgressPrinter:
     def _intel_lines(self, s) -> None:
         """Per-cycle reasoning: what the model is actually thinking."""
         intel = getattr(s, "intel", None) or {}
+        self._challenge_lines(intel.get("challenge"))
         mtf = intel.get("mtf")
         if mtf:
             tf = lambda k: mtf.get(k) or "-"  # noqa: E731
@@ -339,6 +340,39 @@ class ProgressPrinter:
                     "  needed: stronger " + ", ".join(missing)
                     + " (these scored < 0.5 this cycle)"
                 )
+
+    def _challenge_lines(self, ch: Optional[dict]) -> None:
+        """DEMO-CHALLENGE-001 momentum-profile reasoning (one block/cycle)."""
+        if not ch:
+            return
+        self._line(
+            f"  profile={ch.get('profile')} "
+            f"fresh_entry_scan={ch.get('fresh_entry_scan')} "
+            f"new_candle_detected={ch.get('new_candle_detected')} "
+            f"local_structure_updated={ch.get('local_structure_updated')}"
+        )
+        self._line(
+            f"  momentum: candidate={ch.get('direction')} "
+            f"state={ch.get('momentum_state')} m15={ch.get('m15_bias')} "
+            f"m5={ch.get('m5_bias')} disp={ch.get('displacement')}x "
+            f"m1_disp={ch.get('m1_displacement')}x "
+            f"entry_plan={ch.get('entry_plan')}"
+        )
+        price = ch.get("tactical_stop_price")
+        distance = ch.get("tactical_stop_distance")
+        self._line(
+            "  tactical_stop: "
+            + (f"price={price:.2f} distance={distance:.2f} "
+               if price is not None else "price=none distance=none ")
+            + f"source={ch.get('tactical_stop_source')} "
+            + f"lot_decision={ch.get('lot_decision')}"
+        )
+        self._line(
+            f"  first_trade_profit_state="
+            f"{ch.get('first_trade_profit_state', '-')} "
+            f"add_on_allowed={ch.get('add_on_allowed', '-')}"
+        )
+        self._line(f"  challenge_why: {ch.get('reason')}")
 
     def market_closed(self, now: datetime, state: str, next_open: datetime,
                       check_seconds: float) -> None:

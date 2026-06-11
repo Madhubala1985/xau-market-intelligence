@@ -3060,3 +3060,93 @@ updates).
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-11-01
+
+## Date:
+2026-06-11
+
+## Area:
+Profiles / Risk Envelope / Strategy / Execution (DEMO ONLY)
+
+## Decision:
+DEMO-CHALLENGE-001: add the aggressive fixed-lot momentum profile
+`--profile demo_challenge` with its own OWNER-DIRECTED demo risk envelope.
+
+Context (live evidence, 2026-06-10/11): the institutional growth_evaluation
+model ran 570+ cycles over hours of strong XAUUSDm movement, repeatedly
+identified the correct direction, and took ZERO trades. Dominant blocker:
+STOP_TOO_WIDE_FOR_ACCOUNT — the HTF structural stop plus a defensive
+0.20% budget on a $2,000 account made every candidate unsizable, and the
+same stale structural verdict repeated for hundreds of cycles while fresh
+M1/M5 local structure formed every candle. The owner directed one final
+aggressive demo attempt as a SEPARATE profile, leaving the institutional
+model untouched.
+
+What demo_challenge is:
+- a separate decision layer (src/strategy/challenge_momentum.py +
+  src/execution/challenge_planner.py) behind the SAME execution stack:
+  SupervisedDemoSession -> ExecutionGateway (kill-switch-aware, only order
+  pathway) -> journal/reconciliation/trailing — zero institutional code
+  rewritten,
+- simplified momentum logic: LONG/SHORT when M15+M5 align or M5 shows real
+  displacement with M1 agreement, triggered by breakout / pullback
+  rejection / displacement continuation; every cycle is a FRESH entry scan
+  (warmstart context never locks the entry or the stop),
+- fixed lots ONLY: 0.05 NORMAL momentum, 0.10 STRONG momentum; low
+  liquidity demotes 0.10 -> 0.05 (never blocks alone); 0.01 exists only as
+  the margin-refusal fallback, never a default,
+- TACTICAL stops from CURRENT local structure (M1/M5 swing, rejection wick,
+  pullback extreme + ATR/spread buffer, hard ceiling 8.0 USD); no valid
+  local stop => skip the cycle with the exact reason — a wide structural
+  stop is never used,
+- macro/futures/news-unknown are NEUTRAL (printed, never blocking); only an
+  actual news RISK (operator NEWS_BLOCK file / active HIGH-impact window)
+  blocks,
+- same-direction add-ons only while EVERY open trade is in floating profit;
+  blocked after a losing trade, against direction (no hedging), or beyond 3
+  open positions,
+- full per-cycle terminal reasoning: profile/momentum/lot/tactical-stop/
+  first-trade-profit/add-on lines plus fresh-entry-scan state.
+
+Owner-directed demo_challenge envelope (carve-out in session_profiles,
+construction-locked to the ONE profile named demo_challenge; real mode
+unaffected and still forbidden):
+- per-trade worst case 3.0% (0.10 lot at the widest tactical stop),
+- daily loss 5% pauses entries until UTC rollover (account-survival guard,
+  not conservative sizing), weekly loss 10% stops the service,
+- max 10 entries/day, max 3 open positions, spread cap 1.0 unchanged,
+- stop-loss mandatory, no martingale/grid/averaging/hedging structurally,
+  kill switch and gateway safety unchanged.
+
+## Alternatives Considered:
+- Loosening the institutional thresholds further: rejected — the failure was
+  architectural (structural stop + percent budget on small equity), not a
+  threshold value.
+- Reusing AdaptiveRiskEngine with a higher cap: rejected — the owner asked
+  for fixed-lot momentum behavior with tactical stops, not budget math.
+- Removing the institutional pipeline: forbidden by the task (it remains
+  intact and default).
+
+## Risk:
+This envelope can lose ~3% on a single 0.10-lot trade and 5% in a day on
+the DEMO account; that is the explicit purpose of the experiment. Survival
+guards (daily pause, weekly shutdown, 3-position cap, mandatory tactical
+stops, kill switch) bound the worst case. Real-money policy is untouched;
+the envelope is rejected at construction for any other profile name.
+
+## Files Affected:
+src/strategy/challenge_momentum.py (new),
+src/execution/challenge_planner.py (new),
+src/execution/session_profiles.py, src/strategy/pipeline.py,
+src/execution/demo_session.py, src/execution/trading_service.py,
+scripts/trading_service.py, scripts/generate_evidence_pack.py,
+tests/test_demo_challenge.py (new), tests/test_session_profiles.py,
+03_RISK_POLICY.md, 24_INTELLIGENCE_AUDIT_ROADMAP.md, CURRENT_STATE.md,
+12_HANDOFF.md.
+
+## Status:
+Accepted

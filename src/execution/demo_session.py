@@ -624,10 +624,13 @@ class SupervisedDemoSession:
                 ),
                 risk_tier=(adaptive.tier.value if adaptive is not None else None),
                 risk_pct=(adaptive.risk_pct if adaptive is not None else None),
-                intel=self._record_exposure(
-                    exposure,
-                    self._record_sizing(
-                        result, self._intel_of(context, adaptive)
+                intel=self._record_challenge(
+                    positions,
+                    self._record_exposure(
+                        exposure,
+                        self._record_sizing(
+                            result, self._intel_of(context, adaptive)
+                        ),
                     ),
                 ),
             )
@@ -671,6 +674,10 @@ class SupervisedDemoSession:
                                           "UNAVAILABLE")
         if adaptive is not None:
             intel["adaptive_risk"] = adaptive.to_dict()
+        # DEMO-CHALLENGE-001: momentum-profile reasoning (display/journal).
+        challenge = getattr(context, "challenge", None)
+        if challenge:
+            intel["challenge"] = dict(challenge)
         return intel
 
     def _record_sizing(self, result, intel: dict) -> dict:
@@ -683,6 +690,35 @@ class SupervisedDemoSession:
     def _record_exposure(exposure, intel: dict) -> dict:
         if exposure is not None:
             intel["exposure"] = exposure.to_dict()
+        return intel
+
+    def _record_challenge(self, positions, intel: dict) -> dict:
+        """DEMO-CHALLENGE-001: add the live first-trade/add-on view to the
+        challenge reasoning (display only; the planner enforces the rules)."""
+        challenge = intel.get("challenge")
+        if not challenge:
+            return intel
+        if positions:
+            first = min(positions, key=lambda p: p.ticket)
+            profit = first.profit
+            if profit is None:
+                challenge["first_trade_profit_state"] = "UNKNOWN"
+            elif profit > 0:
+                challenge["first_trade_profit_state"] = f"IN_PROFIT({profit:+.2f})"
+            else:
+                challenge["first_trade_profit_state"] = (
+                    f"NOT_IN_PROFIT({profit:+.2f})"
+                )
+            all_in_profit = all(
+                p.profit is not None and p.profit > 0 for p in positions
+            )
+            challenge["add_on_allowed"] = (
+                "yes" if all_in_profit and len(positions) < self._hard_max_open
+                else "no"
+            )
+        else:
+            challenge["first_trade_profit_state"] = "NO_OPEN_POSITION"
+            challenge["add_on_allowed"] = "n/a (no position yet)"
         return intel
 
     def _assess_exposure(

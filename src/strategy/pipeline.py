@@ -172,6 +172,9 @@ class PipelineContext:
     asian: Optional[AsianRangeContext] = None
     m1: Optional[M1Refinement] = None
     macro_pressure: str = "UNAVAILABLE"
+    # DEMO-CHALLENGE-001: per-cycle reasoning of the demo_challenge momentum
+    # pipeline (display/journal only; None for the institutional pipeline).
+    challenge: Optional[dict] = None
 
 
 @dataclass(frozen=True)

@@ -48,6 +48,22 @@ POLICY_MAX_OPEN_POSITIONS = 2
 # Live price-unit spread limit established in make_live_pipeline (LIVE-001).
 POLICY_MAX_SPREAD_PRICE = 1.0
 
+# DEMO-CHALLENGE-001 (owner decision 2026-06-11-01): a SEPARATE, DEMO-ONLY
+# risk envelope for the aggressive fixed-lot momentum profile. This is NOT a
+# loosening of the standard demo policy: it is an explicitly owner-directed
+# carve-out, available EXCLUSIVELY to the profile literally named
+# "demo_challenge" (construction refuses it anywhere else), forbidden for
+# real mode, and still bounded: per-trade worst case 3% (0.10 lot at the
+# widest tactical stop), daily 5% pauses entries (account-survival guard,
+# not conservative sizing), weekly 10% stops the service, max 3 open
+# same-direction positions, stop-loss mandatory, no martingale structurally.
+CHALLENGE_MAX_RISK_PER_TRADE = 0.030
+CHALLENGE_MAX_DAILY_LOSS = 0.05
+CHALLENGE_MAX_WEEKLY_LOSS = 0.10
+CHALLENGE_MAX_TRADES_PER_DAY = 10
+CHALLENGE_MAX_OPEN_POSITIONS = 3
+CHALLENGE_PROFILE_NAME = "demo_challenge"
+
 _MAX_DURATION_MINUTES = 8 * 60  # SupervisedDemoSession hard ceiling
 
 _UNSET = object()  # "not overridden" marker (None is a meaningful value here)
@@ -72,6 +88,10 @@ class SessionProfile:
     max_daily_loss: float = POLICY_MAX_DAILY_LOSS
     max_weekly_loss: float = POLICY_MAX_WEEKLY_LOSS
     max_spread_price: float = POLICY_MAX_SPREAD_PRICE
+    # "demo" validates against the standard demo policy bounds above;
+    # "demo_challenge" validates against the CHALLENGE_* envelope and is
+    # accepted ONLY for the profile named demo_challenge (DEMO-CHALLENGE-001).
+    envelope: str = "demo"
 
     def __post_init__(self) -> None:
         if self.duration_minutes is not None and not (
@@ -85,20 +105,41 @@ class SessionProfile:
             raise ValueError(f"profile {self.name!r}: poll_seconds must be > 0")
         if self.max_orders is not None and self.max_orders < 0:
             raise ValueError(f"profile {self.name!r}: max_orders must be >= 0")
-        # Profiles may only TIGHTEN the demo risk policy.
-        violations = []
-        if self.max_risk_per_trade > POLICY_MAX_RISK_PER_TRADE:
-            violations.append("max_risk_per_trade")
-        if self.max_daily_loss > POLICY_MAX_DAILY_LOSS:
-            violations.append("max_daily_loss")
-        if self.max_weekly_loss > POLICY_MAX_WEEKLY_LOSS:
-            violations.append("max_weekly_loss")
-        if self.max_trades_per_day > POLICY_MAX_TRADES_PER_DAY:
-            violations.append("max_trades_per_day")
-        if self.max_open_positions > POLICY_MAX_OPEN_POSITIONS:
-            violations.append("max_open_positions")
-        if self.max_spread_price > POLICY_MAX_SPREAD_PRICE:
-            violations.append("max_spread_price")
+        if self.envelope not in ("demo", "demo_challenge"):
+            raise ValueError(
+                f"profile {self.name!r}: unknown envelope {self.envelope!r}"
+            )
+        # The demo_challenge envelope is an owner-directed, DEMO-ONLY
+        # carve-out (DEMO-CHALLENGE-001) tied to the ONE profile literally
+        # named demo_challenge — no other profile can adopt it.
+        if self.envelope == "demo_challenge" and self.name != CHALLENGE_PROFILE_NAME:
+            raise ValueError(
+                f"profile {self.name!r}: the demo_challenge envelope is "
+                f"reserved for the {CHALLENGE_PROFILE_NAME!r} profile"
+            )
+        if self.envelope == "demo_challenge":
+            bounds = {
+                "max_risk_per_trade": CHALLENGE_MAX_RISK_PER_TRADE,
+                "max_daily_loss": CHALLENGE_MAX_DAILY_LOSS,
+                "max_weekly_loss": CHALLENGE_MAX_WEEKLY_LOSS,
+                "max_trades_per_day": CHALLENGE_MAX_TRADES_PER_DAY,
+                "max_open_positions": CHALLENGE_MAX_OPEN_POSITIONS,
+                "max_spread_price": POLICY_MAX_SPREAD_PRICE,
+            }
+        else:
+            # Profiles may only TIGHTEN the demo risk policy.
+            bounds = {
+                "max_risk_per_trade": POLICY_MAX_RISK_PER_TRADE,
+                "max_daily_loss": POLICY_MAX_DAILY_LOSS,
+                "max_weekly_loss": POLICY_MAX_WEEKLY_LOSS,
+                "max_trades_per_day": POLICY_MAX_TRADES_PER_DAY,
+                "max_open_positions": POLICY_MAX_OPEN_POSITIONS,
+                "max_spread_price": POLICY_MAX_SPREAD_PRICE,
+            }
+        violations = [
+            field for field, bound in bounds.items()
+            if getattr(self, field) > bound
+        ]
         if violations:
             raise ValueError(
                 f"profile {self.name!r} is looser than 03_RISK_POLICY.md demo "
@@ -231,6 +272,29 @@ PROFILES: Dict[str, SessionProfile] = {
             poll_seconds=60,
             max_orders=None,
             max_trades_per_day=6,
+        ),
+        SessionProfile(
+            name=CHALLENGE_PROFILE_NAME,
+            description=(
+                "FINAL LAST-CHANCE aggressive XAUUSDm momentum profile "
+                "(DEMO-CHALLENGE-001). DEMO ONLY — never for real funds. "
+                "Fixed lots (0.05 normal / 0.10 strong momentum), tactical "
+                "M1/M5 local stops instead of structural HTF stops, "
+                "same-direction add-ons only into floating profit, max 3 "
+                "open positions, no martingale/grid/averaging/hedging. "
+                "Survival guard: 3% worst case per trade, daily 5% pauses "
+                "entries, weekly 10% stops the service. Use "
+                "scripts/trading_service.py --profile demo_challenge."
+            ),
+            duration_minutes=None,
+            poll_seconds=30,
+            max_orders=None,
+            max_open_positions=CHALLENGE_MAX_OPEN_POSITIONS,
+            max_trades_per_day=CHALLENGE_MAX_TRADES_PER_DAY,
+            max_risk_per_trade=CHALLENGE_MAX_RISK_PER_TRADE,
+            max_daily_loss=CHALLENGE_MAX_DAILY_LOSS,
+            max_weekly_loss=CHALLENGE_MAX_WEEKLY_LOSS,
+            envelope="demo_challenge",
         ),
     )
 }

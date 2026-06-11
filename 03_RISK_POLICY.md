@@ -61,6 +61,36 @@ ZERO budget.
 This policy is for demo validation only and does not approve the same risk
 for real-money trading.
 
+## Demo-Challenge Envelope (decision 2026-06-11-01; DEMO ONLY)
+
+The profile literally named `demo_challenge` runs an OWNER-DIRECTED
+aggressive momentum experiment on the DEMO account only. It is a separate
+risk envelope, not a loosening of the standard demo policy: construction
+rejects the envelope for any other profile name, and real-money policy is
+completely unaffected.
+
+Bounds of the demo_challenge envelope:
+
+- fixed lots only: 0.05 (normal momentum) / 0.10 (strong momentum);
+  0.01 only as a broker margin-refusal fallback,
+- per-trade worst case: 3.00% (0.10 lot at the widest allowed tactical stop),
+- stop-loss mandatory and TACTICAL: derived from current local M1/M5
+  structure with a hard 8.0 USD ceiling; if no valid local stop exists the
+  cycle is skipped (a wide structural stop is never substituted),
+- maximum daily loss: 5.00% — pauses new entries until the next UTC day
+  (account-survival guard, not conservative sizing),
+- maximum weekly loss: 10.00% — stops the service,
+- maximum trades per day: 10,
+- maximum open positions: 3, same-direction only, add-ons only while every
+  open trade is in floating profit,
+- forbidden behaviors unchanged: no martingale, no grid, no averaging down,
+  no opposite-direction hedging, no removing/widening stops,
+- kill switch, ExecutionGateway-only sending, and demo-only flags unchanged.
+
+This envelope exists to answer one experimental question — can the system
+aggressively capture XAUUSD momentum and compound on demo — and approves
+nothing for real-money trading.
+
 ## Initial Real-Money Risk
 
 When real-money mode is eventually allowed:

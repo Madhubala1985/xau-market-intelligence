@@ -512,3 +512,30 @@ states (0/0/1/3/6); (R4) startup warmstart context report from real MT5
 history; (R5) macro/futures UNAVAILABLE proven neutral by test. New
 growth_evaluation profile for the milestone campaign. Survival anchors
 (2%/5%, protected add-ons, stop mandatory, contraction-only) unchanged.
+
+---
+
+# 14. DEMO-CHALLENGE-001 — 2026-06-11 (tenth pass)
+
+## F-16. The institutional model froze on stale structural-stop verdicts
+- **Class:** Proven Defect of the operational posture (ADDRESSED by a
+  separate profile, not by weakening the institutional model)
+- **Evidence:** 570+ live cycles across strong XAUUSDm movement; direction
+  repeatedly read correctly (bearish MTF, aligned intel); zero trades. The
+  dominant blocker STOP_TOO_WIDE_FOR_ACCOUNT repeated for hours because the
+  candidate stop came from HTF/warmstart structure while fresh M1/M5 local
+  swings formed every candle and were never consulted for a tactical stop.
+- **Response:** `--profile demo_challenge` (decision 2026-06-11-01): a
+  DEMO-ONLY aggressive momentum decision layer (fixed lots 0.05/0.10,
+  tactical M1/M5 local stops with an 8 USD ceiling, fresh entry scan every
+  cycle, add-ons only into floating profit, max 3 open) behind the SAME
+  session/gateway/journal safety stack. The institutional pipeline remains
+  intact and default.
+- **Lesson:** every new candle is a new execution opportunity check; a
+  warmstart thesis must inform context, never lock the entry plan or the
+  stop source for hours.
+
+Survival guards for the experiment: 3% worst-case per trade, daily 5%
+entry pause, weekly 10% shutdown, mandatory tactical stop, kill switch,
+no martingale/grid/averaging/hedging structurally. Real-money gates are
+unaffected; nothing from this experiment approves real trading.

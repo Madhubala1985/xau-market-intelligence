@@ -59,6 +59,7 @@ from src.broker.mt5_data_adapter import (  # noqa: E402
     verify_demo_account,
 )
 from src.broker.mt5_settings import load_mt5_settings  # noqa: E402
+from src.execution.challenge_planner import ChallengeTradePlanner  # noqa: E402
 from src.execution.demo_planner import DemoTradePlanner  # noqa: E402
 from src.execution.demo_session import (  # noqa: E402
     CONFIRMATION_TOKEN,
@@ -72,7 +73,12 @@ from src.execution.gateway import (  # noqa: E402
 from src.execution.kill_switch import KillSwitch  # noqa: E402
 from src.execution.live_shadow import make_live_pipeline  # noqa: E402
 from src.execution.preflight import DemoPreflight  # noqa: E402
-from src.execution.session_profiles import PROFILES, get_profile  # noqa: E402
+from src.execution.session_profiles import (  # noqa: E402
+    CHALLENGE_PROFILE_NAME,
+    PROFILES,
+    get_profile,
+)
+from src.strategy.challenge_momentum import make_challenge_pipeline  # noqa: E402
 from src.strategy.pipeline import THRESHOLD_PROFILES  # noqa: E402
 from src.execution.trading_service import (  # noqa: E402
     BannerInfo,
@@ -205,13 +211,30 @@ def main() -> int:
             kill_switch=kill_switch,
         )
         journal = TradeJournal(JOURNAL_PATH)
-        session = SupervisedDemoSession(
-            adapter=adapter,
-            pipeline=make_live_pipeline(
+        # DEMO-CHALLENGE-001: the demo_challenge profile swaps the DECISION
+        # layer (momentum pipeline + fixed-lot planner, no exposure governor)
+        # while every safety layer stays identical: same session, gateway,
+        # kill switch, journal, reconciliation, and stop management.
+        challenge_mode = profile.name == CHALLENGE_PROFILE_NAME
+        if challenge_mode:
+            pipeline = make_challenge_pipeline(
+                canonical, max_spread_price=profile.max_spread_price,
+            )
+            planner = ChallengeTradePlanner(limits=limits)
+            exposure_governor = None
+        else:
+            pipeline = make_live_pipeline(
                 canonical, max_spread_price=profile.max_spread_price,
                 threshold_profile=args.thresholds,
-            ),
-            planner=DemoTradePlanner(limits=limits),
+            )
+            planner = DemoTradePlanner(limits=limits)
+            # Adaptive Exposure Policy (OPERATIONAL-001): condition-driven
+            # entry allowance, hard-bounded by the profile.
+            exposure_governor = AdaptiveExposureGovernor()
+        session = SupervisedDemoSession(
+            adapter=adapter,
+            pipeline=pipeline,
+            planner=planner,
             gateway=gateway,
             journal=journal,
             symbol=settings.symbol,
@@ -225,9 +248,7 @@ def main() -> int:
             # pipeline/governor enforce; the AdaptiveRiskEngine's per-phase
             # ceilings and evidence budget decide the actual risk below it.
             risk_pct=limits.max_risk_per_trade,
-            # Adaptive Exposure Policy (OPERATIONAL-001): condition-driven
-            # entry allowance, hard-bounded by the profile.
-            exposure_governor=AdaptiveExposureGovernor(),
+            exposure_governor=exposure_governor,
             hard_max_trades=limits.max_trades_per_day,
             hard_max_open=limits.max_open_trades,
             max_daily_loss=limits.max_daily_loss,
@@ -273,6 +294,10 @@ def main() -> int:
             ).assess(now).summary(),
             capital_phase=f"{phase.value} (equity ~{equity:,.0f})",
             thresholds=(
+                "demo_challenge: fixed lots 0.05(normal)/0.10(strong), "
+                "tactical M1/M5 stops, add-ons only into floating profit, "
+                "max 3 open"
+                if challenge_mode else
                 f"profile={args.thresholds} "
                 + " ".join(f"{k}={v}" for k, v in
                            THRESHOLD_PROFILES[args.thresholds].items())

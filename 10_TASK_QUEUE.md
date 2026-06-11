@@ -698,3 +698,28 @@ verified.
 
 Status:
 Completed in commit OPERATIONAL-INTELLIGENCE-001.
+
+---
+
+## Task DEMO-CHALLENGE-001: Aggressive Fixed-Lot Momentum Profile (DEMO ONLY)
+
+Goal:
+One final aggressive demo attempt as a SEPARATE profile
+(--profile demo_challenge) without touching the institutional model:
+simplified momentum execution (M15/M5 alignment or displacement), fixed
+lots 0.05/0.10, tactical M1/M5 local stops instead of structural stops,
+fresh entry scan every candle, same-direction pyramiding only into floating
+profit (max 3 open), macro/futures/news-unknown neutral, full per-cycle
+terminal reasoning.
+
+Rules:
+- DEMO ONLY; the owner-directed demo_challenge envelope (3%/trade worst
+  case, daily 5% pause, weekly 10% stop) is construction-locked to this
+  one profile (decision 2026-06-11-01).
+- Stop-loss mandatory (tactical local structure); skip when no local stop.
+- No martingale, grid, averaging down, or opposite-direction hedging.
+- Kill switch, gateway-only sending, and demo-only flags unchanged.
+- The institutional pipeline remains intact and default.
+
+Status:
+Completed in commit DEMO-CHALLENGE-001.

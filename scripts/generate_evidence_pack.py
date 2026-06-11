@@ -279,6 +279,16 @@ _TABLE: Dict[str, dict] = {
         layer="execution",
         summary="sized+guarded+governed demo trade plans; never sends (F-3)",
         test_file="test_demo_planner.py", test_note="", **_MT5_BOUNDARY),
+    "src.execution.challenge_planner": dict(
+        layer="execution",
+        summary="demo_challenge fixed-lot momentum planner; never sends "
+                "(DEMO-CHALLENGE-001)",
+        test_file="test_demo_challenge.py", test_note="", **_MT5_BOUNDARY),
+    "src.strategy.challenge_momentum": dict(
+        layer="strategy",
+        summary="demo_challenge aggressive momentum pipeline: tactical local "
+                "stops, fixed lots (DEMO-CHALLENGE-001)",
+        test_file="test_demo_challenge.py", test_note="", **_PURE_SHADOW_READY),
     "src.execution.demo_session": dict(
         layer="execution",
         summary="supervised demo session loop (DEMO-002; gateway-only orders)",
