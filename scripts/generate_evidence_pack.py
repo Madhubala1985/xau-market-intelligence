@@ -284,11 +284,12 @@ _TABLE: Dict[str, dict] = {
         summary="demo_challenge fixed-lot momentum planner; never sends "
                 "(DEMO-CHALLENGE-001)",
         test_file="test_demo_challenge.py", test_note="", **_MT5_BOUNDARY),
-    "src.strategy.challenge_momentum": dict(
+    "src.strategy.smc_execution": dict(
         layer="strategy",
-        summary="demo_challenge aggressive momentum pipeline: tactical local "
-                "stops, fixed lots (DEMO-CHALLENGE-001)",
-        test_file="test_demo_challenge.py", test_note="", **_PURE_SHADOW_READY),
+        summary="institutional SMC execution pipeline: HTF+liquidity+anchor+"
+                "trigger gates, tactical stops, fixed lots "
+                "(SMC-EXECUTION-001)",
+        test_file="test_smc_execution.py", test_note="", **_PURE_SHADOW_READY),
     "src.execution.demo_session": dict(
         layer="execution",
         summary="supervised demo session loop (DEMO-002; gateway-only orders)",

@@ -566,3 +566,40 @@ unaffected; nothing from this experiment approves real trading.
 - **Lesson:** an execution boundary is only as honest as its rejection
   path; every order_send must persist what was asked and what the broker
   answered.
+
+---
+
+# 16. SMC-EXECUTION-001 — 2026-06-11 (twelfth pass)
+
+## F-18. Fake WIN/daily_pnl from contaminated MT5 deal queries
+- **Class:** Proven Defect (FIXED)
+- **Evidence:** terminal printed CLOSE_DETECTED outcome=WIN pnl=1158.62
+  while MT5 showed the trade closing negative; daily_pnl went fake-positive.
+- **Root cause:** history_deals_get(date_from, date_to, position=ticket) —
+  the MT5 Python API's date-range and position= variants are mutually
+  exclusive; combined, the position filter is dropped and ALL account deals
+  in the window (other trades, balance operations) were summed as the
+  trade's P&L.
+- **Fix:** fetch_closed_position uses history_deals_get(position=ticket)
+  only, verifies position_id per deal, excludes non-trade deal types, and
+  reports net P&L + close price/time/reason from the OUT deal;
+  fetch_realized_pnl_since computes today's realized P&L from MT5 trade
+  deals only; per-cycle accounting snapshot with accounting_verified gate
+  (unverified => ACCOUNTING_UNVERIFIED_BLOCK_NEW_ENTRIES); LOSS_COOLDOWN
+  after 2 consecutive MT5 losses.
+- **Lesson:** money facts may only come from the broker's own ledger,
+  queried with the API variant that actually filters.
+
+## F-19. demo_challenge degenerated into a retail momentum bot
+- **Class:** Proven Defect of the strategy posture (FIXED by replacement)
+- **Evidence:** live entries from M5/M1 momentum + rejection wicks alone;
+  an add-on fired with the first trade at +0.21 floating.
+- **Fix:** src/strategy/smc_execution.py — institutional A+B+C+D gates
+  (HTF context, kill-zone/liquidity context, SMC anchor, executable local
+  trigger + structurally justified tactical stop); the retail pipeline is
+  DELETED and demo_challenge aliases smc_challenge; add-ons require
+  protected winners (>=0.5R or break-even), never same-candle, never with
+  weakened SMC context. The anti-freeze re-entry planner keeps execution
+  active without retail entries.
+- **Lesson:** "aggressive" must mean institutional setups executed
+  decisively — not fewer requirements.

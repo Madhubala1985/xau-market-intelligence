@@ -130,11 +130,21 @@ class FakeMT5Trading:
         )
         return _Obj(retcode=self.TRADE_RETCODE_DONE, order=ticket)
 
-    def close_position(self, ticket, pnl):
+    def close_position(self, ticket, pnl, *, price=2310.0, reason=4,
+                       time_utc=None, extra_deals=None):
+        """Close a fake position leaving an MT5-shaped OUT deal behind.
+
+        reason follows MT5 DEAL_REASON_* (4=SL, 5=TP). extra_deals lets a
+        test inject unrelated deals (e.g. a balance operation) to prove the
+        accounting cannot be contaminated (SMC-EXECUTION-001).
+        """
         self.positions.pop(ticket, None)
+        stamp = int((time_utc or BASE_DT).timestamp())
         self.deals[ticket] = [
-            _Obj(profit=pnl, commission=0.0, swap=0.0),
-        ]
+            _Obj(profit=pnl, commission=0.0, swap=0.0, type=1, entry=1,
+                 position_id=ticket, price=price, time=stamp, reason=reason,
+                 symbol="XAUUSDm"),
+        ] + list(extra_deals or [])
 
     def positions_total(self):
         return len(self.positions)
@@ -143,8 +153,20 @@ class FakeMT5Trading:
         return [p for p in self.positions.values()
                 if symbol is None or p.symbol == symbol]
 
-    def history_deals_get(self, t_from, t_to, position=None):
-        return self.deals.get(position)
+    def history_deals_get(self, t_from=None, t_to=None, position=None):
+        """MT5-shaped history access: position= variant OR date range."""
+        if position is not None:
+            return self.deals.get(position)
+        out = []
+        for deals in self.deals.values():
+            for d in deals:
+                stamp = getattr(d, "time", None)
+                if stamp is not None and t_from is not None and t_to is not None:
+                    when = datetime.fromtimestamp(stamp, tz=timezone.utc)
+                    if not (t_from <= when <= t_to):
+                        continue
+                out.append(d)
+        return out
 
 
 def ready_preflight() -> PreflightReport:

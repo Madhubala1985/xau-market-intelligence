@@ -127,6 +127,33 @@ class BrokerPosition:
     profit: Optional[float]
 
 
+# MT5 DEAL_REASON_* codes -> human-readable close reason (SMC-EXECUTION-001).
+_DEAL_REASONS = {
+    0: "MANUAL", 1: "MANUAL", 2: "MANUAL",  # client / mobile / web
+    3: "EXPERT",
+    4: "SL",
+    5: "TP",
+    6: "STOP_OUT",
+}
+
+
+@dataclass(frozen=True)
+class ClosedPosition:
+    """Verified close information for one position, from MT5 deal history.
+
+    The ONLY permitted source for realized P&L (SMC-EXECUTION-001): net_pnl
+    is profit + commission + swap over the position's own TRADE deals.
+    Nothing here is ever inferred from internal prices or points.
+    """
+
+    ticket: int
+    net_pnl: float
+    close_price: Optional[float]
+    close_time_utc: Optional[datetime]
+    close_reason: str  # SL | TP | STOP_OUT | MANUAL | EXPERT | UNKNOWN
+    deal_count: int
+
+
 class MT5DataAdapter:
     """Read-only MT5 data adapter for XAU/USD candles."""
 
@@ -405,29 +432,126 @@ class MT5DataAdapter:
     def fetch_position_profit(
         self, ticket: int, *, lookback_days: int = 7
     ) -> Optional[float]:
-        """Realized P&L of a CLOSED position from deal history (READ-ONLY).
+        """Realized net P&L of a CLOSED position (READ-ONLY).
 
-        Sums profit + commission + swap over all deals belonging to the
-        position ticket (history_deals_get). Returns None when history is
-        unavailable or no deals are found — callers must treat None as
-        "unknown", never as zero.
+        Backward-compatible wrapper around fetch_closed_position. Returns
+        None when the close cannot be verified from MT5 deal history —
+        callers must treat None as "unknown", never as zero.
+        """
+        closed = self.fetch_closed_position(ticket)
+        return closed.net_pnl if closed is not None else None
+
+    def fetch_closed_position(self, ticket: int) -> Optional[ClosedPosition]:
+        """Verified close information for one position from MT5 deal history.
+
+        SMC-EXECUTION-001 Proven Defect fixed here: the old implementation
+        called history_deals_get(date_from, date_to, position=ticket). In
+        the MT5 Python API the date-range and position= variants are
+        mutually exclusive — combined, the position filter is not applied,
+        the call returns EVERY account deal in the window (other trades,
+        balance operations), and summing them fabricated results like
+        "WIN pnl=1158.62" on a losing trade. Now:
+
+        - history_deals_get(position=ticket) ONLY (the documented variant),
+        - every deal must belong to the ticket (position_id checked when
+          the terminal reports it),
+        - balance/credit operations (deal type not BUY/SELL) are excluded,
+        - net = profit + commission + swap over the position's trade deals,
+        - close price/time/reason come from the closing (OUT) deal.
+
+        Returns None when history is unavailable or holds no trade deals for
+        the ticket (unknown — never zero, never inferred from prices).
         """
         if not self._connected:
             raise BrokerConnectionError("adapter is not connected; call connect() first")
         mt5 = self._mt5
         if not hasattr(mt5, "history_deals_get"):
             return None
-        now = datetime.now(timezone.utc)
-        deals = mt5.history_deals_get(
-            now - timedelta(days=lookback_days), now, position=ticket
-        )
+        try:
+            deals = mt5.history_deals_get(position=ticket)
+        except Exception:  # noqa: BLE001 - unknown stays unknown, never zero
+            return None
         if not deals:
             return None
+        buy_type = getattr(mt5, "DEAL_TYPE_BUY", 0)
+        sell_type = getattr(mt5, "DEAL_TYPE_SELL", 1)
+        entry_out = getattr(mt5, "DEAL_ENTRY_OUT", 1)
         total = 0.0
+        close_price = None
+        close_time = None
+        reason_code = None
+        counted = 0
         for d in deals:
+            if int(_field(d, "position_id", ticket) or ticket) != int(ticket):
+                continue  # never sum another position's deals
+            if _field(d, "type", buy_type) not in (buy_type, sell_type):
+                continue  # balance/credit ops must never read as trade P&L
             total += float(_field(d, "profit", 0.0) or 0.0)
             total += float(_field(d, "commission", 0.0) or 0.0)
             total += float(_field(d, "swap", 0.0) or 0.0)
+            counted += 1
+            # Closing deal (fakes may omit `entry`: a deal queried for a
+            # position that vanished from positions_get IS close evidence).
+            if _field(d, "entry", entry_out) == entry_out:
+                close_price = _pos_float(_field(d, "price"))
+                raw_time = _field(d, "time")
+                if raw_time:
+                    try:
+                        _, close_time = self._epoch_to_times(int(raw_time))
+                    except (TypeError, ValueError):
+                        close_time = None
+                reason_code = _field(d, "reason", None)
+        if counted == 0:
+            return None
+        return ClosedPosition(
+            ticket=int(ticket),
+            net_pnl=round(total, 2),
+            close_price=close_price,
+            close_time_utc=close_time,
+            close_reason=_DEAL_REASONS.get(reason_code, "UNKNOWN"),
+            deal_count=counted,
+        )
+
+    def fetch_realized_pnl_since(
+        self, start_utc: datetime, *, now: Optional[datetime] = None
+    ) -> Optional[float]:
+        """Realized net P&L of the configured symbol's TRADE deals closed
+        since start_utc, straight from MT5 history (READ-ONLY). This is the
+        ONLY permitted source for daily/weekly realized P&L
+        (SMC-EXECUTION-001).
+
+        Excludes balance/credit operations and other symbols; commissions
+        count on every trade deal, profit/swap on the closing deal. Returns
+        None when history is unavailable — callers must treat that as
+        "accounting unverified" and block new entries, never as zero.
+        """
+        if not self._connected:
+            raise BrokerConnectionError("adapter is not connected; call connect() first")
+        mt5 = self._mt5
+        if not hasattr(mt5, "history_deals_get"):
+            return None
+        end = now or datetime.now(timezone.utc)
+        try:
+            deals = mt5.history_deals_get(start_utc, end)
+        except Exception:  # noqa: BLE001
+            return None
+        if deals is None:
+            return None
+        buy_type = getattr(mt5, "DEAL_TYPE_BUY", 0)
+        sell_type = getattr(mt5, "DEAL_TYPE_SELL", 1)
+        entry_out = getattr(mt5, "DEAL_ENTRY_OUT", 1)
+        symbol = (self._settings.symbol or "").strip().upper()
+        total = 0.0
+        for d in deals:
+            if _field(d, "type", buy_type) not in (buy_type, sell_type):
+                continue  # deposits/credits must never read as profit
+            deal_symbol = str(_field(d, "symbol", symbol) or symbol)
+            if deal_symbol.strip().upper() != symbol:
+                continue
+            if _field(d, "entry", entry_out) == entry_out:
+                total += float(_field(d, "profit", 0.0) or 0.0)
+                total += float(_field(d, "swap", 0.0) or 0.0)
+            total += float(_field(d, "commission", 0.0) or 0.0)
         return round(total, 2)
 
     def _to_candle(self, row: Any, timeframe: Timeframe, symbol: str) -> Candle:

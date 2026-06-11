@@ -723,3 +723,33 @@ Rules:
 
 Status:
 Completed in commit DEMO-CHALLENGE-001.
+
+---
+
+## Task SMC-EXECUTION-001: Institutional SMC Execution Mode + MT5 Accounting Truth
+
+Goal:
+Stop the retail momentum behavior of demo_challenge and replace it with the
+institutional SMC execution mode (--profile smc_challenge; demo_challenge
+becomes a deprecated alias), and make MT5 the only source of truth for
+P&L/accounting.
+
+Rules:
+- A trade requires ALL gates per candle: HTF context (D1/H4/H1/M15),
+  session/liquidity context (kill zone / Asian or session sweep /
+  liquidity target), an SMC anchor (sweep+displacement, FVG/OB retest,
+  break-retest, BOS/CHOCH), and an executable M5/M1 trigger with a
+  structurally justified tactical stop. M1/M5 momentum alone never trades.
+- Failed gates produce re-entry plans (waiting_for=...), never silent
+  multi-hour blocks.
+- Closed P&L only from MT5 deal history (position= variant, per-deal
+  position_id checks, balance deals excluded); daily realized P&L only
+  from today's MT5 trade deals; unverified accounting blocks new entries;
+  2 consecutive MT5 losses pause entries (cooldown).
+- Add-ons only onto protected winners (break-even stop or >= 0.5R
+  floating), never in the same M5 candle, never with weakened SMC context.
+- Envelope, fixed lots, kill switch, gateway-only sending, and all
+  forbidden behaviors unchanged. Real trading remains forbidden.
+
+Status:
+Completed in commit SMC-EXECUTION-001.

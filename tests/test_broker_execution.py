@@ -31,7 +31,7 @@ from src.execution.trading_service import ProgressPrinter
 from src.journal.journal import TradeJournal
 from src.risk.governor import RiskContext, RiskGovernor
 from src.risk.state_tracker import RiskStateSnapshot
-from src.strategy.challenge_momentum import make_challenge_limits
+from src.strategy.smc_execution import make_challenge_limits
 from tests.test_demo_challenge import (
     BROKER_SYMBOL,
     SYMBOL,

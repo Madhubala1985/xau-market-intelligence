@@ -256,6 +256,10 @@ class SupervisedDemoSession:
         max_daily_loss: float = 0.02,
         max_weekly_loss: float = 0.05,
         risk_pct: float = 0.005,
+        # SMC-EXECUTION-001: after this many consecutive MT5-verified losses,
+        # new entries pause for the cooldown (open positions still managed).
+        loss_cooldown_losses: int = 2,
+        loss_cooldown_minutes: float = 30.0,
         exec_timeframe: Timeframe = Timeframe.M5,
         exec_count: int = 300,
         h4_count: int = 180,
@@ -295,6 +299,8 @@ class SupervisedDemoSession:
         self._max_daily_loss = max_daily_loss
         self._max_weekly_loss = max_weekly_loss
         self._risk_pct = risk_pct
+        self._loss_cooldown_losses = loss_cooldown_losses
+        self._loss_cooldown_minutes = loss_cooldown_minutes
         self._exec_tf = exec_timeframe
         self._exec_count = exec_count
         self._h4_count = h4_count
@@ -324,6 +330,8 @@ class SupervisedDemoSession:
         # BROKER-EXECUTION-001: broker diagnostics of THIS cycle's send
         # attempt (surfaced in CycleStat.intel and the terminal).
         self._last_order_rejection: Optional[dict] = None
+        # SMC-EXECUTION-001: MT5-verified accounting snapshot of THIS cycle.
+        self._last_accounting: Optional[dict] = None
 
     # -- session loop --------------------------------------------------------
     def run(
@@ -530,6 +538,10 @@ class SupervisedDemoSession:
 
         risk_state = self._risk_state.snapshot(now, broker.balance)
         self._last_risk_state = risk_state
+        # SMC-EXECUTION-001: MT5 is the ONLY source of truth for money facts.
+        self._last_accounting = self._assess_accounting(
+            now, broker, positions, risk_state
+        )
         news = self._news_guard.assess(now)
 
         result = self._pipeline.decide(
@@ -632,13 +644,15 @@ class SupervisedDemoSession:
                 ),
                 risk_tier=(adaptive.tier.value if adaptive is not None else None),
                 risk_pct=(adaptive.risk_pct if adaptive is not None else None),
-                intel=self._record_order_rejection(
-                    self._record_challenge(
-                        positions,
-                        self._record_exposure(
-                            exposure,
-                            self._record_sizing(
-                                result, self._intel_of(context, adaptive)
+                intel=self._record_accounting(
+                    self._record_order_rejection(
+                        self._record_challenge(
+                            positions,
+                            self._record_exposure(
+                                exposure,
+                                self._record_sizing(
+                                    result, self._intel_of(context, adaptive)
+                                ),
                             ),
                         ),
                     ),
@@ -708,6 +722,86 @@ class SupervisedDemoSession:
             intel["order_rejection"] = dict(self._last_order_rejection)
         return intel
 
+    def _record_accounting(self, intel: dict) -> dict:
+        if self._last_accounting:
+            intel["accounting"] = dict(self._last_accounting)
+        return intel
+
+    # -- MT5-verified accounting (SMC-EXECUTION-001) -----------------------------
+    _MILESTONES = {"PHASE_1": 10000, "PHASE_2": 15000, "PHASE_3": 25000,
+                   "PHASE_4": None}
+
+    def _assess_accounting(
+        self,
+        now: datetime,
+        broker: BrokerState,
+        positions: List[BrokerPosition],
+        risk_state: "RiskStateSnapshot",
+    ) -> dict:
+        """Money facts straight from MT5; verified=False blocks new entries.
+
+        - realized_daily_pnl comes from MT5 deal history (today's trade
+          deals: profit + commission + swap), NEVER from internal points,
+        - floating_pnl is the sum of the open positions' MT5 profit fields,
+        - anything missing makes the snapshot UNVERIFIED (fail closed).
+        """
+        day_start = now.astimezone(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        realized = None
+        fetch = getattr(self._adapter, "fetch_realized_pnl_since", None)
+        if fetch is not None:
+            try:
+                realized = fetch(day_start, now=now)
+            except Exception:  # noqa: BLE001 - unknown stays unknown
+                realized = None
+        floating_known = all(p.profit is not None for p in positions)
+        floating = (
+            round(sum(p.profit for p in positions), 2)
+            if positions and floating_known else 0.0 if not positions else None
+        )
+        equity = broker.equity if broker.equity is not None else broker.balance
+        verified = (
+            broker.balance is not None
+            and broker.equity is not None
+            and realized is not None
+            and floating_known
+        )
+        try:
+            from src.risk.adaptive_risk import CapitalPhase
+            phase = CapitalPhase.of(equity or 0.0).value
+        except Exception:  # noqa: BLE001 - phase label must never crash a cycle
+            phase = "UNKNOWN"
+        return {
+            "mt5_balance": broker.balance,
+            "mt5_equity": broker.equity,
+            "mt5_free_margin": broker.free_margin,
+            "realized_daily_pnl": realized,
+            "floating_pnl": floating,
+            "consecutive_losses": risk_state.consecutive_losses,
+            "verified": bool(verified),
+            "capital_phase": phase,
+            "next_milestone": self._MILESTONES.get(phase),
+        }
+
+    def _last_loss_close(self) -> Optional[datetime]:
+        losses = [
+            r.closed_at_utc
+            for r in collapse_records(self._journal.records())
+            if r.outcome is TradeOutcome.LOSS and r.closed_at_utc is not None
+        ]
+        return max(losses) if losses else None
+
+    def _seconds_since_last_entry(self, now: datetime) -> Optional[float]:
+        opens = [
+            r.opened_at_utc
+            for r in collapse_records(self._journal.records())
+            if r.outcome is TradeOutcome.OPEN and r.opened_at_utc is not None
+        ]
+        if not opens:
+            return None
+        return max(0.0, (now - max(opens)).total_seconds())
+
     def _record_challenge(self, positions, intel: dict) -> dict:
         """DEMO-CHALLENGE-001: add the live first-trade/add-on view to the
         challenge reasoning (display only; the planner enforces the rules)."""
@@ -771,6 +865,13 @@ class SupervisedDemoSession:
 
     # -- close detection ---------------------------------------------------------
     def _detect_closes(self, positions: List[BrokerPosition], now: datetime) -> None:
+        """Detect closed positions from MT5 DEAL HISTORY only.
+
+        SMC-EXECUTION-001: the outcome is the sign of the MT5 net deal P&L
+        (profit + commission + swap of the position's own trade deals). A
+        negative MT5 close can never be journaled as WIN; an unverifiable
+        close stays OPEN (fail-closed) and blocks via reconciliation.
+        """
         open_tickets = {p.ticket for p in positions}
         latest = collapse_records(self._journal.records())
         for record in latest:
@@ -779,29 +880,50 @@ class SupervisedDemoSession:
             ticket = self._ticket_of(record)
             if ticket is None or ticket in open_tickets:
                 continue
-            pnl = self._adapter.fetch_position_profit(ticket)
-            if pnl is None:
+            closed = self._fetch_closed(ticket)
+            if closed is None:
                 self._violations += 1
                 self._event(
                     "VIOLATION",
-                    f"position {ticket} closed but P&L unknown; record stays "
-                    f"OPEN (fail-closed; resolve manually)",
+                    f"position {ticket} closed but MT5 history is "
+                    f"unverifiable; record stays OPEN (fail-closed; resolve "
+                    f"manually)",
                 )
                 continue
+            net = closed.net_pnl
             outcome = (
-                TradeOutcome.WIN if pnl > 0
-                else TradeOutcome.LOSS if pnl < 0
+                TradeOutcome.WIN if net > 0
+                else TradeOutcome.LOSS if net < 0
                 else TradeOutcome.BREAKEVEN
             )
+            closed_at = closed.close_time_utc or now
+            # A close can never precede its open (clock skew / partial
+            # history protection; the schema enforces the same invariant).
+            if record.opened_at_utc is not None and closed_at < record.opened_at_utc:
+                closed_at = record.opened_at_utc
             self._journal.log_record(
                 record.model_copy(update={
-                    "outcome": outcome, "pnl": pnl, "closed_at_utc": now,
+                    "outcome": outcome, "pnl": net,
+                    "closed_at_utc": closed_at,
+                    "exit_price": closed.close_price,
                 })
             )
             self._event(
                 "CLOSE_DETECTED",
-                f"ticket {ticket} closed; outcome={outcome.value} pnl={pnl}",
+                f"ticket={ticket} outcome={outcome.value} net_pnl={net:+.2f} "
+                f"source=MT5_HISTORY close_price={closed.close_price} "
+                f"reason={closed.close_reason} deals={closed.deal_count}",
             )
+
+    def _fetch_closed(self, ticket: int):
+        """Verified MT5 close info; None when unverifiable (never zero)."""
+        fetch = getattr(self._adapter, "fetch_closed_position", None)
+        if fetch is None:
+            return None
+        try:
+            return fetch(ticket)
+        except Exception:  # noqa: BLE001 - unknown stays unknown
+            return None
 
     def _fetch_optional(self, timeframe: Timeframe, count: int):
         """Fetch one extra timeframe; None on failure (honest degradation)."""
@@ -920,6 +1042,36 @@ class SupervisedDemoSession:
             detail = "account balance/leverage unknown"
             self._event("ENTRY_BLOCKED", detail)
             return "ENTRY_BLOCKED", detail
+        # SMC-EXECUTION-001: no new entry without VERIFIED MT5 accounting
+        # (balance, equity, deal history, per-position P&L). Open positions
+        # are still managed (the stop path ran earlier this cycle).
+        accounting = self._last_accounting or {}
+        if not accounting.get("verified", False):
+            self._entries_blocked += 1
+            detail = (
+                "ACCOUNTING_UNVERIFIED_BLOCK_NEW_ENTRIES: MT5 balance/"
+                "equity/deal history could not be verified this cycle; "
+                "managing existing positions only"
+            )
+            self._event("ENTRY_BLOCKED", detail)
+            return "ENTRY_BLOCKED", detail
+        # Loss cooldown: after N consecutive MT5-verified losses, pause new
+        # entries; never keep firing into a losing day.
+        if risk_state.consecutive_losses >= self._loss_cooldown_losses:
+            last_loss = self._last_loss_close()
+            if last_loss is not None:
+                elapsed = (now - last_loss).total_seconds()
+                cooldown = self._loss_cooldown_minutes * 60.0
+                if elapsed < cooldown:
+                    self._entries_blocked += 1
+                    detail = (
+                        f"LOSS_COOLDOWN: {risk_state.consecutive_losses} "
+                        f"consecutive MT5 losses; new entries paused another "
+                        f"{(cooldown - elapsed) / 60:.0f} min (positions "
+                        f"still managed)"
+                    )
+                    self._event("ENTRY_BLOCKED", detail)
+                    return "ENTRY_BLOCKED", detail
 
         account = AccountSnapshot(
             balance=broker.balance,
@@ -958,6 +1110,9 @@ class SupervisedDemoSession:
                 "trades_today": risk_state.trades_today,
                 "consecutive_losses": risk_state.consecutive_losses,
                 "open_symbols": risk_state.open_symbols,
+                # SMC-EXECUTION-001 add-on spacing: never inside the same
+                # M5 candle as the previous entry.
+                "seconds_since_last_entry": self._seconds_since_last_entry(now),
             },
             fresh_setup=has_setup,
             continuation_supported=has_setup,

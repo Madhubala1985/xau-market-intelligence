@@ -3231,3 +3231,116 @@ tests/test_broker_execution.py (new).
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-11-03
+
+## Date:
+2026-06-11
+
+## Area:
+Strategy / Accounting / Execution / Profiles (DEMO ONLY)
+
+## Decision:
+SMC-EXECUTION-001: replace the retail momentum behavior of demo_challenge
+with an institutional SMC execution mode (--profile smc_challenge) and make
+MT5 the ONLY source of truth for P&L/accounting.
+
+Live evidence: broker execution worked, but (1) the model entered trades
+from M5/M1 momentum + rejection wicks alone — retail behavior, never the
+goal; (2) MT5 closed trades NEGATIVE while the terminal printed
+"CLOSE_DETECTED outcome=WIN pnl=1158.62" and a fake positive daily_pnl.
+
+PROVEN accounting root cause: fetch_position_profit called
+history_deals_get(date_from, date_to, position=ticket). In the MT5 Python
+API the date-range and position= variants are MUTUALLY EXCLUSIVE; combined,
+the position filter is dropped and the call returns EVERY account deal in
+the window (other trades, balance/deposit operations) — summing them
+fabricated the +1158.62 "WIN" on a losing trade.
+
+Accounting fixes (src/broker/mt5_data_adapter.py, demo_session,
+trading_service):
+- fetch_closed_position(ticket): history_deals_get(position=ticket) ONLY;
+  position_id verified per deal; balance/credit deals (type not BUY/SELL)
+  excluded; net = profit + commission + swap of the position's own trade
+  deals; close price/time/reason (SL/TP/STOP_OUT/MANUAL/EXPERT/UNKNOWN)
+  from the OUT deal. CLOSE_DETECTED now prints
+  "ticket=... outcome=LOSS net_pnl=-25.19 source=MT5_HISTORY
+  close_price=... reason=SL". A negative MT5 net can never journal as WIN.
+- fetch_realized_pnl_since(day_start): today's realized P&L from MT5 trade
+  deals of the configured symbol only (deposits/credits/other symbols
+  excluded; profit/swap on OUT deals, commissions on all trade deals).
+  The terminal daily_pnl uses THIS, not journal arithmetic.
+- Per-cycle accounting snapshot: mt5_balance / mt5_equity /
+  mt5_free_margin / realized_daily_pnl / floating_pnl /
+  consecutive_losses / accounting_verified printed every cycle, plus
+  capital_phase / next_milestone /
+  milestone_mode=compound_growth_not_single_trade_target.
+  UNVERIFIED accounting blocks new entries
+  (ACCOUNTING_UNVERIFIED_BLOCK_NEW_ENTRIES); open positions stay managed.
+- Loss cooldown: 2 consecutive MT5-verified losses pause new entries for
+  30 minutes (LOSS_COOLDOWN); daily/weekly anchors unchanged.
+
+Strategy replacement (src/strategy/smc_execution.py NEW;
+src/strategy/challenge_momentum.py DELETED — the retail pipeline is gone,
+demo_challenge is now a deprecated alias of smc_challenge):
+A trade requires ALL FOUR gates, re-evaluated on every new candle:
+- A HTF context: D1/H4/H1/M15(+M5 structure) MtfAlignment or D1/H4 bias
+  must produce a directional candidate,
+- B session/liquidity: London/NY/overlap kill zone OR Asian high/low sweep
+  OR buy-/sell-side liquidity taken (TRUE_SWEEP) OR liquidity target ahead
+  (labels: ASIAN_LOW_SWEEP / ASIAN_HIGH_SWEEP / SESSION_LIQUIDITY /
+  LIQUIDITY_TARGET_AHEAD / NONE),
+- C SMC anchor: SWEEP_DISPLACEMENT > FVG_RETEST > OB_RETEST > BREAK_RETEST
+  > CHOCH > BOS, aligned and recent — M1/M5 momentum alone CANNOT trade
+  (SMC_ANCHOR_MISSING),
+- D executable local trigger: MITIGATION_REJECTION / PULLBACK_REJECTION /
+  BREAK_RETEST / CONTINUATION on M5/M1, plus a structurally justified
+  tactical stop (FVG/OB boundary, sweep rejection extreme, local M1/M5
+  swing + ATR/spread buffer, 8 USD ceiling) with stop_logic /
+  invalidation_reason / risk_if_sl_hit printed.
+Anti-freeze rule kept: a failed gate or too-wide stop prints
+reentry_plan=... waiting_for=FVG_RETEST/OB_RETEST/LOCAL_SWING/SWEEP/
+BREAK_RETEST and rescans next candle — never a 570-cycle silent block,
+never the old structural-stop verdict repeated.
+
+Add-on tightening (ChallengeTradePlanner): every open trade must be a
+PROTECTED winner — stop at/beyond break-even OR floating profit >= 0.5R of
+its current stop risk (the live +0.21 add-on case is now
+ADDON_BLOCKED_PROFIT_TOO_SMALL); ADDON_BLOCKED_NOT_PROTECTED for any
+negative position; ADDON_BLOCKED_SAME_CANDLE within 300s of the previous
+entry; ADDON_BLOCKED_SMC_CONTEXT_WEAKENED without a fresh fully-qualified
+setup; hedge/max-3/post-loss blocks unchanged.
+
+Unchanged: fixed lots 0.05/0.10 (survival-cap demotion, 0.01 only on
+margin refusal), challenge envelope (3%/trade worst case, daily 5% pause,
+weekly 10% stop, max 3 open), gateway-only sending, kill switch, no
+martingale/grid/averaging/hedging, real trading forbidden.
+
+## Alternatives Considered:
+- Keeping the retail momentum pipeline alongside the SMC mode: rejected —
+  the owner ordered the retail behavior STOPPED; demo_challenge now aliases
+  the SMC mode so no retail path remains.
+- Patching the date-range deals call instead of switching to the position=
+  variant: rejected — the API variants are exclusive by contract; the
+  position= call is the documented correct form.
+
+## Risk:
+None loosened. Trade frequency will drop versus the retail mode (four
+gates instead of momentum-only); the re-entry planner keeps the model
+actively scanning instead of silent.
+
+## Files Affected:
+src/strategy/smc_execution.py (new), src/strategy/challenge_momentum.py
+(deleted), src/broker/mt5_data_adapter.py, src/execution/demo_session.py,
+src/execution/challenge_planner.py, src/execution/trading_service.py,
+src/execution/session_profiles.py, scripts/trading_service.py,
+scripts/generate_evidence_pack.py, tests/test_smc_execution.py (new),
+tests/test_smc_accounting.py (new), tests/test_demo_challenge.py,
+tests/test_demo_session.py, tests/test_broker_execution.py,
+tests/test_session_profiles.py.
+
+## Status:
+Accepted

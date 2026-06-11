@@ -27,7 +27,7 @@ from src.execution.session_profiles import (
 def test_registry_offers_the_evaluation_profiles():
     assert set(PROFILES) == {
         "smoke", "evaluation", "london", "newyork", "full_day", "continuous",
-        "growth_evaluation", "demo_challenge",
+        "growth_evaluation", "demo_challenge", "smc_challenge",
     }
 
 

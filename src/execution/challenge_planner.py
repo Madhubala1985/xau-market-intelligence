@@ -127,13 +127,18 @@ class ChallengeTradePlanner:
                 "tactical stop-loss is mandatory; no plan",
             )
 
-        # Gate 4: same-direction pyramiding ONLY into floating profit.
+        # Gate 4: same-direction pyramiding ONLY into protected winners
+        # (SMC-EXECUTION-001: +0.21 floating is noise, not a winner).
         is_addon = len(open_positions) > 0
         pyramid: Optional[PyramidResult] = None
         if is_addon:
             pyramid = self._addon_gate(
                 decision, open_positions,
                 consecutive_losses=int(risk_inputs.get("consecutive_losses", 0)),
+                seconds_since_last_entry=risk_inputs.get(
+                    "seconds_since_last_entry"
+                ),
+                fresh_setup=fresh_setup,
             )
             if not pyramid.allowed:
                 check = (
@@ -191,12 +196,21 @@ class ChallengeTradePlanner:
         )
 
     # -- add-on gate ------------------------------------------------------------
+    # SMC-EXECUTION-001: an add-on requires every open trade to be a
+    # PROTECTED winner — stop at/beyond break-even OR floating profit of at
+    # least MIN_PROTECTION_R of its current stop risk. A few cents of
+    # floating profit (the live +0.21 case) is spread noise, not protection.
+    MIN_PROTECTION_R = 0.5
+    MIN_ADDON_SPACING_SECONDS = 300.0  # never inside the same M5 candle
+
     def _addon_gate(
         self,
         decision: TradeDecision,
         open_positions: Sequence[BrokerPosition],
         *,
         consecutive_losses: int,
+        seconds_since_last_entry: Optional[float] = None,
+        fresh_setup: bool = False,
     ) -> PyramidResult:
         reasons: List[str] = []
         if len(open_positions) >= self._limits.max_open_trades:
@@ -218,10 +232,40 @@ class ChallengeTradePlanner:
             reasons.append(
                 "an open position's floating P&L is unknown (fail closed)"
             )
-        elif any(p.profit <= 0 for p in open_positions):
+        else:
+            for p in open_positions:
+                if p.profit <= 0:
+                    reasons.append(
+                        f"ADDON_BLOCKED_NOT_PROTECTED: position {p.ticket} "
+                        f"floating {p.profit:+.2f} (never average down)"
+                    )
+                    continue
+                if p.stop_loss is None:
+                    continue  # already reported above
+                if self._at_breakeven(p):
+                    continue  # protected by the stop itself
+                risk = abs(p.entry_price - p.stop_loss) * p.lot_size * 100.0
+                needed = self.MIN_PROTECTION_R * risk
+                if risk <= 0 or p.profit < needed:
+                    reasons.append(
+                        f"ADDON_BLOCKED_PROFIT_TOO_SMALL: position "
+                        f"{p.ticket} floating {p.profit:+.2f} < "
+                        f"{self.MIN_PROTECTION_R}R (${needed:.2f}) and stop "
+                        "not at break-even — noise is not protection"
+                    )
+        if (
+            seconds_since_last_entry is not None
+            and seconds_since_last_entry < self.MIN_ADDON_SPACING_SECONDS
+        ):
             reasons.append(
-                "existing position not in profit; add-ons require floating "
-                "profit on every open trade (never average down)"
+                f"ADDON_BLOCKED_SAME_CANDLE: last entry "
+                f"{seconds_since_last_entry:.0f}s ago < "
+                f"{self.MIN_ADDON_SPACING_SECONDS:.0f}s (one M5 candle)"
+            )
+        if not fresh_setup:
+            reasons.append(
+                "ADDON_BLOCKED_SMC_CONTEXT_WEAKENED: no fresh fully-"
+                "qualified SMC setup behind this add-on candidate"
             )
         if consecutive_losses > 0:
             reasons.append(
@@ -235,10 +279,20 @@ class ChallengeTradePlanner:
         return PyramidResult(
             action=PyramidAction.ALLOW,
             reasons=(
-                "same-direction add-on permitted: all open trades in "
-                "floating profit",
+                "same-direction add-on permitted: every open trade is a "
+                "protected winner (break-even stop or >= "
+                f"{self.MIN_PROTECTION_R}R floating) and the SMC thesis "
+                "re-qualified",
             ),
         )
+
+    @staticmethod
+    def _at_breakeven(p: BrokerPosition) -> bool:
+        if p.stop_loss is None:
+            return False
+        if p.direction == "LONG":
+            return p.stop_loss >= p.entry_price - 1e-9
+        return p.stop_loss <= p.entry_price + 1e-9
 
     # -- sizing -------------------------------------------------------------------
     def _size_fixed_lot(

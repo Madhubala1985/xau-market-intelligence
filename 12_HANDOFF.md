@@ -13,18 +13,50 @@ Phase 12: Live Demo Readiness — continuous service operational; FINAL
 LAST-CHANCE demo_challenge experiment ready
 
 ## Current Task ID:
-BROKER-EXECUTION-001 (implemented; user restarts demo_challenge —
+SMC-EXECUTION-001 (implemented; user starts --profile smc_challenge —
 user-started only)
 
 ## Current Task Goal:
-Re-run demo_challenge with the fixed broker execution path: orders now
-carry the LIVE tick price and the broker-supported filling mode, an
-invalid-stops order is blocked before sending, and any rejection is fully
-persisted (retcode/comment/request) and printed honestly as
-ORDER_REJECTED_BY_BROKER.
+Run the institutional SMC execution mode on the Exness MT5 DEMO account:
+trades only on full A+B+C+D qualification (HTF context + kill-zone/
+liquidity context + SMC anchor + executable local trigger with a
+structurally justified tactical stop), MT5-verified accounting on every
+cycle, and verify each CLOSE_DETECTED line against the MT5 history tab.
 
 ## Current Status:
-BROKER-EXECUTION-001 implemented. 769 tests pass; safety check passes.
+SMC-EXECUTION-001 implemented. 792 tests pass; safety check passes.
+- ACCOUNTING (Proven Defect fixed): history_deals_get(dates, position=)
+  silently drops the position filter — every account deal in the window
+  (incl. balance ops) was summed, fabricating "WIN pnl=1158.62" on a
+  losing trade. Now: fetch_closed_position(position=ticket only, per-deal
+  position_id check, balance-deal exclusion, net = profit+commission+swap,
+  close price/time/reason from the OUT deal);
+  fetch_realized_pnl_since(day_start) for the terminal daily P&L; per-cycle
+  accounting snapshot with accounting_verified gate (UNVERIFIED blocks new
+  entries: ACCOUNTING_UNVERIFIED_BLOCK_NEW_ENTRIES); LOSS_COOLDOWN after 2
+  consecutive MT5 losses (30 min).
+- STRATEGY: src/strategy/challenge_momentum.py DELETED (retail momentum
+  gone); src/strategy/smc_execution.py NEW. Gates per candle:
+  A HTF (D1/H4/H1/M15 MtfAlignment or D1/H4 bias) -> candidate;
+  B session/liquidity (kill zone OR ASIAN_LOW/HIGH_SWEEP OR
+  SESSION_LIQUIDITY sweep OR LIQUIDITY_TARGET_AHEAD);
+  C SMC anchor (SWEEP_DISPLACEMENT > FVG_RETEST > OB_RETEST > BREAK_RETEST
+  > CHOCH > BOS) — momentum alone = SMC_ANCHOR_MISSING, no trade;
+  D local trigger (MITIGATION_REJECTION / PULLBACK_REJECTION /
+  BREAK_RETEST / CONTINUATION) + tactical stop from FVG/OB boundary, sweep
+  rejection extreme, or local M1/M5 swing (+ ATR/spread buffer, 8 USD
+  ceiling) with stop_logic / invalidation_reason / risk_if_sl_hit printed.
+- ANTI-FREEZE: every refusal prints reentry_plan + waiting_for
+  (FVG_RETEST/OB_RETEST/LOCAL_SWING/SWEEP/BREAK_RETEST) and rescans next
+  candle.
+- ADD-ONS: protected winners only — break-even stop or >= 0.5R floating
+  (live +0.21 case => ADDON_BLOCKED_PROFIT_TOO_SMALL); same-candle (300s)
+  and weakened-context blocks; hedge/max-3/post-loss unchanged.
+- PROFILES: smc_challenge (primary) + demo_challenge (deprecated alias,
+  same SMC behavior); challenge envelope unchanged (3%/trade worst case,
+  daily 5% pause, weekly 10% stop, 3 open max, fixed lots 0.05/0.10).
+
+BROKER-EXECUTION-001 status (previous): implemented; 769 tests then.
 - PROVEN root causes of the live rejections (request builder, not symbol
   case): stale candle-close price outside the deviation window + missing
   type_filling. Fixed: live ask/bid in the request; filling mode from
@@ -145,21 +177,22 @@ CONTINUOUS-001 status (previous): implemented and committed; 583 tests then.
   symbol case ("XAUUSDm"); canonical forms are comparison-only.
   verify_demo_account shared in src/broker/mt5_data_adapter.py.
 
-## Operator steps (Windows PowerShell) — DEMO-CHALLENGE run:
+## Operator steps (Windows PowerShell) — SMC EXECUTION run:
 1. Maintain configs/news_windows.json (empty list = explicit all-clear);
    control/NEWS_BLOCK for manual blocks. Verify control/KILL_SWITCH absent.
 2. py -3.12 scripts\demo_preflight.py            -> all 13 gates PASS
 3. Optional rehearsal (identical loop, nothing sent):
-   py -3.12 scripts\trading_service.py --profile demo_challenge --dry-run --stdout-progress
+   py -3.12 scripts\trading_service.py --profile smc_challenge --dry-run --stdout-progress
 4. Ensure .env flags: TRADING_MODE=DEMO, REAL_TRADING_ENABLED=false,
    ALLOW_DEMO_ORDERS=true, ALLOW_MT5_ORDER_SEND=true, ALLOW_REAL_ORDERS=false
-5. py -3.12 scripts\trading_service.py --profile demo_challenge --stdout-progress
-   -> supervise; trades appear in MT5 Toolbox/Trade tab; every cycle prints
-   momentum candidate/state, entry_plan, tactical_stop, lot_decision,
-   first_trade_profit_state, add_on_allowed, and the exact WAIT reason.
-   If the broker rejects an order the terminal prints
-   decision=ORDER_REJECTED_BY_BROKER with retcode/comment + the exact
-   request, and the journal persists it:
+5. py -3.12 scripts\trading_service.py --profile smc_challenge --stdout-progress
+   -> supervise; every cycle prints the MT5 accounting line
+   (mt5_balance/equity/free_margin, realized_daily_pnl, floating_pnl,
+   accounting_verified), htf_context, killzone, liquidity_context,
+   smc_anchor, entry_trigger, tactical_stop + stop_logic + risk_if_sl_hit,
+   and reentry_plan/waiting_for on every NO_TRADE.
+   Verify each CLOSE_DETECTED (outcome/net_pnl/reason, source=MT5_HISTORY)
+   against the MT5 history tab. Broker rejections persist as before:
    Select-String -Path logs\demo_trade_journal.jsonl -Pattern "ORDER_REJECTED","retcode","broker"
 6. Stop: New-Item -ItemType File control\KILL_SWITCH
    Resume: Remove-Item control\KILL_SWITCH ; restart the service
@@ -231,15 +264,20 @@ CONTINUOUS-001 status (previous): implemented and committed; 583 tests then.
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, 10_TASK_QUEUE.md,
 23_DEMO_TRADING_RUNBOOK.md, 24_INTELLIGENCE_AUDIT_ROADMAP.md.
 
-BROKER-EXECUTION-001 is implemented on top of DEMO-CHALLENGE-001 (decisions
-2026-06-11-01/-02): the live broker rejections were caused by the stale
-candle-close price + missing filling mode in the order request — both
-fixed (live tick price, symbol_info-driven filling mode), with full
-rejection diagnostics journaled as ORDER_* events and printed honestly as
-ORDER_REJECTED_BY_BROKER. 769 tests pass. Guide the user to restart
-demo_challenge and, if any rejection still occurs, read its retcode/comment
-from the terminal or grep the journal for ORDER_REJECTED — the cause is now
-always persisted.
+SMC-EXECUTION-001 is implemented (decision 2026-06-11-03) on top of
+DEMO-CHALLENGE-001 / BROKER-EXECUTION-001: the retail momentum pipeline is
+DELETED; --profile smc_challenge (and its alias demo_challenge) runs the
+institutional SMC execution mode — A+B+C+D gates (HTF context, kill-zone/
+liquidity, SMC anchor, local trigger + structurally justified tactical
+stop), re-entry plans instead of silent blocks, add-ons only onto protected
+winners (>=0.5R or break-even). MT5 is the only source of truth for P&L:
+fetch_closed_position / fetch_realized_pnl_since (the
+history_deals_get(dates, position=) contamination defect is fixed),
+per-cycle accounting_verified gate, LOSS_COOLDOWN after 2 MT5 losses.
+792 tests pass. Guide the user to run
+`py -3.12 scripts\trading_service.py --profile smc_challenge
+--stdout-progress` and to verify CLOSE_DETECTED lines against the MT5
+history tab. Do not start the service. Do not weaken risk or the gates.
 
 DEMO-CHALLENGE-001 context: the FINAL
 LAST-CHANCE aggressive momentum profile `--profile demo_challenge` — fixed

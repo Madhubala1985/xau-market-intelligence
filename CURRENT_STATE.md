@@ -10,7 +10,44 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-BROKER-EXECUTION-001: IMPLEMENTED — demo order rejections fixed and fully
+SMC-EXECUTION-001: IMPLEMENTED — the retail momentum behavior is REMOVED
+and replaced by the institutional SMC execution mode
+(--profile smc_challenge; demo_challenge is now a deprecated alias of the
+SAME behavior), and MT5 is the ONLY source of truth for P&L/accounting.
+- PROVEN accounting root cause fixed: history_deals_get(dates, position=)
+  drops the position filter (the API variants are mutually exclusive) and
+  summed EVERY account deal in the window — that fabricated
+  "CLOSE_DETECTED outcome=WIN pnl=1158.62" on a losing trade. Close
+  detection now uses history_deals_get(position=ticket) with per-deal
+  position_id checks and balance-deal exclusion; outcome = sign of the MT5
+  net (profit+commission+swap); CLOSE_DETECTED prints net_pnl /
+  source=MT5_HISTORY / close_price / reason=SL/TP/MANUAL.
+- Per-cycle MT5 accounting: mt5_balance/equity/free_margin,
+  realized_daily_pnl (from today's MT5 trade deals only), floating_pnl,
+  consecutive_losses, accounting_verified; UNVERIFIED accounting blocks new
+  entries (ACCOUNTING_UNVERIFIED_BLOCK_NEW_ENTRIES, positions still
+  managed); LOSS_COOLDOWN pauses entries 30 min after 2 consecutive MT5
+  losses; capital_phase/next_milestone/
+  milestone_mode=compound_growth_not_single_trade_target printed.
+- A trade now requires ALL FOUR gates every candle: (A) D1/H4/H1/M15 HTF
+  context, (B) kill zone or Asian/session liquidity event/target, (C) an
+  SMC anchor (SWEEP_DISPLACEMENT/FVG_RETEST/OB_RETEST/BREAK_RETEST/CHOCH/
+  BOS) — M1/M5 momentum alone CANNOT trade (SMC_ANCHOR_MISSING), (D) an
+  executable local trigger + structurally justified tactical stop
+  (FVG/OB boundary, sweep extreme, local swing + buffer; stop_logic /
+  invalidation_reason / risk_if_sl_hit printed).
+- Anti-freeze: failed gates print reentry_plan/waiting_for (FVG_RETEST/
+  OB_RETEST/LOCAL_SWING/SWEEP/BREAK_RETEST) and rescan next candle — the
+  570-cycle STOP_TOO_WIDE freeze is structurally impossible.
+- Add-ons only onto PROTECTED winners: stop at break-even or floating
+  >= 0.5R (the live +0.21 add-on is now ADDON_BLOCKED_PROFIT_TOO_SMALL);
+  ADDON_BLOCKED_NOT_PROTECTED / _SAME_CANDLE (300s) /
+  _SMC_CONTEXT_WEAKENED; hedge/max-3/post-loss blocks unchanged.
+- 792 tests pass (+24: SMC gates 14, MT5 accounting 10);
+  pre_demo_safety_check.sh passes. Run:
+py -3.12 scripts\trading_service.py --profile smc_challenge --stdout-progress
+
+Previously: BROKER-EXECUTION-001: IMPLEMENTED — demo order rejections fixed and fully
 diagnosable. Root causes (proven, request builder — NOT symbol case): the
 market order carried the stale M5 candle close as price (outside the
 deviation window exactly when momentum fires => REQUOTE/INVALID_PRICE) and
@@ -270,17 +307,21 @@ BROKER-EXECUTION-001 (2026-06-11, decision 2026-06-11-02):
 
 ## Next Task
 
-User starts the DEMO-CHALLENGE run on the Windows MT5 host (PowerShell):
+User starts the SMC execution run on the Windows MT5 host (PowerShell):
 1. Stop the running service if any: New-Item -ItemType File control\KILL_SWITCH
    then Remove-Item control\KILL_SWITCH once stopped.
 2. Optional rehearsal (identical loop, nothing sent):
-   py -3.12 scripts\trading_service.py --profile demo_challenge --dry-run --stdout-progress
+   py -3.12 scripts\trading_service.py --profile smc_challenge --dry-run --stdout-progress
 3. Live demo run:
-   py -3.12 scripts\trading_service.py --profile demo_challenge --stdout-progress
-4. Watch per cycle: momentum candidate/state, entry_plan, tactical_stop
-   price/distance/source, lot_decision 0.05/0.10, first_trade_profit_state,
-   add_on_allowed, and the exact WAIT reason when no trade is taken.
-5. Stop any time: New-Item -ItemType File control\KILL_SWITCH
+   py -3.12 scripts\trading_service.py --profile smc_challenge --stdout-progress
+4. Watch per cycle: mt5_balance/equity/realized_daily_pnl/floating_pnl +
+   accounting_verified, htf_context, killzone, liquidity_context,
+   smc_anchor, entry_trigger, tactical_stop + stop_logic +
+   risk_if_sl_hit, lot_decision 0.05/0.10, reentry_plan/waiting_for on
+   every NO_TRADE, first_trade_profit_state/add_on_allowed.
+5. Verify every CLOSE_DETECTED line against the MT5 history tab: outcome
+   and net_pnl must match the broker exactly (source=MT5_HISTORY).
+6. Stop any time: New-Item -ItemType File control\KILL_SWITCH
 
 Institutional evidence collection (unchanged, optional):
 1. py -3.12 scripts\trading_service.py --profile continuous --stdout-progress

@@ -63,6 +63,12 @@ CHALLENGE_MAX_WEEKLY_LOSS = 0.10
 CHALLENGE_MAX_TRADES_PER_DAY = 10
 CHALLENGE_MAX_OPEN_POSITIONS = 3
 CHALLENGE_PROFILE_NAME = "demo_challenge"
+# SMC-EXECUTION-001 (owner decision 2026-06-11-03): the challenge profile is
+# the institutional SMC execution mode; smc_challenge is the primary name,
+# demo_challenge remains as an alias of the SAME behavior (the retail
+# momentum pipeline no longer exists). Both share the challenge envelope.
+SMC_PROFILE_NAME = "smc_challenge"
+CHALLENGE_PROFILE_NAMES = frozenset({CHALLENGE_PROFILE_NAME, SMC_PROFILE_NAME})
 
 _MAX_DURATION_MINUTES = 8 * 60  # SupervisedDemoSession hard ceiling
 
@@ -110,12 +116,13 @@ class SessionProfile:
                 f"profile {self.name!r}: unknown envelope {self.envelope!r}"
             )
         # The demo_challenge envelope is an owner-directed, DEMO-ONLY
-        # carve-out (DEMO-CHALLENGE-001) tied to the ONE profile literally
-        # named demo_challenge — no other profile can adopt it.
-        if self.envelope == "demo_challenge" and self.name != CHALLENGE_PROFILE_NAME:
+        # carve-out (DEMO-CHALLENGE-001 / SMC-EXECUTION-001) tied to the
+        # challenge profiles only — no other profile can adopt it.
+        if self.envelope == "demo_challenge" \
+                and self.name not in CHALLENGE_PROFILE_NAMES:
             raise ValueError(
                 f"profile {self.name!r}: the demo_challenge envelope is "
-                f"reserved for the {CHALLENGE_PROFILE_NAME!r} profile"
+                f"reserved for {sorted(CHALLENGE_PROFILE_NAMES)}"
             )
         if self.envelope == "demo_challenge":
             bounds = {
@@ -276,15 +283,34 @@ PROFILES: Dict[str, SessionProfile] = {
         SessionProfile(
             name=CHALLENGE_PROFILE_NAME,
             description=(
-                "FINAL LAST-CHANCE aggressive XAUUSDm momentum profile "
-                "(DEMO-CHALLENGE-001). DEMO ONLY — never for real funds. "
-                "Fixed lots (0.05 normal / 0.10 strong momentum), tactical "
-                "M1/M5 local stops instead of structural HTF stops, "
-                "same-direction add-ons only into floating profit, max 3 "
-                "open positions, no martingale/grid/averaging/hedging. "
-                "Survival guard: 3% worst case per trade, daily 5% pauses "
-                "entries, weekly 10% stops the service. Use "
-                "scripts/trading_service.py --profile demo_challenge."
+                "DEPRECATED ALIAS of smc_challenge (SMC-EXECUTION-001): the "
+                "retail momentum behavior was removed; this name now runs "
+                "the SAME institutional SMC execution mode. DEMO ONLY."
+            ),
+            duration_minutes=None,
+            poll_seconds=30,
+            max_orders=None,
+            max_open_positions=CHALLENGE_MAX_OPEN_POSITIONS,
+            max_trades_per_day=CHALLENGE_MAX_TRADES_PER_DAY,
+            max_risk_per_trade=CHALLENGE_MAX_RISK_PER_TRADE,
+            max_daily_loss=CHALLENGE_MAX_DAILY_LOSS,
+            max_weekly_loss=CHALLENGE_MAX_WEEKLY_LOSS,
+            envelope="demo_challenge",
+        ),
+        SessionProfile(
+            name=SMC_PROFILE_NAME,
+            description=(
+                "Institutional SMC execution mode (SMC-EXECUTION-001). DEMO "
+                "ONLY — never for real funds. A trade requires ALL gates: "
+                "HTF context (D1/H4/H1/M15), session/liquidity context "
+                "(kill zone, Asian/session sweep, liquidity target), an SMC "
+                "anchor (sweep+displacement, FVG/OB retest, break-retest, "
+                "BOS/CHOCH), and an executable M5/M1 trigger with a "
+                "structurally justified tactical stop. Fixed lots "
+                "0.05/0.10; add-ons only onto protected winners (>=0.5R or "
+                "break-even); max 3 open; MT5 is the only source of truth "
+                "for P&L. Use scripts/trading_service.py --profile "
+                "smc_challenge."
             ),
             duration_minutes=None,
             poll_seconds=30,

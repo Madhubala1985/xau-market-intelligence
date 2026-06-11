@@ -279,6 +279,7 @@ class ProgressPrinter:
     def _intel_lines(self, s) -> None:
         """Per-cycle reasoning: what the model is actually thinking."""
         intel = getattr(s, "intel", None) or {}
+        self._accounting_lines(intel.get("accounting"))
         self._challenge_lines(intel.get("challenge"))
         mtf = intel.get("mtf")
         if mtf:
@@ -380,7 +381,7 @@ class ProgressPrinter:
                 )
 
     def _challenge_lines(self, ch: Optional[dict]) -> None:
-        """DEMO-CHALLENGE-001 momentum-profile reasoning (one block/cycle)."""
+        """SMC-EXECUTION-001: institutional gate reasoning (one block/cycle)."""
         if not ch:
             return
         self._line(
@@ -389,12 +390,18 @@ class ProgressPrinter:
             f"new_candle_detected={ch.get('new_candle_detected')} "
             f"local_structure_updated={ch.get('local_structure_updated')}"
         )
+        self._line(f"  htf_context={ch.get('htf_context')}")
         self._line(
-            f"  momentum: candidate={ch.get('direction')} "
-            f"state={ch.get('momentum_state')} m15={ch.get('m15_bias')} "
-            f"m5={ch.get('m5_bias')} disp={ch.get('displacement')}x "
-            f"m1_disp={ch.get('m1_displacement')}x "
-            f"entry_plan={ch.get('entry_plan')}"
+            f"  killzone={ch.get('killzone')} "
+            f"liquidity_context={ch.get('liquidity_context')} "
+            f"disp={ch.get('displacement')}x"
+        )
+        self._line(
+            f"  smc_anchor={ch.get('smc_anchor')} "
+            f"entry_trigger={ch.get('entry_trigger')} "
+            f"grade={ch.get('grade')} "
+            f"candidate={ch.get('direction')} "
+            f"lot_decision={ch.get('lot_decision')}"
         )
         price = ch.get("tactical_stop_price")
         distance = ch.get("tactical_stop_distance")
@@ -402,15 +409,55 @@ class ProgressPrinter:
             "  tactical_stop: "
             + (f"price={price:.2f} distance={distance:.2f} "
                if price is not None else "price=none distance=none ")
-            + f"source={ch.get('tactical_stop_source')} "
-            + f"lot_decision={ch.get('lot_decision')}"
+            + f"source={ch.get('tactical_stop_source')}"
         )
+        if ch.get("stop_logic"):
+            risk_hit = ch.get("risk_if_sl_hit")
+            self._line(
+                f"  stop_logic={ch.get('stop_logic')} "
+                f"risk_if_sl_hit="
+                + (f"${risk_hit:.2f}" if risk_hit is not None else "n/a")
+            )
+            self._line(f"  invalidation_reason={ch.get('invalidation_reason')}")
+        if ch.get("waiting_for") or ch.get("reentry_plan"):
+            self._line(
+                f"  reentry_plan={ch.get('reentry_plan') or '-'} "
+                f"waiting_for={ch.get('waiting_for') or '-'}"
+            )
         self._line(
             f"  first_trade_profit_state="
             f"{ch.get('first_trade_profit_state', '-')} "
             f"add_on_allowed={ch.get('add_on_allowed', '-')}"
         )
-        self._line(f"  challenge_why: {ch.get('reason')}")
+        self._line(f"  smc_why: {ch.get('reason')}")
+
+    def _accounting_lines(self, acct: Optional[dict]) -> None:
+        """SMC-EXECUTION-001: MT5 is the only source of truth for money."""
+        if not acct:
+            return
+        fmt = lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "n/a"  # noqa: E731
+        self._line(
+            f"  mt5_balance={fmt(acct.get('mt5_balance'))} "
+            f"mt5_equity={fmt(acct.get('mt5_equity'))} "
+            f"mt5_free_margin={fmt(acct.get('mt5_free_margin'))} "
+            f"realized_daily_pnl={fmt(acct.get('realized_daily_pnl'))} "
+            f"floating_pnl={fmt(acct.get('floating_pnl'))}"
+        )
+        self._line(
+            f"  consecutive_losses={acct.get('consecutive_losses')} "
+            f"accounting_verified="
+            f"{'true' if acct.get('verified') else 'false'}"
+        )
+        if not acct.get("verified"):
+            self._line("  ACCOUNTING_UNVERIFIED_BLOCK_NEW_ENTRIES")
+        milestone = acct.get("next_milestone")
+        self._line(
+            f"  capital_phase={acct.get('capital_phase')} "
+            f"current_balance={fmt(acct.get('mt5_balance'))} "
+            f"current_equity={fmt(acct.get('mt5_equity'))} "
+            f"next_milestone={milestone if milestone is not None else 'compounding'} "
+            f"milestone_mode=compound_growth_not_single_trade_target"
+        )
 
     def market_closed(self, now: datetime, state: str, next_open: datetime,
                       check_seconds: float) -> None:
@@ -716,11 +763,15 @@ class TradingService:
             else "NEWS_ACTIVE" if s.news_risky
             else "NEWS_CLEAR"
         )
+        # SMC-EXECUTION-001: daily P&L comes from MT5 deal history when the
+        # cycle verified it; the journal sum is only the offline fallback.
+        accounting = (getattr(s, "intel", None) or {}).get("accounting") or {}
+        realized = accounting.get("realized_daily_pnl")
         self._printer.cycle(
             cycle_no, outcome,
             decision_label=decision,
             market_state="OPEN",
-            daily_pnl=self._daily_pnl(now),
+            daily_pnl=realized if realized is not None else self._daily_pnl(now),
             risk_label=risk_label,
             news_label=news_label,
             kill_label="on" if self._kill_switch.engaged else "off",

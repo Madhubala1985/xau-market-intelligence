@@ -74,11 +74,11 @@ from src.execution.kill_switch import KillSwitch  # noqa: E402
 from src.execution.live_shadow import make_live_pipeline  # noqa: E402
 from src.execution.preflight import DemoPreflight  # noqa: E402
 from src.execution.session_profiles import (  # noqa: E402
-    CHALLENGE_PROFILE_NAME,
+    CHALLENGE_PROFILE_NAMES,
     PROFILES,
     get_profile,
 )
-from src.strategy.challenge_momentum import make_challenge_pipeline  # noqa: E402
+from src.strategy.smc_execution import make_smc_pipeline  # noqa: E402
 from src.strategy.pipeline import THRESHOLD_PROFILES  # noqa: E402
 from src.execution.trading_service import (  # noqa: E402
     BannerInfo,
@@ -211,13 +211,14 @@ def main() -> int:
             kill_switch=kill_switch,
         )
         journal = TradeJournal(JOURNAL_PATH)
-        # DEMO-CHALLENGE-001: the demo_challenge profile swaps the DECISION
-        # layer (momentum pipeline + fixed-lot planner, no exposure governor)
-        # while every safety layer stays identical: same session, gateway,
-        # kill switch, journal, reconciliation, and stop management.
-        challenge_mode = profile.name == CHALLENGE_PROFILE_NAME
+        # SMC-EXECUTION-001: the challenge profiles (smc_challenge and its
+        # deprecated alias demo_challenge) swap the DECISION layer for the
+        # institutional SMC execution pipeline + fixed-lot planner (no
+        # exposure governor) while every safety layer stays identical: same
+        # session, gateway, kill switch, journal, reconciliation, stops.
+        challenge_mode = profile.name in CHALLENGE_PROFILE_NAMES
         if challenge_mode:
-            pipeline = make_challenge_pipeline(
+            pipeline = make_smc_pipeline(
                 canonical, max_spread_price=profile.max_spread_price,
             )
             planner = ChallengeTradePlanner(limits=limits)
@@ -294,9 +295,9 @@ def main() -> int:
             ).assess(now).summary(),
             capital_phase=f"{phase.value} (equity ~{equity:,.0f})",
             thresholds=(
-                "demo_challenge: fixed lots 0.05(normal)/0.10(strong), "
-                "tactical M1/M5 stops, add-ons only into floating profit, "
-                "max 3 open"
+                "smc_challenge: HTF+killzone/liquidity+SMC anchor+local "
+                "trigger required; fixed lots 0.05/0.10; tactical stops; "
+                "add-ons only onto protected winners (>=0.5R/BE); max 3 open"
                 if challenge_mode else
                 f"profile={args.thresholds} "
                 + " ".join(f"{k}={v}" for k, v in

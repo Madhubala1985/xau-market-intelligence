@@ -1,19 +1,11 @@
-"""Tests for the demo_challenge aggressive momentum profile
-(Task DEMO-CHALLENGE-001).
+"""Tests for the challenge profiles + fixed-lot SMC planner
+(DEMO-CHALLENGE-001, revised by SMC-EXECUTION-001).
 
-Proves the owner-directed behavior:
-- the demo_challenge profile exists with the challenge envelope (3 open max,
-  fixed-lot survival cap) and the envelope is reserved for that ONE profile,
-- fixed lots: 0.05 for NORMAL momentum, 0.10 for very STRONG momentum,
-- macro/futures/news-unknown never block (only an actual news RISK state),
-- low liquidity demotes 0.10 -> 0.05 but never hard-blocks strong momentum,
-- the tactical stop is mandatory and LOCAL: no stop candidate => skip the
-  cycle; the huge structural stop is never used as a fallback,
-- same-direction add-ons only while every open trade is in floating profit;
-  adding to a loser, after a loss, against direction (hedge), or beyond 3
-  open positions is blocked (no martingale/grid/averaging structurally),
-- the kill switch blocks execution,
-- orders carry the EXACT broker symbol case (XAUUSDm).
+Covers the envelope/profile registry, the fixed-lot rules, the tightened
+add-on protection rules (>=0.5R or break-even — a +0.21 floating trade is
+NOT a winner), kill switch, exact XAUUSDm symbol case, and the end-to-end
+session path. The SMC pipeline gates themselves are covered in
+tests/test_smc_execution.py.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -41,21 +33,23 @@ from src.execution.session_profiles import (
     CHALLENGE_MAX_OPEN_POSITIONS,
     CHALLENGE_MAX_RISK_PER_TRADE,
     CHALLENGE_PROFILE_NAME,
+    CHALLENGE_PROFILE_NAMES,
+    SMC_PROFILE_NAME,
     SessionProfile,
     get_profile,
 )
 from src.risk.governor import RiskContext, RiskGovernor
 from src.risk.leverage_sizing import AccountSnapshot
 from src.risk.news_guard import NewsRiskState
-from src.strategy.challenge_momentum import (
+from src.strategy.pipeline import PipelineInput
+from src.strategy.scoring import ConfidenceResult, ScoreRecommendation
+from src.strategy.smc_execution import (
     LOT_NORMAL,
     LOT_STRONG,
-    MomentumState,
+    SetupGrade,
     make_challenge_limits,
-    make_challenge_pipeline,
+    make_smc_pipeline,
 )
-from src.strategy.pipeline import PipelineInput, PipelineStage
-from src.strategy.scoring import ConfidenceResult, ScoreRecommendation
 
 SYMBOL = "XAUUSDM"
 BROKER_SYMBOL = "XAUUSDm"  # exact Exness case
@@ -85,31 +79,6 @@ def broker_state(now, *, balance=2000.0, open_positions=0):
     )
 
 
-def m5_breakdown(final_body):
-    """40 declining candles, a 4-candle pullback (local swing high), two
-    small drifts, then a breakdown candle with the given body."""
-    closes = [3400.0 - 0.5 * (i + 1) for i in range(40)]        # -> 3380.0
-    closes += [3380.6, 3381.2, 3381.8, 3382.4]                  # pullback top
-    closes += [3382.2, 3382.0]                                  # drift
-    closes += [3382.0 - final_body]                             # breakdown
-    return make_candles(closes)
-
-
-def m15_bearish():
-    return make_candles(
-        [3440.0 - 1.5 * i for i in range(30)], timeframe="M15", minutes=15,
-        start=START - timedelta(hours=6),
-    )
-
-
-def m1_with_local_swing(entry_zone=3381.0):
-    closes = [entry_zone + d for d in
-              (1.0, 0.6, 0.2, -0.2, 0.2, 0.6, -0.1, -0.8, -1.2, -1.6,
-               -1.8, -2.0)]
-    return make_candles(closes, timeframe="M1", minutes=1,
-                        start=START + timedelta(hours=3, minutes=43))
-
-
 def pipeline_input(m5, *, m15=None, m1=None, balance=2000.0, spread=0.2,
                    open_positions=0, **kwargs):
     now = m5[-1].time_utc
@@ -129,10 +98,10 @@ def challenge_decision(direction=Direction.SHORT, *, lot=0.05,
     )
     target = entry - 5.0 if direction is Direction.SHORT else entry + 5.0
     return TradeDecision(
-        decision_id="chal-test", time_utc=START, symbol=SYMBOL,
+        decision_id="smc-test", time_utc=START, symbol=SYMBOL,
         direction=direction,
-        setup_type=f"challenge_breakout[STRONG,lot={lot:.2f}]",
-        thesis="test momentum", invalidation_price=stop,
+        setup_type=f"smc_fvg_retest[STRONG,lot={lot:.2f}]",
+        thesis="test smc setup", invalidation_price=stop,
         entry_price=entry, stop_loss=stop, take_profits=(target,),
         confidence=0.8, uncertainty=0.2,
     )
@@ -156,10 +125,10 @@ def news_clear():
 
 
 def open_position(ticket=1, *, direction="SHORT", profit=15.0,
-                  entry=3360.0, stop=3363.0):
+                  entry=3360.0, stop=3363.0, lot=0.05):
     return BrokerPosition(
         ticket=ticket, symbol=BROKER_SYMBOL, direction=direction,
-        lot_size=0.05, entry_price=entry, stop_loss=stop,
+        lot_size=lot, entry_price=entry, stop_loss=stop,
         take_profit=None, current_price=3355.0, profit=profit,
     )
 
@@ -169,7 +138,7 @@ def planner():
 
 
 def plan(p, decision, *, positions=(), news=None, risk_inputs=None,
-         account=None, broker=None):
+         account=None, broker=None, fresh_setup=True):
     return p.plan(
         decision, allow_confidence(),
         broker=broker or broker_state(START, open_positions=len(positions)),
@@ -182,27 +151,36 @@ def plan(p, decision, *, positions=(), news=None, risk_inputs=None,
         risk_inputs=risk_inputs or {
             "open_symbols": {SYMBOL} if positions else set()
         },
+        fresh_setup=fresh_setup,
+        continuation_supported=fresh_setup,
     )
 
 
 # -- profile / envelope -----------------------------------------------------------
 
-def test_demo_challenge_profile_exists_with_challenge_envelope():
-    profile = get_profile(CHALLENGE_PROFILE_NAME)
-    assert profile.envelope == "demo_challenge"
-    assert profile.max_open_positions == CHALLENGE_MAX_OPEN_POSITIONS == 3
-    assert profile.max_risk_per_trade == CHALLENGE_MAX_RISK_PER_TRADE
-    assert profile.duration_minutes is None  # continuous service profile
-    assert profile.max_orders is None
-    limits = profile.risk_limits(SYMBOL)
-    challenge_limits = make_challenge_limits(SYMBOL)
-    assert limits.max_open_trades == challenge_limits.max_open_trades == 3
-    assert limits.max_risk_per_trade == challenge_limits.max_risk_per_trade
-    assert limits.max_daily_loss == challenge_limits.max_daily_loss
-    assert limits.max_weekly_loss == challenge_limits.max_weekly_loss
+def test_challenge_profiles_exist_with_the_challenge_envelope():
+    for name in CHALLENGE_PROFILE_NAMES:
+        profile = get_profile(name)
+        assert profile.envelope == "demo_challenge"
+        assert profile.max_open_positions == CHALLENGE_MAX_OPEN_POSITIONS == 3
+        assert profile.max_risk_per_trade == CHALLENGE_MAX_RISK_PER_TRADE
+        assert profile.duration_minutes is None
+        assert profile.max_orders is None
+        limits = profile.risk_limits(SYMBOL)
+        challenge_limits = make_challenge_limits(SYMBOL)
+        assert limits.max_open_trades == challenge_limits.max_open_trades == 3
+        assert limits.max_risk_per_trade == challenge_limits.max_risk_per_trade
+        assert limits.max_daily_loss == challenge_limits.max_daily_loss
+        assert limits.max_weekly_loss == challenge_limits.max_weekly_loss
 
 
-def test_challenge_envelope_is_reserved_for_the_demo_challenge_profile():
+def test_smc_challenge_is_the_primary_name_demo_challenge_an_alias():
+    assert SMC_PROFILE_NAME == "smc_challenge"
+    assert "DEPRECATED ALIAS" in get_profile(CHALLENGE_PROFILE_NAME).description
+    assert "SMC" in get_profile(SMC_PROFILE_NAME).description
+
+
+def test_challenge_envelope_is_reserved_for_the_challenge_profiles():
     with pytest.raises(ValueError, match="reserved"):
         SessionProfile(
             name="sneaky", description="x", duration_minutes=None,
@@ -218,134 +196,46 @@ def test_other_profiles_still_cannot_loosen_the_demo_policy():
         )
 
 
-# -- fixed-lot momentum sizing -----------------------------------------------------
+# -- fixed-lot rules ---------------------------------------------------------------
 
-def test_normal_momentum_chooses_005():
-    pipe = make_challenge_pipeline(SYMBOL)
+def test_normal_grade_chooses_005():
+    pipe = make_smc_pipeline(SYMBOL)
     lot, why = pipe._fixed_lot(
-        MomentumState.NORMAL, SessionType.LONDON, 2000.0, 2.5, 0.2
+        SetupGrade.NORMAL, SessionType.LONDON, 2000.0, 2.5, 0.2
     )
     assert lot == LOT_NORMAL == 0.05
     assert "NORMAL" in why
 
 
-def test_very_strong_momentum_chooses_010():
-    pipe = make_challenge_pipeline(SYMBOL)
+def test_strong_grade_chooses_010():
+    pipe = make_smc_pipeline(SYMBOL)
     lot, _ = pipe._fixed_lot(
-        MomentumState.STRONG, SessionType.LONDON, 2000.0, 2.5, 0.2
+        SetupGrade.STRONG, SessionType.LONDON, 2000.0, 2.5, 0.2
     )
     assert lot == LOT_STRONG == 0.10
 
 
 def test_low_liquidity_demotes_010_to_005_but_does_not_block():
-    pipe = make_challenge_pipeline(SYMBOL)
+    pipe = make_smc_pipeline(SYMBOL)
     lot, why = pipe._fixed_lot(
-        MomentumState.STRONG, SessionType.LOW_LIQUIDITY, 2000.0, 2.5, 0.2
+        SetupGrade.STRONG, SessionType.LOW_LIQUIDITY, 2000.0, 2.5, 0.2
     )
-    assert lot == LOT_NORMAL  # demoted, NOT blocked
+    assert lot == LOT_NORMAL
     assert "demoted" in why
 
 
 def test_survival_cap_demotes_then_skips_never_resizes_the_stop():
-    pipe = make_challenge_pipeline(SYMBOL)
-    # 0.10 lot at a 7.0 stop risks $72 > $60 cap -> demote to 0.05 ($36).
+    pipe = make_smc_pipeline(SYMBOL)
     lot, why = pipe._fixed_lot(
-        MomentumState.STRONG, SessionType.LONDON, 2000.0, 7.0, 0.2
+        SetupGrade.STRONG, SessionType.LONDON, 2000.0, 7.0, 0.2
     )
     assert lot == LOT_NORMAL
     assert "demotes" in why
-    # Even 0.05 over the cap -> skip the cycle (no shrunken stop, no 0.01).
     lot, why = pipe._fixed_lot(
-        MomentumState.STRONG, SessionType.LONDON, 2000.0, 12.5, 0.2
+        SetupGrade.STRONG, SessionType.LONDON, 2000.0, 12.5, 0.2
     )
     assert lot is None
     assert "survival cap" in why
-
-
-# -- end-to-end momentum decisions ---------------------------------------------------
-
-def test_strong_breakdown_produces_a_short_with_tactical_stop_and_010():
-    pipe = make_challenge_pipeline(SYMBOL)
-    result = pipe.decide(pipeline_input(
-        m5_breakdown(3.0), m15=m15_bearish(), m1=m1_with_local_swing(),
-    ))
-    assert result.stage is PipelineStage.RISK_EVALUATED
-    assert result.approved, result.reason
-    decision = result.decision
-    assert decision.direction is Direction.SHORT
-    assert decision.stop_loss is not None and decision.take_profits
-    stop_distance = decision.stop_loss - decision.entry_price
-    assert 0 < stop_distance <= 8.0  # tactical/local, never structural
-    assert result.lot_size == LOT_STRONG
-    assert "lot=0.10" in decision.setup_type
-    ch = result.context.challenge
-    assert ch["momentum_state"] == "STRONG"
-    assert ch["lot_decision"] == "0.10"
-    assert ch["tactical_stop_source"] in (
-        "m1_local_swing", "m5_local_swing", "rejection_wick",
-        "pullback_extreme",
-    )
-
-
-def test_normal_momentum_produces_005_lot():
-    pipe = make_challenge_pipeline(SYMBOL)
-    result = pipe.decide(pipeline_input(
-        m5_breakdown(1.2), m15=m15_bearish(),
-        m1=m1_with_local_swing(entry_zone=3381.4),
-    ))
-    assert result.approved, result.reason
-    assert result.context.challenge["momentum_state"] == "NORMAL"
-    assert result.lot_size == LOT_NORMAL
-    assert "lot=0.05" in result.decision.setup_type
-
-
-def test_no_local_stop_means_skip_not_a_structural_stop():
-    # A vertical collapse with no pullback: momentum is real but no local
-    # M1/M5 invalidation exists nearby. demo_challenge must SKIP the cycle,
-    # never fall back to a huge structural stop.
-    closes = [3400.0 - 0.5 * (i + 1) for i in range(40)]
-    closes += [3380.0 - 7.0]  # 7-dollar breakdown candle
-    result = make_challenge_pipeline(SYMBOL).decide(pipeline_input(
-        make_candles(closes), m15=m15_bearish(),
-    ))
-    assert not result.approved
-    assert result.stage is PipelineStage.HYPOTHESIS
-    assert "waiting for local swing stop" in result.reason
-    assert "structural stop is NOT used" in result.reason
-
-
-def test_weak_momentum_waits_with_an_exact_reason():
-    closes = [3390.0 + (0.4 if i % 2 == 0 else -0.4) for i in range(50)]
-    result = make_challenge_pipeline(SYMBOL).decide(pipeline_input(
-        make_candles(closes),
-        m15=make_candles([3390.0 + (0.5 if i % 2 else -0.5)
-                          for i in range(30)],
-                         timeframe="M15", minutes=15,
-                         start=START - timedelta(hours=6)),
-    ))
-    assert not result.approved
-    assert "momentum weak" in result.reason
-    assert result.context.challenge["direction"] == "NONE"
-
-
-def test_macro_futures_unavailable_never_blocks_the_challenge_pipeline():
-    # The challenge pipeline consults NO macro/futures/news provider at all:
-    # a fully-approved decision with zero external context proves
-    # unavailability is neutral.
-    result = make_challenge_pipeline(SYMBOL).decide(pipeline_input(
-        m5_breakdown(3.0), m15=m15_bearish(), m1=m1_with_local_swing(),
-        futures_candles=None,
-    ))
-    assert result.approved, result.reason
-
-
-def test_spread_too_high_waits():
-    result = make_challenge_pipeline(SYMBOL).decide(pipeline_input(
-        m5_breakdown(3.0), m15=m15_bearish(), m1=m1_with_local_swing(),
-        spread=1.5,
-    ))
-    assert not result.approved
-    assert "spread too high" in result.reason
 
 
 # -- planner gates -----------------------------------------------------------------
@@ -381,7 +271,10 @@ def test_planner_uses_the_pipeline_fixed_lot():
     assert result.lot_size == 0.05
 
 
-def test_addon_allowed_only_when_first_trade_is_in_floating_profit():
+# -- add-on protection rules (SMC-EXECUTION-001) -------------------------------------
+
+def test_addon_allowed_when_first_trade_has_half_r_protection():
+    # SHORT from 3360, stop 3363 (risk $15 at 0.05): +$15 floating >= 0.5R.
     result = plan(planner(), challenge_decision(lot=0.05),
                   positions=[open_position(profit=15.0)])
     assert result.approved, result.reasons
@@ -389,12 +282,45 @@ def test_addon_allowed_only_when_first_trade_is_in_floating_profit():
     assert result.pyramid is not None and result.pyramid.allowed
 
 
+def test_addon_allowed_when_stop_is_at_breakeven():
+    protected = open_position(profit=2.0, entry=3360.0, stop=3360.0)
+    result = plan(planner(), challenge_decision(lot=0.05),
+                  positions=[protected])
+    assert result.approved, result.reasons
+
+
+def test_addon_blocked_when_profit_is_noise_like_021():
+    # The live defect: +0.21 floating is spread noise, not a winner.
+    result = plan(planner(), challenge_decision(lot=0.05),
+                  positions=[open_position(profit=0.21)])
+    assert not result.approved
+    assert PlanCheck.PYRAMIDING_BLOCKED in result.failed_checks
+    assert "ADDON_BLOCKED_PROFIT_TOO_SMALL" in result.reasons[0]
+
+
 def test_addon_blocked_when_first_trade_is_losing():
     result = plan(planner(), challenge_decision(lot=0.05),
                   positions=[open_position(profit=-8.0)])
     assert not result.approved
-    assert PlanCheck.PYRAMIDING_BLOCKED in result.failed_checks
-    assert "not in profit" in result.reasons[0]
+    assert "ADDON_BLOCKED_NOT_PROTECTED" in result.reasons[0]
+
+
+def test_addon_blocked_inside_the_same_m5_candle():
+    result = plan(
+        planner(), challenge_decision(lot=0.05),
+        positions=[open_position(profit=15.0)],
+        risk_inputs={"open_symbols": {SYMBOL},
+                     "seconds_since_last_entry": 60.0},
+    )
+    assert not result.approved
+    assert "ADDON_BLOCKED_SAME_CANDLE" in result.reasons[0]
+
+
+def test_addon_blocked_when_smc_context_weakened():
+    result = plan(planner(), challenge_decision(lot=0.05),
+                  positions=[open_position(profit=15.0)], fresh_setup=False)
+    assert not result.approved
+    assert "ADDON_BLOCKED_SMC_CONTEXT_WEAKENED" in result.reasons[0]
 
 
 def test_addon_blocked_after_a_losing_trade():
@@ -416,7 +342,7 @@ def test_opposite_direction_position_blocks_no_hedging():
 
 
 def test_max_three_open_positions():
-    positions = [open_position(ticket=i, profit=10.0 + i) for i in (1, 2, 3)]
+    positions = [open_position(ticket=i, profit=20.0 + i) for i in (1, 2, 3)]
     result = plan(planner(), challenge_decision(lot=0.05),
                   positions=positions)
     assert not result.approved
@@ -424,19 +350,17 @@ def test_max_three_open_positions():
 
 
 def test_001_fallback_only_on_margin_refusal():
-    # Free margin refuses 0.05 -> the broker-minimum 0.01 fallback engages.
     tight = AccountSnapshot(balance=2000.0, free_margin=50.0, leverage=200)
     result = plan(planner(), challenge_decision(lot=0.05), account=tight)
     assert result.approved
     assert result.lot_size == 0.01
     assert "fallback" in result.sizing.reason
-    # With normal margin the challenge lot is used; 0.01 is never a default.
     result = plan(planner(), challenge_decision(lot=0.05))
     assert result.lot_size == 0.05
 
 
 def test_planner_survival_cap_blocks_never_a_structural_widening():
-    wide = challenge_decision(lot=0.05, entry=3350.0, stop=3363.0)  # $13 stop
+    wide = challenge_decision(lot=0.05, entry=3350.0, stop=3363.0)
     result = plan(planner(), wide)
     assert not result.approved
     assert PlanCheck.SIZING_BLOCKED in result.failed_checks
@@ -484,7 +408,7 @@ def test_kill_switch_blocks_challenge_orders():
     result = gateway.execute(challenge_decision(lot=0.05), _risk_context())
     assert result.status is ExecutionStatus.BLOCKED
     assert ExecutionCheck.KILL_SWITCH in result.failed_checks
-    assert not client.requests  # nothing reached order_send
+    assert not client.requests
 
 
 def test_orders_carry_the_exact_broker_symbol_case():
@@ -506,7 +430,7 @@ def test_orders_carry_the_exact_broker_symbol_case():
 
 def test_challenge_stack_sends_a_fixed_lot_order_through_the_session(tmp_path):
     """The exact stack the live service drives: SupervisedDemoSession +
-    ChallengeTradePlanner + gateway, with a challenge-style decision."""
+    ChallengeTradePlanner + gateway, with an SMC-style decision."""
     from unittest.mock import MagicMock
 
     from src.broker.mt5_data_adapter import MT5DataAdapter
@@ -517,7 +441,7 @@ def test_challenge_stack_sends_a_fixed_lot_order_through_the_session(tmp_path):
     )
     from src.execution.kill_switch import KillSwitch
     from src.journal.journal import TradeJournal
-    from src.strategy.pipeline import PipelineContext, PipelineResult
+    from src.strategy.pipeline import PipelineContext, PipelineResult, PipelineStage
     from tests.test_demo_session import (
         NOW,
         FakeMT5Trading,
@@ -530,21 +454,21 @@ def test_challenge_stack_sends_a_fixed_lot_order_through_the_session(tmp_path):
 
     entry, stop = 2315.0, 2317.5
     decision = TradeDecision(
-        decision_id="chal-e2e", time_utc=NOW, symbol=SYMBOL,
+        decision_id="smc-e2e", time_utc=NOW, symbol=SYMBOL,
         direction=Direction.SHORT,
-        setup_type="challenge_breakout[STRONG,lot=0.10]",
-        thesis="strong short momentum", invalidation_price=stop,
+        setup_type="smc_sweep_displacement[STRONG,lot=0.10]",
+        thesis="strong smc short", invalidation_price=stop,
         entry_price=entry, stop_loss=stop, take_profits=(2310.0,),
         confidence=0.8, uncertainty=0.2,
     )
-    challenge = {"profile": "demo_challenge", "momentum_state": "STRONG",
-                 "lot_decision": "0.10", "reason": "e2e"}
+    smc = {"mode": "smc", "profile": "smc_challenge", "grade": "STRONG",
+           "lot_decision": "0.10", "reason": "e2e"}
     result = PipelineResult(
         stage=PipelineStage.RISK_EVALUATED, approved=True, reason="ok",
         decision=decision, confidence=allow_confidence(),
         context=PipelineContext(
             session=None, htf_bias=None, regime=None, structure_bias=None,
-            has_setup=True, challenge=challenge,
+            has_setup=True, challenge=smc,
         ),
         lot_size=0.10,
     )
@@ -572,7 +496,7 @@ def test_challenge_stack_sends_a_fixed_lot_order_through_the_session(tmp_path):
         news_guard=clear_news(tmp_path),
         kill_switch=kill_switch,
         max_orders=None,
-        profile_name=CHALLENGE_PROFILE_NAME,
+        profile_name=SMC_PROFILE_NAME,
         hard_max_trades=10,
         hard_max_open=3,
         max_daily_loss=0.05,
@@ -587,13 +511,14 @@ def test_challenge_stack_sends_a_fixed_lot_order_through_the_session(tmp_path):
     assert outcome.stat.entry_action == "SENT"
     request = fake.order_send.call_args.args[0]
     assert request["symbol"] == "XAUUSDm"
-    assert request["volume"] == pytest.approx(0.10)  # the FIXED challenge lot
+    assert request["volume"] == pytest.approx(0.10)
     assert request["sl"] == pytest.approx(stop)
-    # The challenge reasoning is journaled per cycle, enriched with the
-    # live first-trade/add-on view.
     ch = outcome.stat.intel["challenge"]
-    assert ch["momentum_state"] == "STRONG"
+    assert ch["grade"] == "STRONG"
     assert ch["first_trade_profit_state"] == "NO_OPEN_POSITION"
-    assert ch["add_on_allowed"] == "n/a (no position yet)"
+    # MT5-verified accounting is present and verified on this cycle.
+    acct = outcome.stat.intel["accounting"]
+    assert acct["verified"] is True
+    assert acct["mt5_balance"] == pytest.approx(2000.0)
     records = journal.records()
     assert any(r.lot_size == pytest.approx(0.10) for r in records)
