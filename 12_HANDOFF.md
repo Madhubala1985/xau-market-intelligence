@@ -13,7 +13,16 @@ Phase 12: Live Demo Readiness — continuous service operational; FINAL
 LAST-CHANCE demo_challenge experiment ready
 
 ## Current Task ID:
-SMC-EXECUTION-002 (implemented after the first live smc_challenge run;
+SMC-EXECUTION-003 (implemented; owner authorized Claude-supervised runs
+this session). Equity-scaled risk sizing (1.0%/1.5% by tier, compounds
+with equity, 3% cap & all brakes unchanged) + per-account MT5 trade
+count (fetch_entry_count_since). The campaign account is the FRESH
+Exness demo (login ..63, Exness-MT5Trial14, symbol XAUUSD — note: NOT
+XAUUSDm on this server; MT5_SYMBOL updated in .env), funded 2,000.00.
+Owner's "remove the cap" partially refused — envelope brakes intact.
+803 tests pass; safety check passes.
+
+Previously: SMC-EXECUTION-002 (implemented after the first live smc_challenge run;
 owner authorized Claude-supervised runs this session)
 
 ## Current Task Goal:

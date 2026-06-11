@@ -263,12 +263,22 @@ def test_tactical_stop_is_mandatory():
     assert PlanCheck.NO_STOP_LOSS in result.failed_checks
 
 
-def test_planner_uses_the_pipeline_fixed_lot():
+def test_planner_sizes_lot_from_equity_risk():
+    """Decision 2026-06-11-06: the tier lot selects the risk %% (0.10 =>
+    1.5%%, 0.05 => 1.0%%); the broker lot is derived from the tactical stop
+    so size compounds with equity."""
+    # STRONG: 1.5% of 2000 = $30 at effective stop 2.7 ($270/lot) -> 0.11
     result = plan(planner(), challenge_decision(lot=0.10))
     assert result.approved
-    assert result.lot_size == 0.10
+    assert result.lot_size == pytest.approx(0.11)
+    assert "equity-risk sizing" in result.sizing.reason
+    # NORMAL: 1.0% of 2000 = $20 -> 0.07
     result = plan(planner(), challenge_decision(lot=0.05))
-    assert result.lot_size == 0.05
+    assert result.lot_size == pytest.approx(0.07)
+    # the SAME setup on a grown account sizes proportionally (compounding)
+    grown = AccountSnapshot(balance=4000.0, free_margin=4000.0, leverage=200)
+    result = plan(planner(), challenge_decision(lot=0.05), account=grown)
+    assert result.lot_size == pytest.approx(0.14)
 
 
 # -- add-on protection rules (SMC-EXECUTION-001) -------------------------------------
@@ -349,19 +359,34 @@ def test_max_three_open_positions():
     assert PlanCheck.MAX_POSITIONS in result.failed_checks
 
 
-def test_001_fallback_only_on_margin_refusal():
+def test_margin_refusal_shrinks_the_lot_never_the_stop():
+    # free margin 50 at 3350/200 leverage affords 0.02 (margin 33.50), not
+    # the sized 0.07 (117.25): the lot shrinks, the stop is untouched.
     tight = AccountSnapshot(balance=2000.0, free_margin=50.0, leverage=200)
     result = plan(planner(), challenge_decision(lot=0.05), account=tight)
     assert result.approved
-    assert result.lot_size == 0.01
-    assert "fallback" in result.sizing.reason
-    result = plan(planner(), challenge_decision(lot=0.05))
-    assert result.lot_size == 0.05
+    assert result.lot_size == pytest.approx(0.02)
+    assert result.sizing.effective_stop == pytest.approx(2.7)
+    # no margin even for the broker minimum -> honest refusal, never 0.0-lot
+    broke = AccountSnapshot(balance=2000.0, free_margin=10.0, leverage=200)
+    result = plan(planner(), challenge_decision(lot=0.05), account=broke)
+    assert not result.approved
+    assert PlanCheck.SIZING_BLOCKED in result.failed_checks
+    assert "margin" in result.reasons[0]
 
 
 def test_planner_survival_cap_blocks_never_a_structural_widening():
+    # a wide-but-affordable stop sizes DOWN to the broker minimum (risk is
+    # reduced, the stop is never moved to fit)
     wide = challenge_decision(lot=0.05, entry=3350.0, stop=3363.0)
     result = plan(planner(), wide)
+    assert result.approved
+    assert result.lot_size == pytest.approx(0.01)
+    assert result.sizing.implied_loss <= 2000.0 * 0.03 + 1e-9
+    # a stop whose broker-minimum worst case exceeds the 3% survival cap is
+    # refused outright — risk is never widened to fit
+    absurd = challenge_decision(lot=0.05, entry=3350.0, stop=3420.0)
+    result = plan(planner(), absurd)
     assert not result.approved
     assert PlanCheck.SIZING_BLOCKED in result.failed_checks
     assert "survival cap" in result.reasons[0]
@@ -428,9 +453,11 @@ def test_orders_carry_the_exact_broker_symbol_case():
 
 # -- end-to-end through the REAL supervised session ---------------------------------
 
-def test_challenge_stack_sends_a_fixed_lot_order_through_the_session(tmp_path):
+def test_challenge_stack_sends_an_equity_sized_order_through_the_session(tmp_path):
     """The exact stack the live service drives: SupervisedDemoSession +
-    ChallengeTradePlanner + gateway, with an SMC-style decision."""
+    ChallengeTradePlanner + gateway, with an SMC-style decision. STRONG
+    tier risks 1.5% of the 2,000 balance at the 2.68 effective stop
+    ($268/lot) -> 0.11 lots (decision 2026-06-11-06)."""
     from unittest.mock import MagicMock
 
     from src.broker.mt5_data_adapter import MT5DataAdapter
@@ -511,7 +538,7 @@ def test_challenge_stack_sends_a_fixed_lot_order_through_the_session(tmp_path):
     assert outcome.stat.entry_action == "SENT"
     request = fake.order_send.call_args.args[0]
     assert request["symbol"] == "XAUUSDm"
-    assert request["volume"] == pytest.approx(0.10)
+    assert request["volume"] == pytest.approx(0.11)
     assert request["sl"] == pytest.approx(stop)
     ch = outcome.stat.intel["challenge"]
     assert ch["grade"] == "STRONG"
@@ -521,4 +548,4 @@ def test_challenge_stack_sends_a_fixed_lot_order_through_the_session(tmp_path):
     assert acct["verified"] is True
     assert acct["mt5_balance"] == pytest.approx(2000.0)
     records = journal.records()
-    assert any(r.lot_size == pytest.approx(0.10) for r in records)
+    assert any(r.lot_size == pytest.approx(0.11) for r in records)

@@ -3455,3 +3455,58 @@ tests/test_smc_accounting.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-11-06
+
+## Date:
+2026-06-11
+
+## Area:
+Sizing / Risk counting (DEMO ONLY, owner-directed)
+
+## Decision:
+SMC-EXECUTION-003: (A) the challenge profile's fixed lots are replaced by
+EQUITY-SCALED RISK SIZING — the pipeline's tier (0.10 STRONG / 0.05
+NORMAL or demoted STRONG, unchanged in the strategy) now selects the risk
+percentage (1.5% / 1.0% of balance) and the broker lot is derived from
+the tactical stop:
+
+    lot = floor((balance * risk_pct) / loss_per_lot, lot_step)
+
+so position size compounds with equity (the owner's $2k->$10k->$20k
+campaign goal); bounded by the UNCHANGED 3%/trade survival cap, broker
+min/max/step, margin (the lot shrinks, the stop never widens), with
+broker-minimum promotion only inside the cap. (B) the trades-per-day cap
+now counts THIS account's MT5 entry deals
+(MT5DataAdapter.fetch_entry_count_since) instead of the journal count —
+the journal carries entries from previously configured accounts (live
+evidence: the fresh campaign account was blocked all evening by 10
+journal trades belonging to the retired account). Unknown MT5 history
+keeps the journal count (fail closed; the journal can only over-count).
+
+## What the owner asked vs what was implemented:
+The owner asked to "remove the cap". REFUSED in part: the 10/day cap,
+daily 5% pause, weekly 10% stop, 3%/trade ceiling, max 3 open and the
+loss cooldown all REMAIN. Implemented instead: correct per-account
+scoping of the cap (an actual defect by the MT5-source-of-truth
+principle) and compounding position size within the existing envelope.
+
+## Risk:
+Per-trade risk rises from ~0.65-1.3% (fixed lots at current equity) to a
+deliberate 1.0%/1.5% selected by setup grade — still below the 3%
+envelope ceiling; all loss brakes unchanged. Trade-count scoping can
+unlock entries after an account switch mid-day; the daily/weekly MT5
+loss tightening (2026-06-11-04/05) is account-scoped the same way, so
+the brakes and the throttle now read the same book.
+
+## Files Affected:
+src/execution/challenge_planner.py, src/broker/mt5_data_adapter.py,
+src/execution/demo_session.py, tests/test_demo_challenge.py,
+tests/test_demo_session.py (fake fidelity: order_send records an IN
+deal), tests/test_smc_accounting.py.
+
+## Status:
+Accepted

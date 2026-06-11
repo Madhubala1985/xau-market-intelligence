@@ -532,3 +532,38 @@ def test_unknown_balance_ops_fall_back_to_deposit_free_tighten(tmp_path):
     # ops unknown -> deposit-free reconstruction (still tightened, 0.0811)
     assert outcome.risk.daily_loss_pct == pytest.approx(0.08113, abs=1e-4)
     assert outcome.stat.entry_action != "SENT"
+
+
+# -- decision 2026-06-11-06: trades-per-day counts THIS account's MT5 entries ---------
+
+
+def _in_deal(position_id, when):
+    return _Obj(
+        profit=0.0, commission=0.0, swap=0.0, type=1, entry=0,
+        position_id=position_id, price=2315.0, time=int(when.timestamp()),
+        reason=0, symbol="XAUUSDm",
+    )
+
+
+def test_other_account_journal_trades_do_not_consume_the_daily_cap(tmp_path):
+    fake = FakeMT5Trading()  # fresh account: zero entry deals today
+    session, journal, _ = build_session(tmp_path, fake, [approved_smc("smc-1")])
+    for i in range(10):  # journal carries a previous account's trades today
+        journal.log_record(_closed_record(
+            f"T-old-acct-{i}", pnl=5.0, outcome=TradeOutcome.WIN,
+            closed_at=NOW - timedelta(hours=3),
+        ))
+    outcome = session.run_cycle()
+    assert outcome.risk.trades_today == 0 or outcome.risk.trades_today == 1
+    assert outcome.stat.entry_action == "SENT"
+
+
+def test_mt5_entries_today_enforce_the_daily_cap(tmp_path):
+    fake = FakeMT5Trading()
+    for i in range(10):  # this account already opened 10 trades today
+        fake.deals[200 + i] = [_in_deal(200 + i, NOW - timedelta(hours=2))]
+    session, _, _ = build_session(tmp_path, fake, [approved_smc("smc-1")])
+    outcome = session.run_cycle()
+    assert outcome.risk.trades_today == 10
+    assert outcome.stat.entry_action != "SENT"
+    assert "trades today" in outcome.stat.entry_detail.lower()

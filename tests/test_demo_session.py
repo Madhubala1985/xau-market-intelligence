@@ -128,6 +128,15 @@ class FakeMT5Trading:
             sl=request["sl"], tp=request["tp"],
             price_current=request["price"], profit=0.0,
         )
+        # Real MT5 records an ENTRY (IN) deal the moment the order fills;
+        # the account-scoped trades-per-day count reads these.
+        self.deals.setdefault(ticket, []).append(_Obj(
+            profit=0.0, commission=0.0, swap=0.0,
+            type=(0 if request["type"] == self.ORDER_TYPE_BUY else 1),
+            entry=0, position_id=ticket, price=request["price"],
+            time=int(BASE_DT.timestamp()), reason=0,
+            symbol=request["symbol"],
+        ))
         return _Obj(retcode=self.TRADE_RETCODE_DONE, order=ticket)
 
     def close_position(self, ticket, pnl, *, price=2310.0, reason=4,
@@ -140,11 +149,11 @@ class FakeMT5Trading:
         """
         self.positions.pop(ticket, None)
         stamp = int((time_utc or BASE_DT).timestamp())
-        self.deals[ticket] = [
+        self.deals.setdefault(ticket, []).extend([
             _Obj(profit=pnl, commission=0.0, swap=0.0, type=1, entry=1,
                  position_id=ticket, price=price, time=stamp, reason=reason,
                  symbol="XAUUSDm"),
-        ] + list(extra_deals or [])
+        ] + list(extra_deals or []))
 
     def positions_total(self):
         return len(self.positions)

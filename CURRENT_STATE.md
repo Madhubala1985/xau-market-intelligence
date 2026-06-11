@@ -10,7 +10,26 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-SMC-EXECUTION-002: IMPLEMENTED — live-evidence fix from the first
+SMC-EXECUTION-003 (decision 2026-06-11-06, owner-directed): IMPLEMENTED.
+- EQUITY-SCALED SIZING replaces fixed challenge lots: tier 0.10/0.05 in
+  setup_type selects 1.5%/1.0% of balance risked to the tactical stop;
+  lot = floor(budget / loss_per_lot, step) — size compounds with equity
+  toward the $2k->$10k->$20k milestones. Unchanged: 3%/trade survival
+  cap, broker min/max/step, margin shrinks the lot never the stop,
+  min-lot promotion only inside the cap. Strategy demotions still arrive
+  as 0.05 => 1.0%.
+- TRADES/DAY now counts THIS account's MT5 entry deals
+  (fetch_entry_count_since); journal count kept only when MT5 history is
+  unavailable (fail closed). Live evidence: the fresh campaign account
+  was blocked all evening by 10 journal trades from the retired account.
+- Owner's "remove the cap" request PARTIALLY REFUSED: 10/day cap, daily
+  5% pause, weekly 10% stop, 3%/trade, max 3 open, loss cooldown all
+  remain.
+- 803 tests pass (+2 count-scoping, sizing tests updated to the new
+  spec, fake order_send now records an MT5-true IN deal);
+  pre_demo_safety_check.sh passes.
+
+Previously: SMC-EXECUTION-002: IMPLEMENTED — live-evidence fix from the first
 smc_challenge run (2026-06-11, 61 cycles, clean KILL_SWITCH stop).
 - LIVE RUN EVIDENCE: 1 order sent (SHORT 0.05 on FVG_RETEST +
   MITIGATION_REJECTION in the NY kill zone, tactical local-swing stop,

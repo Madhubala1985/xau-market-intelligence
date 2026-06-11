@@ -1,18 +1,19 @@
 """Demo-challenge trade planner (Task DEMO-CHALLENGE-001). DEMO ONLY.
 
-The fixed-lot, momentum-profile counterpart of DemoTradePlanner, with the
-SAME plan() signature so SupervisedDemoSession drives it unchanged. It NEVER
-sends orders; the ExecutionGateway (kill switch + flags + its own governor
-run) remains the only order pathway.
+The challenge-profile counterpart of DemoTradePlanner, with the SAME plan()
+signature so SupervisedDemoSession drives it unchanged. It NEVER sends
+orders; the ExecutionGateway (kill switch + flags + its own governor run)
+remains the only order pathway.
 
 What it relaxes versus the institutional planner (owner-directed, demo only):
 - NEWS_UNKNOWN does NOT block (no calendar = neutral); only an actual news
   RISK state blocks — the operator NEWS_BLOCK file or an active HIGH-impact
   calendar window.
-- No tier dollar caps / adaptive budgets: the lot is the FIXED challenge lot
-  chosen by the momentum pipeline (0.05 NORMAL / 0.10 STRONG, carried in
-  decision.setup_type), demoted only by the survival cap, with 0.01 ONLY as
-  a margin-refusal fallback.
+- No tier dollar caps / adaptive budgets: the pipeline's tier lot
+  (0.05 NORMAL / 0.10 STRONG in decision.setup_type) selects the EQUITY
+  RISK TIER (1.0% / 1.5% of balance, decision 2026-06-11-06); the broker
+  lot is derived from the tactical stop so size compounds with equity,
+  bounded by the 3%/trade survival cap and broker min/max/step.
 - Add-ons require the open trades to be in FLOATING PROFIT (not yet
   break-even-protected) — momentum compounding, still never into losers.
 
@@ -50,9 +51,14 @@ from src.risk.news_guard import NewsRiskState
 from src.risk.pyramiding import PyramidAction, PyramidResult
 from src.strategy.scoring import ConfidenceResult
 
-# The only lots this planner will ever request.
+# The pipeline's tier lots (parsed from setup_type). Since decision
+# 2026-06-11-06 they select the EQUITY RISK TIER instead of being sent to
+# the broker verbatim: 0.10 (STRONG, undemoted) => 1.5% of balance risked
+# to the tactical stop, 0.05 (NORMAL or demoted STRONG) => 1.0%. Lots are
+# derived from the stop distance so position size compounds with equity.
 CHALLENGE_LOTS = (0.05, 0.10)
-MARGIN_FALLBACK_LOT = 0.01  # used ONLY when margin refuses the challenge lot
+RISK_PCT_NORMAL = 0.010
+RISK_PCT_STRONG = 0.015
 
 _LOT_PATTERN = re.compile(r"lot=(\d+\.\d+)")
 
@@ -301,67 +307,65 @@ class ChallengeTradePlanner:
         account: AccountSnapshot,
         spread_price: float,
     ) -> LeverageSizingResult:
+        """Equity-scaled risk sizing (decision 2026-06-11-06).
+
+        The tier lot in setup_type selects the risk percentage (0.10 =>
+        1.5%, 0.05 => 1.0% — strategy demotions arrive as 0.05 and stay
+        demoted); the LOT is derived from balance and the tactical stop:
+
+            lot = floor((balance * risk_pct) / loss_per_lot, lot_step)
+
+        so position size compounds with equity. The 3%/trade survival cap
+        and the broker min/max/step bounds stay absolute; below the broker
+        minimum the trade is promoted to min_lot only when its worst case
+        still fits the cap; an unaffordable margin shrinks the lot, never
+        the stop.
+        """
         spec = self._spec
         requested = self._requested_lot(decision)
+        risk_pct = (
+            RISK_PCT_STRONG if requested >= max(CHALLENGE_LOTS) - 1e-9
+            else RISK_PCT_NORMAL
+        )
         effective_stop = (
             abs(decision.entry_price - decision.stop_loss)
             + max(spread_price, 0.0)
         )
         loss_per_lot = spec.loss_per_lot(effective_stop)
         cap = account.balance * self._limits.max_risk_per_trade
+        budget = account.balance * risk_pct
 
-        # Survival-cap demotion chain (0.10 -> 0.05), then the explicit
-        # margin-refusal fallback to the broker minimum (0.01) — the only
-        # path to 0.01 in demo_challenge.
-        chain = [lot for lot in (requested, *CHALLENGE_LOTS) if lot <= requested]
-        chain = sorted(set(chain), reverse=True)
-        for lot in chain:
-            implied = lot * loss_per_lot
-            if implied > cap + 1e-9:
-                continue
-            margin = (lot * spec.contract_size * decision.entry_price
-                      / account.leverage)
-            if margin > account.free_margin + 1e-9:
-                continue
-            return LeverageSizingResult(
-                status=LeverageSizingStatus.OK,
-                lot_size=lot,
-                max_loss_cap=cap,
-                loss_per_lot=loss_per_lot,
-                implied_loss=implied,
-                implied_risk_pct=implied / account.balance,
-                margin_required=margin,
-                effective_stop=effective_stop,
-                reason=(
-                    f"fixed challenge lot {lot:.2f} "
-                    f"(requested {requested:.2f}); loss-at-stop "
-                    f"${implied:.2f} within survival cap ${cap:.2f}"
-                ),
-            )
-        # Margin-only fallback: 0.01 is allowed ONLY when the cap would
-        # accept the challenge lot but free margin refuses it.
-        smallest = min(chain) if chain else requested
-        cap_ok = smallest * loss_per_lot <= cap + 1e-9
-        if cap_ok:
-            margin = (MARGIN_FALLBACK_LOT * spec.contract_size
-                      * decision.entry_price / account.leverage)
-            if margin <= account.free_margin + 1e-9:
-                implied = MARGIN_FALLBACK_LOT * loss_per_lot
+        def floor_step(lot: float) -> float:
+            steps = int((lot + 1e-9) / spec.lot_step)
+            return round(steps * spec.lot_step, 2)
+
+        lot = floor_step(min(budget / loss_per_lot, spec.max_lot))
+        promoted = False
+        if lot < spec.min_lot:
+            # Broker-minimum promotion: allowed only inside the survival cap.
+            if spec.min_lot * loss_per_lot > cap + 1e-9:
                 return LeverageSizingResult(
-                    status=LeverageSizingStatus.OK,
-                    lot_size=MARGIN_FALLBACK_LOT,
-                    max_loss_cap=cap,
-                    loss_per_lot=loss_per_lot,
-                    implied_loss=implied,
-                    implied_risk_pct=implied / account.balance,
-                    margin_required=margin,
-                    effective_stop=effective_stop,
+                    status=LeverageSizingStatus.STOP_TOO_WIDE,
+                    lot_size=0.0, max_loss_cap=cap, loss_per_lot=loss_per_lot,
+                    implied_loss=0.0, implied_risk_pct=0.0,
+                    margin_required=0.0, effective_stop=effective_stop,
                     reason=(
-                        f"free margin refused {smallest:.2f}; broker-minimum "
-                        f"fallback {MARGIN_FALLBACK_LOT:.2f} (margin "
-                        f"${margin:.2f})"
+                        f"tactical stop {effective_stop:.2f} risks more than "
+                        f"the survival cap ${cap:.2f} even at the broker "
+                        f"minimum {spec.min_lot:.2f}; skip and wait for a "
+                        "tighter local stop (risk is never widened to fit)"
                     ),
                 )
+            lot = spec.min_lot
+            promoted = True
+
+        # Margin: shrink the lot (never the stop) until affordable.
+        def margin_for(l: float) -> float:
+            return l * spec.contract_size * decision.entry_price / account.leverage
+
+        while lot >= spec.min_lot - 1e-9 and margin_for(lot) > account.free_margin + 1e-9:
+            lot = floor_step(lot - spec.lot_step)
+        if lot < spec.min_lot - 1e-9:
             return LeverageSizingResult(
                 status=LeverageSizingStatus.INSUFFICIENT_MARGIN,
                 lot_size=0.0, max_loss_cap=cap, loss_per_lot=loss_per_lot,
@@ -369,16 +373,31 @@ class ChallengeTradePlanner:
                 effective_stop=effective_stop,
                 reason="insufficient free margin even at the broker minimum",
             )
+
+        implied = lot * loss_per_lot
+        if implied > cap + 1e-9:  # unreachable by construction; absolute guard
+            return LeverageSizingResult(
+                status=LeverageSizingStatus.STOP_TOO_WIDE,
+                lot_size=0.0, max_loss_cap=cap, loss_per_lot=loss_per_lot,
+                implied_loss=0.0, implied_risk_pct=0.0, margin_required=0.0,
+                effective_stop=effective_stop,
+                reason=f"sized loss ${implied:.2f} exceeds survival cap ${cap:.2f}",
+            )
+        margin = margin_for(lot)
         return LeverageSizingResult(
-            status=LeverageSizingStatus.STOP_TOO_WIDE,
-            lot_size=0.0, max_loss_cap=cap, loss_per_lot=loss_per_lot,
-            implied_loss=0.0, implied_risk_pct=0.0, margin_required=0.0,
+            status=LeverageSizingStatus.OK,
+            lot_size=lot,
+            max_loss_cap=cap,
+            loss_per_lot=loss_per_lot,
+            implied_loss=implied,
+            implied_risk_pct=implied / account.balance,
+            margin_required=margin,
             effective_stop=effective_stop,
             reason=(
-                f"tactical stop {effective_stop:.2f} risks more than the "
-                f"survival cap ${cap:.2f} even at "
-                f"{min(CHALLENGE_LOTS):.2f}; skip and wait for a tighter "
-                "local stop (demo_challenge never widens risk to fit)"
+                f"equity-risk sizing: {risk_pct:.1%} of ${account.balance:.2f} "
+                f"= ${budget:.2f} budget at stop {effective_stop:.2f} -> lot "
+                f"{lot:.2f}{' (broker-minimum promotion)' if promoted else ''} "
+                f"(loss-at-stop ${implied:.2f}, survival cap ${cap:.2f})"
             ),
         )
 

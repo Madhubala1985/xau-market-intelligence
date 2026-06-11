@@ -554,6 +554,45 @@ class MT5DataAdapter:
             total += float(_field(d, "commission", 0.0) or 0.0)
         return round(total, 2)
 
+    def fetch_entry_count_since(
+        self, start_utc: datetime, *, now: Optional[datetime] = None
+    ) -> Optional[int]:
+        """Count of the configured symbol's ENTRY trade deals since
+        start_utc, straight from MT5 history (READ-ONLY).
+
+        Decision 2026-06-11-06: the trades-per-day cap counts what THIS
+        account actually opened today (the journal may carry entries from
+        a previously configured account). Returns None when history is
+        unavailable — callers keep the journal-derived count (fail closed,
+        the journal can only over-count).
+        """
+        if not self._connected:
+            raise BrokerConnectionError("adapter is not connected; call connect() first")
+        mt5 = self._mt5
+        if not hasattr(mt5, "history_deals_get"):
+            return None
+        end = now or datetime.now(timezone.utc)
+        try:
+            deals = mt5.history_deals_get(start_utc, end)
+        except Exception:  # noqa: BLE001
+            return None
+        if deals is None:
+            return None
+        buy_type = getattr(mt5, "DEAL_TYPE_BUY", 0)
+        sell_type = getattr(mt5, "DEAL_TYPE_SELL", 1)
+        entry_in = getattr(mt5, "DEAL_ENTRY_IN", 0)
+        symbol = (self._settings.symbol or "").strip().upper()
+        count = 0
+        for d in deals:
+            if _field(d, "type", buy_type) not in (buy_type, sell_type):
+                continue
+            deal_symbol = str(_field(d, "symbol", symbol) or symbol)
+            if deal_symbol.strip().upper() != symbol:
+                continue
+            if _field(d, "entry", entry_in) == entry_in:
+                count += 1
+        return count
+
     def fetch_balance_ops_since(
         self, start_utc: datetime, *, now: Optional[datetime] = None
     ) -> Optional[float]:

@@ -849,13 +849,23 @@ class SupervisedDemoSession:
         weekly = tightened(
             risk_state.weekly_loss_pct, realized_week, ops_week
         )
+        # Decision 2026-06-11-06: the trades-per-day cap counts THIS
+        # account's MT5 entry deals — the journal may carry entries from a
+        # previously configured account and can only over-count. Unknown
+        # stays journal-based (fail closed).
+        trades_today = risk_state.trades_today
+        mt5_trades = safe_fetch("fetch_entry_count_since", day_start)
+        if mt5_trades is not None:
+            trades_today = int(mt5_trades)
         if (
             daily == risk_state.daily_loss_pct
             and weekly == risk_state.weekly_loss_pct
+            and trades_today == risk_state.trades_today
         ):
             return risk_state
         return replace(
-            risk_state, daily_loss_pct=daily, weekly_loss_pct=weekly
+            risk_state, daily_loss_pct=daily, weekly_loss_pct=weekly,
+            trades_today=trades_today,
         )
 
     def _last_loss_close(self) -> Optional[datetime]:
