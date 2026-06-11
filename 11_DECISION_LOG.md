@@ -3510,3 +3510,41 @@ deal), tests/test_smc_accounting.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-12-01
+
+## Date:
+2026-06-12
+
+## Area:
+Strategy gates (DEMO ONLY, tighten-only)
+
+## Decision:
+SMC-EXECUTION-004 (D2): two tighten-only guards added to gate C from
+live evidence — 2026-06-11 produced two MT5-verified SL losses with the
+same signature: counter-trend SHORTs on a vertical +130 USD up-day,
+anchored to structure the rally had invalidated hours earlier (trade 2:
+BOS@4078 anchoring a short at 4214) while H1/M15/M5 read BULLISH.
+
+(1) SMC_ANCHOR_STALE: a level-bearing anchor (BOS/CHOCH/BREAK_RETEST/
+SWEEP) whose level sits > 10x ATR(M5) from price is dead structure and
+cannot pass gate C (zone retests are at price by construction). Reentry
+plan printed; rescan next candle.
+(2) LTF_CONSENSUS_CONFLICT: when H1+M15+M5 are unanimously opposed to
+the candidate AND displacement >= 1.3x confirms their direction, the
+counter-trend entry stands down unless the anchor is a fresh
+SWEEP_DISPLACEMENT — the one SMC pattern designed to fade a move.
+
+## Risk:
+Tighten-only: blocks trades, enables nothing. Cost: may delay legitimate
+reversal entries on trend days until a sweep-reclaim forms — accepted;
+that is the institutional playbook.
+
+## Files Affected:
+src/strategy/smc_execution.py, tests/test_smc_execution.py.
+
+## Status:
+Accepted

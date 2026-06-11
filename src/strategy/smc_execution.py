@@ -80,6 +80,12 @@ MAX_STOP_ABSOLUTE = 8.0
 REJECTION_WICK_RATIO = 0.40
 
 STRONG_DISPLACEMENT = 1.6
+# D2 guards (decision 2026-06-12-01): an anchor whose level sits further
+# than this many M5-ATRs from price is no longer live structure; and a
+# counter-trend candidate facing unanimous H1/M15/M5 opposition with at
+# least this displacement may only trade a fresh sweep-reclaim.
+STALE_ANCHOR_ATR_MULT = 10.0
+CONFLICT_DISPLACEMENT = 1.3
 ANCHOR_DISPLACEMENT = 1.3  # sweep needs real displacement behind it
 
 _KILL_ZONES = {
@@ -294,6 +300,52 @@ class SmcExecutionPipeline:
                 waiting=waiting, plan=plan,
             )
         smc["smc_anchor"] = anchor.label
+
+        # -- D2 guards (decision 2026-06-12-01, live evidence 2026-06-11:
+        # two SL losses shorting a vertical up-day on stale structure) ------
+        # (1) the anchor must be structurally LIVE near price.
+        if (
+            anchor.level is not None and atr5 > 0
+            and abs(entry - anchor.level) > STALE_ANCHOR_ATR_MULT * atr5
+        ):
+            waiting, plan = self._reentry_plan(candidate, zones)
+            return self._wait(
+                context, smc,
+                f"SMC_ANCHOR_STALE: {anchor.label} level "
+                f"{anchor.level:.2f} is {abs(entry - anchor.level):.2f} "
+                f"from price (> {STALE_ANCHOR_ATR_MULT:.0f}x ATR "
+                f"{atr5:.2f}) — that structure is no longer live",
+                waiting=waiting, plan=plan,
+            )
+        # (2) counter-trend stand-down: H1+M15+M5 unanimously against the
+        # candidate with confirming displacement => only a fresh
+        # sweep-reclaim may fade the move.
+        opposing_bias = (
+            Bias.BULLISH if candidate is Direction.SHORT else Bias.BEARISH
+        )
+        opposing_dir = (
+            Direction.LONG if candidate is Direction.SHORT
+            else Direction.SHORT
+        )
+        if (
+            all(b is opposing_bias for b in (mtf.h1, mtf.m15, mtf.m5))
+            and disp_direction is opposing_dir
+            and displacement >= CONFLICT_DISPLACEMENT
+            and anchor.label != "SWEEP_DISPLACEMENT"
+        ):
+            return self._wait(
+                context, smc,
+                f"LTF_CONSENSUS_CONFLICT: H1/M15/M5 all "
+                f"{opposing_bias.value} with {displacement:.1f}x "
+                f"displacement against the {candidate.value} candidate — "
+                "counter-trend entry requires a fresh sweep-reclaim; "
+                "standing down instead of fading the move",
+                waiting="SWEEP",
+                plan=(
+                    "wait for a liquidity sweep + reclaim or for "
+                    "HTF/LTF realignment"
+                ),
+            )
 
         # -- Gate D: executable local trigger ---------------------------------
         trigger = self._entry_trigger(

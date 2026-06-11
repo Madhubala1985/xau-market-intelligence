@@ -373,3 +373,73 @@ def test_htf_context_killzone_and_liquidity_are_always_reported():
     assert "d1=BEARISH" in smc["htf_context"]
     assert smc["killzone"] == "LONDON"
     assert "liquidity_context" in smc and "smc_anchor" in smc
+
+
+# -- D2 guards (decision 2026-06-12-01): stale anchors / counter-trend stand-down ----
+
+def test_stale_anchor_cannot_qualify():
+    """Live defect 2026-06-11: a SHORT at 4214 was anchored to a BOS from
+    4078 — 135 USD below, structure the rally had invalidated hours
+    earlier. An anchor whose level sits > 10x ATR(M5) from price is dead
+    structure and must fail gate C with a reentry plan (no freeze)."""
+    m5 = m5_breakdown(3.0)
+    pipe = smc_pipeline(structure=structure_result(
+        events=(bos_event(index=len(m5) - 1, price=3320.0),)  # ~59 away
+    ))
+    result = pipe.decide(pipeline_input(m5, m1=m1_with_local_swing()))
+    assert not result.approved
+    assert "SMC_ANCHOR_STALE" in result.reason
+    smc = result.context.challenge
+    assert smc["reentry_plan"], "stale anchor must leave a reentry plan"
+
+
+def m5_rally(final_body, *, start=START):
+    """44 rising candles, two drifts, then a big bullish displacement."""
+    closes = [3340.0 + 0.5 * (i + 1) for i in range(44)]      # -> 3362.0
+    closes += [3361.8, 3361.6]
+    closes += [3361.6 + final_body]
+    return make_candles(closes, start=start)
+
+
+def conflicted_alignment():
+    """The live 2026-06-11 signature: D1/H4 stale-bearish while the whole
+    intraday stack is bullish; the candidate fell back to SHORT."""
+    return MtfAlignment(
+        d1=Bias.BEARISH, h4=Bias.BEARISH, h1=Bias.BULLISH,
+        m15=Bias.BULLISH, m5=Bias.BULLISH,
+        direction=Direction.SHORT, score=0.55, reason="stub conflict",
+    )
+
+
+def test_ltf_consensus_conflict_stands_down():
+    m5 = m5_rally(3.0)
+    pipe = smc_pipeline(
+        structure=structure_result(events=(
+            bos_event(index=len(m5) - 1, price=3364.0),  # FRESH bearish BOS
+        )),
+        mtf=conflicted_alignment(),
+    )
+    result = pipe.decide(pipeline_input(m5, m1=m1_with_local_swing()))
+    assert not result.approved
+    assert "LTF_CONSENSUS_CONFLICT" in result.reason
+    assert "sweep-reclaim" in result.reason
+
+
+def test_fresh_sweep_reclaim_may_still_fade_a_trend(monkeypatch):
+    """The stand-down must NOT block the one pattern designed to fade:
+    a fresh sweep + displacement reclaim in the candidate direction."""
+    m5 = m5_breakdown(3.0)
+    pipe = smc_pipeline(
+        sweeps=[true_sweep(index=len(m5) - 2, price=3382.4)],
+        mtf=MtfAlignment(
+            d1=Bias.BEARISH, h4=Bias.BEARISH, h1=Bias.BULLISH,
+            m15=Bias.BULLISH, m5=Bias.BULLISH,
+            direction=Direction.SHORT, score=0.55, reason="stub conflict",
+        ),
+    )
+    result = pipe.decide(pipeline_input(m5, m1=m1_with_local_swing()))
+    # the breakdown displacement is BEARISH here, so guard 2's
+    # "displacement against the candidate" arm is not armed — the sweep
+    # anchor qualifies exactly as before
+    assert result.approved, result.reason
+    assert result.context.challenge["smc_anchor"] == "SWEEP_DISPLACEMENT"
