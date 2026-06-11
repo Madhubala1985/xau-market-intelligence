@@ -346,8 +346,21 @@ class SmcExecutionPipeline:
         if lot is None:
             return self._wait(context, smc, lot_why, waiting="LOCAL_SWING",
                               plan="wait for a tighter local invalidation")
-        risk_usd = lot * 100.0 * (stop_distance + spread)
-        smc["lot_decision"] = f"{lot:.2f}"
+        # Decision 2026-06-11-06: the tier lot selects the planner's equity
+        # risk percentage; display the BUDGETED risk (the planner's floored
+        # lot risks at most this), never the obsolete fixed-lot dollars.
+        risk_pct = 0.015 if lot == LOT_STRONG else 0.010
+        budget_usd = equity * risk_pct
+        est_lot = max(
+            int(budget_usd / (100.0 * (stop_distance + spread)) / 0.01) * 0.01,
+            0.01,
+        )
+        smc["lot_decision"] = (
+            f"~{est_lot:.2f} (tier {lot:.2f} = {risk_pct:.1%} equity risk)"
+        )
+        risk_usd = min(
+            budget_usd, est_lot * 100.0 * (stop_distance + spread)
+        )
         smc["risk_if_sl_hit"] = round(risk_usd, 2)
 
         decision = self._decision(
@@ -721,11 +734,12 @@ class SmcExecutionPipeline:
         stop_distance: float, spread: float,
     ) -> Tuple[Optional[float], str]:
         lot = LOT_STRONG if grade == SetupGrade.STRONG else LOT_NORMAL
-        why = f"{grade} setup -> fixed lot {lot:.2f}"
+        why = (f"{grade} setup -> tier {lot:.2f} "
+               f"({'1.5%' if lot == LOT_STRONG else '1.0%'} equity risk)")
         if lot == LOT_STRONG and session in _LOW_LIQUIDITY_SESSIONS:
             lot = LOT_NORMAL
             why = (f"{grade} setup in low-liquidity session {session.value} "
-                   f"-> demoted to {lot:.2f} (not blocked)")
+                   f"-> demoted to tier {lot:.2f} (1.0% risk, not blocked)")
         cap = equity * self._limits.max_risk_per_trade
         loss = lot * 100.0 * (stop_distance + spread)
         if loss > cap and lot == LOT_STRONG:
