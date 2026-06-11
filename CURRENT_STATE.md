@@ -40,6 +40,12 @@ smc_challenge run (2026-06-11, 61 cycles, clean KILL_SWITCH stop).
   the stop just past the obvious local swing (retail pool) and was swept;
   candidate refinement = enter after sweep completion / stop beyond the
   engineered-liquidity extreme. Needs more session evidence.
+- D1 FIX VALIDATED LIVE (run 2): restart printed risk=WEEKLY_LIMIT on
+  cycle 1 and stopped cleanly (RISK_SHUTDOWN weekly loss 0.5172 >= 0.10).
+  Verified against raw MT5 history: 30 trade deals since Mon 2026-06-08,
+  net -1952.98. This account is policy-stopped until Monday 2026-06-15
+  UTC; recommended: fresh demo account funded at exactly 2,000 (update
+  .env) as the clean $2k->$10k campaign baseline.
 
 Previously: SMC-EXECUTION-001: IMPLEMENTED — the retail momentum behavior is REMOVED
 and replaced by the institutional SMC execution mode

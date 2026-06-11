@@ -35,10 +35,15 @@ SMC-EXECUTION-002 implemented. 798 tests pass; safety check passes.
   unchanged (entries already blocked). Tightened snapshot reaches
   pipeline, exposure governor, planner risk_inputs, gateway RiskContext,
   CycleOutcome.risk (DAY_PAUSED label + weekly RISK_SHUTDOWN).
-- NOTE for next start: with the fix the service will correctly show
-  DAY_PAUSED until UTC rollover (real day loss -8.8% > 5%) and
-  trades_today=10/10; entries resume after rollover. If the WEEK's MT5
-  net is worse than -10%, RISK_SHUTDOWN at start is correct policy.
+- VALIDATED LIVE (run 2, 2026-06-11 18:20 UTC): on restart the first
+  cycle printed risk=WEEKLY_LIMIT and the service stopped cleanly with
+  RISK_SHUTDOWN weekly loss 0.5172 >= 0.10. Verified directly against
+  MT5 history: 30 XAUUSDm trade deals since Monday 2026-06-08, net
+  -1952.98 (pre-SMC profiles Mon-Wed -1776.39 + today -176.59) — losses
+  the poisoned journal had hidden. Per policy NO service trading on this
+  account until the week resets (Monday 2026-06-15 UTC). For the $2,000
+  campaign the owner should fund a FRESH Exness demo account at exactly
+  2,000 and update .env — clean baseline, all anchors intact.
 - Tracked hypothesis (sample of one, NOT acted on): stop sat just past
   the obvious local swing and was swept in a spike; candidate = require
   sweep completion / anchor stops beyond the engineered-liquidity
