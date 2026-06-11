@@ -122,11 +122,14 @@ class ServiceReport:
     violations: int
     stop_reason: str
     detail: str
+    profile: str = ""
+    orders_rejected: int = 0
 
     def to_dict(self) -> dict:
         return {
             "task": "CONTINUOUS-001",
             "service": SERVICE_NAME,
+            "profile": self.profile,
             "started_at_utc": self.started_at_utc.isoformat(),
             "ended_at_utc": self.ended_at_utc.isoformat(),
             "cycles": self.cycles,
@@ -134,6 +137,7 @@ class ServiceReport:
             "decisions": self.decisions,
             "orders_sent": self.orders_sent,
             "orders_simulated": self.orders_simulated,
+            "orders_rejected": self.orders_rejected,
             "violations": self.violations,
             "stop_reason": self.stop_reason,
             "detail": self.detail,
@@ -208,7 +212,41 @@ class ProgressPrinter:
             f"session={s.session or 'n/a'} conf={conf} unc={unc}"
         )
         self._intel_lines(s)
-        self._line(f"  decision={decision_label} reason: {s.reason}")
+        # BROKER-EXECUTION-001: a broker rejection prints the broker's own
+        # verdict + the exact request — never the contradictory
+        # "BLOCKED: all risk checks passed".
+        rejection = (getattr(s, "intel", None) or {}).get("order_rejection")
+        if s.entry_action == "REJECTED" and rejection:
+            request = rejection.get("request") or {}
+            self._line(f"  decision={decision_label}")
+            self._line(
+                f"  reason={rejection.get('retcode_label', 'unknown rejection')}"
+            )
+            self._line(
+                f"  request_symbol={request.get('symbol')} "
+                f"request_volume={request.get('volume')} "
+                f"request_price={request.get('price')} "
+                f"request_sl={request.get('sl')} "
+                f"request_tp={request.get('tp')} "
+                f"type_filling={request.get('type_filling')}"
+            )
+            conditions = rejection.get("symbol_conditions")
+            if conditions:
+                self._line(
+                    f"  symbol_conditions trade_mode={conditions.get('trade_mode')} "
+                    f"vol_min={conditions.get('volume_min')} "
+                    f"vol_step={conditions.get('volume_step')} "
+                    f"stops_level={conditions.get('stops_level')} "
+                    f"freeze_level={conditions.get('freeze_level')} "
+                    f"filling_mode={conditions.get('filling_mode')}"
+                )
+            if rejection.get("bid") is not None:
+                self._line(
+                    f"  broker_quote bid={rejection.get('bid')} "
+                    f"ask={rejection.get('ask')}"
+                )
+        else:
+            self._line(f"  decision={decision_label} reason: {s.reason}")
         if s.entry_action not in ("NONE",):
             self._line(f"  entry: {s.entry_action} — {s.entry_detail}")
         if outcome.sent_ticket is not None:
@@ -521,6 +559,12 @@ class TradingService:
         cycles = 0
         stop_reason = StopReason.MAX_CYCLES
         detail = ""
+        # BROKER-EXECUTION-001: the runtime report reflects the CURRENT run
+        # from startup on (previously it kept the previous run's data until
+        # this run stopped, making live diagnostics unusable).
+        self._write_service_report(self._snapshot(started, cycles, "RUNNING",
+                                                  "service started",
+                                                  ended=started))
         try:
             while True:
                 now = self._now()
@@ -547,6 +591,16 @@ class TradingService:
                 self._accumulate(outcome)
                 self._print_cycle(cycles, outcome, now)
                 self._track_opportunity(outcome, now)
+                # Keep the runtime report current whenever the order path
+                # produced something worth diagnosing (BROKER-EXECUTION-001).
+                if outcome.stat.entry_action in (
+                    "SENT", "SIMULATED", "REJECTED", "ORDER_ERROR",
+                ):
+                    self._write_service_report(self._snapshot(
+                        started, cycles, "RUNNING",
+                        f"live snapshot after {outcome.stat.entry_action}",
+                        ended=now,
+                    ))
 
                 # Risk shutdown: the WEEKLY loss limit stops the service
                 # (03_RISK_POLICY shutdown rule). The DAILY limit pauses
@@ -575,21 +629,29 @@ class TradingService:
 
         ended = self._now()
         self._write_day_reports(self._current_day)
-        report = ServiceReport(
+        report = self._snapshot(started, cycles, stop_reason, detail,
+                                ended=ended)
+        self._write_service_report(report)
+        self._printer.stopped(stop_reason, detail)
+        return report
+
+    def _snapshot(self, started: datetime, cycles: int, stop_reason: str,
+                  detail: str, *, ended: Optional[datetime] = None
+                  ) -> ServiceReport:
+        return ServiceReport(
             started_at_utc=started,
-            ended_at_utc=ended,
+            ended_at_utc=ended or self._now(),
             cycles=cycles,
             market_closed_checks=self._closed_checks,
             decisions=self._session.decisions_logged,
             orders_sent=self._session.orders_sent,
             orders_simulated=self._session.orders_simulated,
+            orders_rejected=getattr(self._session, "orders_rejected", 0),
             violations=self._session.violations,
             stop_reason=stop_reason,
             detail=detail,
+            profile=self._profile.name,
         )
-        self._write_service_report(report)
-        self._printer.stopped(stop_reason, detail)
-        return report
 
     # -- closed/waiting states ------------------------------------------------
     def _wait_market_closed(self, now: datetime, state: str) -> None:
@@ -626,8 +688,14 @@ class TradingService:
             decision = "TRADE"
         elif s.entry_action == "SIMULATED":
             decision = "TRADE_SIMULATED"
+        elif s.entry_action == "REJECTED":
+            # BROKER-EXECUTION-001: the broker said no — name it honestly
+            # instead of the contradictory generic BLOCKED.
+            decision = "ORDER_REJECTED_BY_BROKER"
+        elif s.entry_action == "ORDER_ERROR":
+            decision = "ORDER_ERROR"
         elif s.entry_action in ("PLAN_BLOCKED", "ENTRY_BLOCKED",
-                                "CAP_REACHED", "REJECTED"):
+                                "CAP_REACHED"):
             decision = "BLOCKED"
         elif outcome.positions:
             decision = "MANAGE_POSITION"

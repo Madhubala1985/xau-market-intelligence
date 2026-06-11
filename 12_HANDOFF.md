@@ -13,17 +13,40 @@ Phase 12: Live Demo Readiness — continuous service operational; FINAL
 LAST-CHANCE demo_challenge experiment ready
 
 ## Current Task ID:
-DEMO-CHALLENGE-001 (implemented; user starts the run —
---profile demo_challenge, user-started only)
+BROKER-EXECUTION-001 (implemented; user restarts demo_challenge —
+user-started only)
 
 ## Current Task Goal:
-Run the aggressive fixed-lot momentum profile on the Exness MT5 DEMO
-account and observe whether the system actually captures XAUUSD momentum:
-fresh entry scan every candle, tactical M1/M5 stops instead of structural
-stops, 0.05/0.10 fixed lots, same-direction add-ons only into floating
-profit, full per-cycle reasoning in the terminal.
+Re-run demo_challenge with the fixed broker execution path: orders now
+carry the LIVE tick price and the broker-supported filling mode, an
+invalid-stops order is blocked before sending, and any rejection is fully
+persisted (retcode/comment/request) and printed honestly as
+ORDER_REJECTED_BY_BROKER.
 
 ## Current Status:
+BROKER-EXECUTION-001 implemented. 769 tests pass; safety check passes.
+- PROVEN root causes of the live rejections (request builder, not symbol
+  case): stale candle-close price outside the deviation window + missing
+  type_filling. Fixed: live ask/bid in the request; filling mode from
+  symbol_info (IOC > FOK > RETURN); graceful degradation when
+  symbol_info/tick are unavailable.
+- Journal now persists typed execution events (ORDER_ATTEMPTED/SENT/
+  REJECTED/BLOCKED/ERROR) with retcode + name + broker comment + the exact
+  XAUUSDm request + quotes + symbol trade conditions + margin check;
+  searchable with Select-String "ORDER_REJECTED","retcode","broker".
+- ORDER_BLOCKED_STOPS_LEVEL guard: an SL/TP inside the broker minimum stop
+  distance is never sent and never silently widened.
+- Terminal prints decision=ORDER_REJECTED_BY_BROKER with
+  reason=retcode/comment + request_symbol/volume/price/sl/tp (the
+  contradictory "BLOCKED: all risk checks passed" is gone);
+  ORDER_ERROR is its own label. Runtime report refreshes live with the
+  active profile.
+- The journal's XAUUSDM on TradeDecision/TradeRecord is the CANONICAL
+  comparison form (F-14 design) — the wire request always carried XAUUSDm;
+  the new ORDER_* events record the exact broker case.
+- Strategy / momentum / lot / tactical-stop logic UNCHANGED.
+
+DEMO-CHALLENGE-001 status (previous): implemented; 753 tests then.
 DEMO-CHALLENGE-001 implemented. 753 tests pass; safety check passes.
 - New decision layer behind the UNCHANGED safety stack: the momentum
   pipeline (src/strategy/challenge_momentum.py) and the fixed-lot planner
@@ -133,7 +156,11 @@ CONTINUOUS-001 status (previous): implemented and committed; 583 tests then.
 5. py -3.12 scripts\trading_service.py --profile demo_challenge --stdout-progress
    -> supervise; trades appear in MT5 Toolbox/Trade tab; every cycle prints
    momentum candidate/state, entry_plan, tactical_stop, lot_decision,
-   first_trade_profit_state, add_on_allowed, and the exact WAIT reason
+   first_trade_profit_state, add_on_allowed, and the exact WAIT reason.
+   If the broker rejects an order the terminal prints
+   decision=ORDER_REJECTED_BY_BROKER with retcode/comment + the exact
+   request, and the journal persists it:
+   Select-String -Path logs\demo_trade_journal.jsonl -Pattern "ORDER_REJECTED","retcode","broker"
 6. Stop: New-Item -ItemType File control\KILL_SWITCH
    Resume: Remove-Item control\KILL_SWITCH ; restart the service
 7. Review daily service_eval_* / service_reflection_* and
@@ -204,7 +231,17 @@ CONTINUOUS-001 status (previous): implemented and committed; 583 tests then.
 Read CLAUDE.md, CURRENT_STATE.md, 12_HANDOFF.md, 10_TASK_QUEUE.md,
 23_DEMO_TRADING_RUNBOOK.md, 24_INTELLIGENCE_AUDIT_ROADMAP.md.
 
-DEMO-CHALLENGE-001 is implemented (decision 2026-06-11-01): the FINAL
+BROKER-EXECUTION-001 is implemented on top of DEMO-CHALLENGE-001 (decisions
+2026-06-11-01/-02): the live broker rejections were caused by the stale
+candle-close price + missing filling mode in the order request — both
+fixed (live tick price, symbol_info-driven filling mode), with full
+rejection diagnostics journaled as ORDER_* events and printed honestly as
+ORDER_REJECTED_BY_BROKER. 769 tests pass. Guide the user to restart
+demo_challenge and, if any rejection still occurs, read its retcode/comment
+from the terminal or grep the journal for ORDER_REJECTED — the cause is now
+always persisted.
+
+DEMO-CHALLENGE-001 context: the FINAL
 LAST-CHANCE aggressive momentum profile `--profile demo_challenge` — fixed
 lots 0.05/0.10, tactical M1/M5 local stops (never structural), fresh entry
 scan every candle, add-ons only into floating profit, max 3 open, daily 5%

@@ -29,6 +29,10 @@ DEFAULT_JOURNAL_PATH = "logs/trade_journal.jsonl"
 class EntryKind(str, Enum):
     DECISION = "decision"
     RECORD = "record"
+    # BROKER-EXECUTION-001: execution-path events (ORDER_ATTEMPTED /
+    # ORDER_SENT / ORDER_REJECTED / ORDER_BLOCKED / ORDER_ERROR) with full
+    # broker diagnostics, so rejections are persisted and searchable.
+    EVENT = "event"
 
 
 @dataclass(frozen=True)
@@ -39,10 +43,15 @@ class JournalEntry:
     logged_at_utc: datetime
     decision: Optional[TradeDecision] = None
     record: Optional[TradeRecord] = None
+    event: Optional[dict] = None
 
     @property
-    def payload(self) -> Union[TradeDecision, TradeRecord]:
-        return self.decision if self.kind is EntryKind.DECISION else self.record
+    def payload(self) -> Union[TradeDecision, TradeRecord, dict]:
+        if self.kind is EntryKind.DECISION:
+            return self.decision
+        if self.kind is EntryKind.RECORD:
+            return self.record
+        return self.event
 
 
 class TradeJournal:
@@ -66,6 +75,17 @@ class TradeJournal:
         """Persist a trade outcome record."""
         logged_at = self._append(EntryKind.RECORD, record.model_dump(mode="json"))
         return JournalEntry(EntryKind.RECORD, logged_at, record=record)
+
+    def log_event(self, event: str, detail: dict) -> JournalEntry:
+        """Persist an execution-path event (credential-free, JSON-safe).
+
+        `event` is the stable name (e.g. ORDER_REJECTED); `detail` carries
+        the broker diagnostics (retcode, comment, request fields...). The
+        caller must never include credentials — only request/response data.
+        """
+        payload = {"event": str(event), **detail}
+        logged_at = self._append(EntryKind.EVENT, payload)
+        return JournalEntry(EntryKind.EVENT, logged_at, event=payload)
 
     def _append(self, kind: EntryKind, data: dict) -> datetime:
         logged_at = datetime.now(timezone.utc)
@@ -97,12 +117,14 @@ class TradeJournal:
                         kind, logged_at, decision=TradeDecision.model_validate(data)
                     )
                 )
-            else:
+            elif kind is EntryKind.RECORD:
                 out.append(
                     JournalEntry(
                         kind, logged_at, record=TradeRecord.model_validate(data)
                     )
                 )
+            else:
+                out.append(JournalEntry(kind, logged_at, event=dict(data)))
         return out
 
     def decisions(self) -> List[TradeDecision]:
@@ -110,6 +132,9 @@ class TradeJournal:
 
     def records(self) -> List[TradeRecord]:
         return [e.record for e in self.entries() if e.kind is EntryKind.RECORD]
+
+    def events(self) -> List[dict]:
+        return [e.event for e in self.entries() if e.kind is EntryKind.EVENT]
 
     def __len__(self) -> int:
         return len(self.entries())

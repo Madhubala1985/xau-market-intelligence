@@ -539,3 +539,30 @@ Survival guards for the experiment: 3% worst-case per trade, daily 5%
 entry pause, weekly 10% shutdown, mandatory tactical stop, kill switch,
 no martingale/grid/averaging/hedging structurally. Real-money gates are
 unaffected; nothing from this experiment approves real trading.
+
+---
+
+# 15. BROKER-EXECUTION-001 — 2026-06-11 (eleventh pass)
+
+## F-17. Demo orders rejected by the broker with zero persisted diagnostics
+- **Class:** Proven Defect (request building) + Proven Defect (missing
+  diagnostics) + Proven Output Defect (contradictory terminal wording)
+- **Evidence:** demo_challenge proposed valid entries (e.g.
+  chal-20260611T102631Z LONG 0.05 @4093.726 SL 4090.44 TP 4100.31); MT5
+  rejected; journal held only PROPOSED decisions; terminal printed
+  "decision=BLOCKED reason: all risk checks passed".
+- **Root cause:** the market order carried the analysed CANDLE CLOSE as
+  price (stale beyond deviation=20 points exactly when momentum fires) and
+  no type_filling (unsupported terminal default => 10030 INVALID_FILL).
+  Symbol case was NOT the cause: the request already carried XAUUSDm
+  (F-14); the journal's XAUUSDM is the canonical comparison form.
+- **Fix:** live-tick price (ask/bid) in the request; broker-supported
+  filling mode from symbol_info; ORDER_BLOCKED_STOPS_LEVEL guard (invalid
+  SL never sent, never silently widened); typed journal events
+  ORDER_ATTEMPTED/SENT/REJECTED/BLOCKED/ERROR with retcode/name/comment/
+  exact request/quotes/symbol conditions/margin; terminal prints
+  ORDER_REJECTED_BY_BROKER + request details; runtime report written at
+  startup and refreshed after every order event (profile included).
+- **Lesson:** an execution boundary is only as honest as its rejection
+  path; every order_send must persist what was asked and what the broker
+  answered.

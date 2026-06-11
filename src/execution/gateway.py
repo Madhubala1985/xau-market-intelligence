@@ -70,6 +70,41 @@ class ExecutionCheck(str, Enum):
     DUPLICATE = "DUPLICATE"
     RISK_BLOCKED = "RISK_BLOCKED"
     KILL_SWITCH = "KILL_SWITCH"
+    # BROKER-EXECUTION-001: SL/TP closer than the broker minimum stop
+    # distance — the order is never sent with an invalid stop.
+    STOPS_LEVEL = "STOPS_LEVEL"
+
+
+# Human-readable names for the MT5 retcodes a demo order realistically hits
+# (BROKER-EXECUTION-001: every rejection must be diagnosable from the journal).
+RETCODE_NAMES = {
+    10004: "REQUOTE",
+    10006: "REJECT",
+    10008: "PLACED",
+    10009: "DONE",
+    10010: "DONE_PARTIAL",
+    10011: "ERROR",
+    10012: "TIMEOUT",
+    10013: "INVALID_REQUEST",
+    10014: "INVALID_VOLUME",
+    10015: "INVALID_PRICE",
+    10016: "INVALID_STOPS",
+    10017: "TRADE_DISABLED",
+    10018: "MARKET_CLOSED",
+    10019: "NO_MONEY",
+    10020: "PRICE_CHANGED",
+    10021: "PRICE_OFF",
+    10022: "INVALID_EXPIRATION",
+    10024: "TOO_MANY_REQUESTS",
+    10026: "SERVER_DISABLES_AT",
+    10027: "CLIENT_DISABLES_AT",
+    10028: "LOCKED",
+    10029: "FROZEN",
+    10030: "INVALID_FILL",
+    10031: "CONNECTION",
+    10033: "LIMIT_ORDERS",
+    10034: "LIMIT_VOLUME",
+}
 
 
 @dataclass(frozen=True)
@@ -123,6 +158,10 @@ class ExecutionResult:
     failed_checks: Tuple[ExecutionCheck, ...] = ()
     risk_decision: Optional[RiskDecision] = None
     reason: str = ""
+    # BROKER-EXECUTION-001: full broker diagnostics for the send attempt —
+    # the exact request, the retcode/comment, live quotes, and the symbol
+    # trade conditions. Credential-free by construction.
+    diagnostics: Optional[dict] = None
 
 
 @dataclass(frozen=True)
@@ -219,7 +258,19 @@ class ExecutionGateway:
 
         log.state(OrderState.RISK_APPROVED)
 
-        # 5) Safe default: if demo sending is not fully enabled, do not send.
+        # 5) Broker stop-distance gate (BROKER-EXECUTION-001): if the broker
+        # publishes a minimum stop distance and the SL/TP sit inside it, the
+        # order is NEVER sent with an invalid stop — explicit block instead.
+        stops_violation = self._stops_level_violation(decision)
+        if stops_violation:
+            log.fail(ExecutionCheck.STOPS_LEVEL)
+            log.state(OrderState.BLOCKED)
+            return self._result(
+                ExecutionStatus.BLOCKED, log, sent=False, risk_decision=verdict,
+                reason=f"ORDER_BLOCKED_STOPS_LEVEL: {stops_violation}",
+            )
+
+        # 6) Safe default: if demo sending is not fully enabled, do not send.
         if not self._flags.demo_send_enabled:
             log.state(OrderState.ORDER_PREPARED)
             return self._result(
@@ -227,11 +278,21 @@ class ExecutionGateway:
                 reason="demo order sending disabled; dry-run only",
             )
 
-        # 6) Prepare and send the demo order.
+        # 7) Prepare and send the demo order.
         log.state(OrderState.ORDER_PREPARED)
         request = self._build_request(decision, context, verdict)
         log.state(OrderState.ORDER_SENT)
-        send_result = self._mt5.order_send(request)
+        try:
+            send_result = self._mt5.order_send(request)
+        except Exception as exc:  # noqa: BLE001 - diagnosed, never swallowed
+            log.state(OrderState.ORDER_REJECTED)
+            diagnostics = self._send_diagnostics(request, None)
+            diagnostics["error"] = f"{exc.__class__.__name__}: {exc}"
+            return self._result(
+                ExecutionStatus.REJECTED, log, sent=True, risk_decision=verdict,
+                reason=f"order_send raised {exc.__class__.__name__}: {exc}",
+                diagnostics=diagnostics,
+            )
 
         if self._accepted(send_result):
             log.state(OrderState.ORDER_ACCEPTED)
@@ -239,11 +300,17 @@ class ExecutionGateway:
                 ExecutionStatus.FILLED, log, sent=True, risk_decision=verdict,
                 order_ticket=getattr(send_result, "order", None),
                 reason="demo order accepted",
+                diagnostics=self._send_diagnostics(request, send_result),
             )
         log.state(OrderState.ORDER_REJECTED)
+        diagnostics = self._send_diagnostics(request, send_result)
         return self._result(
             ExecutionStatus.REJECTED, log, sent=True, risk_decision=verdict,
-            reason="demo order rejected by broker",
+            reason=(
+                "broker rejected order: "
+                f"{diagnostics.get('retcode_label', 'no result returned')}"
+            ),
+            diagnostics=diagnostics,
         )
 
     # -- stop modification (protection only; never widens, never removes) ---
@@ -365,20 +432,176 @@ class ExecutionGateway:
         raw_volume = context.lot_size * verdict.size_factor
         volume = round(math.floor(raw_volume / _LOT_STEP + 1e-9) * _LOT_STEP, 8)
         take_profit = decision.take_profits[0] if decision.take_profits else None
+        # A market order must carry the LIVE quote, not the analysed candle
+        # close (BROKER-EXECUTION-001 root cause: momentum entries fire right
+        # after price moved, so the stale close fell outside the deviation
+        # window and the broker rejected with REQUOTE/INVALID_PRICE).
+        tick = self._live_tick()
+        if tick is not None:
+            price = (
+                getattr(tick, "ask", None) if is_long
+                else getattr(tick, "bid", None)
+            ) or decision.entry_price
+        else:
+            price = decision.entry_price
         # NOTE: contains no credentials (login/password/server) by construction.
-        return {
+        request = {
             "action": getattr(mt5, "TRADE_ACTION_DEAL", 1),
             # exact broker case (e.g. "XAUUSDm"), never the canonical form
             "symbol": self._broker_symbol or decision.symbol,
             "volume": volume,
             "type": order_type,
-            "price": decision.entry_price,
+            "price": price,
             "sl": decision.stop_loss,
             "tp": take_profit,
             "deviation": self._deviation,
             "magic": self._magic,
             "comment": "XAUUSD demo",
         }
+        # Filling mode must be one the BROKER supports for this symbol
+        # (BROKER-EXECUTION-001: an unsupported default reads as retcode
+        # 10030 INVALID_FILL). Without symbol_info the key is omitted, which
+        # preserves the terminal's own default.
+        filling = self._select_filling()
+        if filling is not None:
+            request["type_filling"] = filling
+        return request
+
+    # -- broker introspection (all getattr-safe; absence degrades honestly) --
+    def _symbol_info(self):
+        client = self._mt5
+        getter = getattr(client, "symbol_info", None)
+        if getter is None:
+            return None
+        try:
+            return getter(self._broker_symbol or self._expected_symbol)
+        except Exception:  # noqa: BLE001 - introspection must never crash sending
+            return None
+
+    def _live_tick(self):
+        client = self._mt5
+        getter = getattr(client, "symbol_info_tick", None)
+        if getter is None:
+            return None
+        try:
+            return getter(self._broker_symbol or self._expected_symbol)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _select_filling(self) -> Optional[int]:
+        """The broker-supported market filling mode from symbol_info.
+
+        symbol_info.filling_mode is a bitmask: 1 = FOK allowed, 2 = IOC
+        allowed. Preference: IOC (partial fill acceptable on a market order)
+        then FOK then RETURN. None when symbol_info is unavailable.
+        """
+        info = self._symbol_info()
+        flags_mask = getattr(info, "filling_mode", None) if info else None
+        if flags_mask is None:
+            return None
+        mt5 = self._mt5
+        if flags_mask & 2:
+            return getattr(mt5, "ORDER_FILLING_IOC", 1)
+        if flags_mask & 1:
+            return getattr(mt5, "ORDER_FILLING_FOK", 0)
+        return getattr(mt5, "ORDER_FILLING_RETURN", 2)
+
+    def _stops_level_violation(self, decision: TradeDecision) -> str:
+        """Non-empty description when SL/TP sit inside the broker minimum
+        stop distance (trade_stops_level points); empty string when fine or
+        when the broker publishes no constraint."""
+        info = self._symbol_info()
+        if info is None:
+            return ""
+        stops_level = getattr(info, "trade_stops_level", 0) or 0
+        point = getattr(info, "point", 0.0) or 0.0
+        if stops_level <= 0 or point <= 0:
+            return ""
+        min_distance = stops_level * point
+        tick = self._live_tick()
+        is_long = decision.direction is Direction.LONG
+        ref = None
+        if tick is not None:
+            ref = getattr(tick, "ask", None) if is_long else getattr(tick, "bid", None)
+        ref = ref or decision.entry_price
+        if ref is None:
+            return ""
+        problems = []
+        if decision.stop_loss is not None:
+            sl_distance = (ref - decision.stop_loss) if is_long \
+                else (decision.stop_loss - ref)
+            if sl_distance < min_distance:
+                problems.append(
+                    f"SL distance {sl_distance:.2f} < broker minimum "
+                    f"{min_distance:.2f} ({stops_level} points)"
+                )
+        if decision.take_profits:
+            tp = decision.take_profits[0]
+            tp_distance = (tp - ref) if is_long else (ref - tp)
+            if tp_distance < min_distance:
+                problems.append(
+                    f"TP distance {tp_distance:.2f} < broker minimum "
+                    f"{min_distance:.2f} ({stops_level} points)"
+                )
+        if not problems:
+            return ""
+        return (
+            "; ".join(problems)
+            + "; an invalid stop is never sent — wait for a tactically valid "
+              "stop beyond the broker minimum"
+        )
+
+    def _send_diagnostics(self, request: dict, send_result: Any) -> dict:
+        """Everything needed to diagnose a send attempt (credential-free)."""
+        retcode = getattr(send_result, "retcode", None)
+        name = RETCODE_NAMES.get(retcode, "UNKNOWN") if retcode is not None else None
+        comment = getattr(send_result, "comment", None)
+        diagnostics: dict = {
+            "broker": "order_send",
+            "retcode": retcode,
+            "retcode_name": name,
+            "comment": comment,
+            "retcode_label": (
+                f"retcode={retcode} ({name}) comment={comment!r}"
+                if retcode is not None else "no broker result returned"
+            ),
+            "request": {
+                "symbol": request.get("symbol"),
+                "volume": request.get("volume"),
+                "type": request.get("type"),
+                "price": request.get("price"),
+                "sl": request.get("sl"),
+                "tp": request.get("tp"),
+                "deviation": request.get("deviation"),
+                "type_filling": request.get("type_filling"),
+            },
+        }
+        tick = self._live_tick()
+        if tick is not None:
+            diagnostics["bid"] = getattr(tick, "bid", None)
+            diagnostics["ask"] = getattr(tick, "ask", None)
+        info = self._symbol_info()
+        if info is not None:
+            diagnostics["symbol_conditions"] = {
+                "trade_mode": getattr(info, "trade_mode", None),
+                "volume_min": getattr(info, "volume_min", None),
+                "volume_max": getattr(info, "volume_max", None),
+                "volume_step": getattr(info, "volume_step", None),
+                "stops_level": getattr(info, "trade_stops_level", None),
+                "freeze_level": getattr(info, "trade_freeze_level", None),
+                "filling_mode": getattr(info, "filling_mode", None),
+                "point": getattr(info, "point", None),
+            }
+        margin_calc = getattr(self._mt5, "order_calc_margin", None)
+        if margin_calc is not None:
+            try:
+                diagnostics["margin_check"] = margin_calc(
+                    request.get("type"), request.get("symbol"),
+                    request.get("volume"), request.get("price"),
+                )
+            except Exception:  # noqa: BLE001
+                diagnostics["margin_check"] = None
+        return diagnostics
 
     def _accepted(self, send_result: Any) -> bool:
         if send_result is None:
@@ -396,6 +619,7 @@ class ExecutionGateway:
         reason: str,
         order_ticket: Optional[int] = None,
         risk_decision: Optional[RiskDecision] = None,
+        diagnostics: Optional[dict] = None,
     ) -> ExecutionResult:
         return ExecutionResult(
             status=status,
@@ -405,4 +629,5 @@ class ExecutionGateway:
             failed_checks=tuple(log.failed),
             risk_decision=risk_decision,
             reason=reason,
+            diagnostics=diagnostics,
         )

@@ -116,7 +116,7 @@ class CycleStat:
     risk_action: Optional[str] = None
     # What the entry path did this cycle:
     # NONE (not actionable/approved) | SENT | SIMULATED | REJECTED |
-    # PLAN_BLOCKED | ENTRY_BLOCKED | CAP_REACHED
+    # PLAN_BLOCKED | ENTRY_BLOCKED | CAP_REACHED | ORDER_ERROR
     entry_action: str = "NONE"
     entry_detail: str = ""
     # INTELLIGENCE-001: graded reasoning, surfaced per cycle.
@@ -321,6 +321,9 @@ class SupervisedDemoSession:
         self._last_positions: List[BrokerPosition] = []
         self._last_risk_state: Optional[RiskStateSnapshot] = None
         self._last_sent_ticket: Optional[int] = None
+        # BROKER-EXECUTION-001: broker diagnostics of THIS cycle's send
+        # attempt (surfaced in CycleStat.intel and the terminal).
+        self._last_order_rejection: Optional[dict] = None
 
     # -- session loop --------------------------------------------------------
     def run(
@@ -392,6 +395,10 @@ class SupervisedDemoSession:
     @property
     def orders_simulated(self) -> int:
         return self._orders_simulated
+
+    @property
+    def orders_rejected(self) -> int:
+        return self._orders_rejected
 
     @property
     def decisions_logged(self) -> int:
@@ -496,6 +503,7 @@ class SupervisedDemoSession:
 
     def _cycle(self) -> ReconciliationReport:
         now = self._now()
+        self._last_order_rejection = None
         exec_candles = self._adapter.fetch_candles(self._exec_tf, self._exec_count)
         daily = self._adapter.fetch_candles(Timeframe.D1, self._daily_count)
         h4 = self._adapter.fetch_candles(Timeframe.H4, self._h4_count)
@@ -624,12 +632,14 @@ class SupervisedDemoSession:
                 ),
                 risk_tier=(adaptive.tier.value if adaptive is not None else None),
                 risk_pct=(adaptive.risk_pct if adaptive is not None else None),
-                intel=self._record_challenge(
-                    positions,
-                    self._record_exposure(
-                        exposure,
-                        self._record_sizing(
-                            result, self._intel_of(context, adaptive)
+                intel=self._record_order_rejection(
+                    self._record_challenge(
+                        positions,
+                        self._record_exposure(
+                            exposure,
+                            self._record_sizing(
+                                result, self._intel_of(context, adaptive)
+                            ),
                         ),
                     ),
                 ),
@@ -690,6 +700,12 @@ class SupervisedDemoSession:
     def _record_exposure(exposure, intel: dict) -> dict:
         if exposure is not None:
             intel["exposure"] = exposure.to_dict()
+        return intel
+
+    def _record_order_rejection(self, intel: dict) -> dict:
+        """BROKER-EXECUTION-001: broker send diagnostics for this cycle."""
+        if self._last_order_rejection:
+            intel["order_rejection"] = dict(self._last_order_rejection)
         return intel
 
     def _record_challenge(self, positions, intel: dict) -> dict:
@@ -972,7 +988,32 @@ class SupervisedDemoSession:
                 plan.is_addon and plan.pyramid is not None and plan.pyramid.allowed
             ),
         )
-        exec_result = self._gateway.execute(decision, context)
+        # BROKER-EXECUTION-001: every send attempt is journaled persistently
+        # with the EXACT broker symbol case, so rejections are searchable
+        # (kind=event, ORDER_ATTEMPTED/SENT/REJECTED/BLOCKED/ERROR).
+        attempt = {
+            "decision_id": decision.decision_id,
+            "symbol": self._symbol,  # exact broker case (e.g. XAUUSDm)
+            "direction": decision.direction.value,
+            "volume": plan.lot_size,
+            "sl": decision.stop_loss,
+            "tp": decision.take_profits[0] if decision.take_profits else None,
+            "mode": (
+                "DEMO_LIVE" if self._gateway.flags.demo_send_enabled
+                else "DRY_RUN"
+            ),
+        }
+        self._journal.log_event("ORDER_ATTEMPTED", attempt)
+        try:
+            exec_result = self._gateway.execute(decision, context)
+        except Exception as exc:  # noqa: BLE001 - journaled, never silent
+            self._violations += 1
+            detail = f"order execution raised {exc.__class__.__name__}: {exc}"
+            self._journal.log_event(
+                "ORDER_ERROR", {**attempt, "error": detail, "broker": "order_send"}
+            )
+            self._event("ORDER_ERROR", detail)
+            return "ORDER_ERROR", detail
 
         if exec_result.status is ExecutionStatus.FILLED and exec_result.sent:
             self._orders_sent += 1
@@ -999,6 +1040,12 @@ class SupervisedDemoSession:
                 notes=_TICKET_NOTE.format(ticket=exec_result.order_ticket),
             )
             self._journal.log_record(record)
+            self._journal.log_event("ORDER_SENT", {
+                **attempt,
+                "ticket": exec_result.order_ticket,
+                "retcode": (exec_result.diagnostics or {}).get("retcode"),
+                "broker": "order_send",
+            })
             detail = (
                 f"ticket={exec_result.order_ticket} lot={plan.lot_size} "
                 f"tier={plan.tier.value} addon={plan.is_addon} "
@@ -1015,14 +1062,33 @@ class SupervisedDemoSession:
             self._event("ORDER_SIMULATED", detail)
             return "SIMULATED", detail
         if exec_result.sent:
+            # Broker rejected (or order_send failed): persist the FULL
+            # diagnostics so the cause is provable from the journal alone.
             self._orders_rejected += 1
-            self._event("ORDER_REJECTED", exec_result.reason)
-            return "REJECTED", exec_result.reason
+            diagnostics = exec_result.diagnostics or {}
+            self._last_order_rejection = diagnostics
+            self._journal.log_event("ORDER_REJECTED", {
+                **attempt, "broker": "order_send", **diagnostics,
+            })
+            request = diagnostics.get("request") or {}
+            detail = (
+                f"{diagnostics.get('retcode_label', exec_result.reason)} "
+                f"request_symbol={request.get('symbol')} "
+                f"request_volume={request.get('volume')} "
+                f"request_price={request.get('price')} "
+                f"request_sl={request.get('sl')} request_tp={request.get('tp')}"
+            )
+            self._event("ORDER_REJECTED", detail)
+            return "REJECTED", detail
         self._entries_blocked += 1
         detail = (
             f"gateway blocked: {[c.value for c in exec_result.failed_checks]} "
             f"({exec_result.reason})"
         )
+        if any(c.value == "STOPS_LEVEL" for c in exec_result.failed_checks):
+            self._journal.log_event("ORDER_BLOCKED", {
+                **attempt, "broker": "stops_level", "reason": exec_result.reason,
+            })
         self._event("ENTRY_BLOCKED", detail)
         return "ENTRY_BLOCKED", detail
 

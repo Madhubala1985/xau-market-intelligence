@@ -10,7 +10,21 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-DEMO-CHALLENGE-001: IMPLEMENTED — FINAL LAST-CHANCE aggressive XAUUSDm
+BROKER-EXECUTION-001: IMPLEMENTED — demo order rejections fixed and fully
+diagnosable. Root causes (proven, request builder — NOT symbol case): the
+market order carried the stale M5 candle close as price (outside the
+deviation window exactly when momentum fires => REQUOTE/INVALID_PRICE) and
+no type_filling (=> 10030 INVALID_FILL on brokers that reject the default).
+Now: live-tick price (ask/bid), broker-supported filling mode from
+symbol_info, ORDER_BLOCKED_STOPS_LEVEL guard, typed journal events
+(ORDER_ATTEMPTED/SENT/REJECTED/BLOCKED/ERROR with retcode + comment + exact
+XAUUSDm request + quotes + symbol conditions + margin), terminal
+decision=ORDER_REJECTED_BY_BROKER with request details (no more
+"BLOCKED: all risk checks passed"), runtime report live-refreshed with the
+profile. Strategy/lot/stop logic unchanged. Restart:
+py -3.12 scripts\trading_service.py --profile demo_challenge --stdout-progress
+
+Previously: DEMO-CHALLENGE-001: IMPLEMENTED — FINAL LAST-CHANCE aggressive XAUUSDm
 momentum profile `--profile demo_challenge` (DEMO ONLY): fixed lots
 0.05/0.10, tactical M1/M5 local stops, fresh entry scan every candle,
 add-ons only into floating profit, max 3 open, owner-directed survival
@@ -221,6 +235,38 @@ DEMO-CHALLENGE-001 (2026-06-11, decision 2026-06-11-01):
   tactical-stop-or-skip, macro/futures/news-unknown neutrality, add-on
   rules, max 3 open, no hedge/martingale, kill switch, exact XAUUSDm case,
   full-session end-to-end 0.10-lot order); pre_demo_safety_check.sh passes.
+
+BROKER-EXECUTION-001 (2026-06-11, decision 2026-06-11-02):
+- Live evidence: demo_challenge found valid entries; the broker rejected
+  every order; nothing was persisted; the terminal printed the
+  contradictory "decision=BLOCKED reason: all risk checks passed".
+- PROVEN root causes in the gateway request builder (symbol case was NOT
+  the cause — the request already carried XAUUSDm per F-14; the journal's
+  XAUUSDM is the canonical comparison form, never sent to the broker):
+  (B1) price = analysed candle close (stale beyond deviation=20 the moment
+  momentum fires) -> now the LIVE tick ask/bid with entry_price fallback;
+  (B2) no type_filling -> now selected from symbol_info.filling_mode
+  (IOC > FOK > RETURN; omitted only when symbol_info is unavailable).
+- Diagnostics: every send attempt journals typed events ORDER_ATTEMPTED /
+  ORDER_SENT / ORDER_REJECTED / ORDER_BLOCKED / ORDER_ERROR with retcode +
+  retcode name + broker comment + exact request (XAUUSDm case, volume,
+  type, price, sl, tp, deviation, type_filling) + live bid/ask + symbol
+  conditions (trade_mode, volume min/max/step, stops/freeze level, filling
+  mask) + margin check. Searchable:
+  Select-String -Path logs\demo_trade_journal.jsonl
+  -Pattern "ORDER_REJECTED","retcode","broker"
+- ORDER_BLOCKED_STOPS_LEVEL: SL/TP inside the broker minimum stop distance
+  block BEFORE sending (never silently widened; risk math unchanged).
+- Terminal: decision=ORDER_REJECTED_BY_BROKER + reason=retcode/comment +
+  request_symbol/volume/price/sl/tp + symbol conditions + broker quote.
+- Runtime report: trading_service.json/.md carry the profile and refresh at
+  startup (RUNNING) and after every SENT/SIMULATED/REJECTED/ORDER_ERROR.
+- Strategy, lot rules, and tactical-stop rules UNCHANGED.
+- 769 tests pass (+15 in tests/test_broker_execution.py: live-price
+  request, filling-mode selection, degradation without symbol_info, full
+  rejection diagnostics, exception diagnosis, stops-level block + pass,
+  journal event roundtrip, session-level rejected/sent/error events,
+  honest terminal wording); pre_demo_safety_check.sh passes.
 
 ## Next Task
 

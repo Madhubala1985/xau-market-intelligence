@@ -3150,3 +3150,84 @@ tests/test_demo_challenge.py (new), tests/test_session_profiles.py,
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-11-02
+
+## Date:
+2026-06-11
+
+## Area:
+Execution / Broker Boundary / Diagnostics / Journal / Observability
+
+## Decision:
+BROKER-EXECUTION-001: fix the demo order-send path and make every broker
+rejection fully diagnosable. No strategy, lot, or tactical-stop logic
+changed.
+
+Live evidence (2026-06-11): demo_challenge found valid LONG entries
+(chal-20260611T102631Z, 0.05 lot, tactical SL/TP), the broker rejected the
+orders, the journal held only the PROPOSED decision (no retcode/comment/
+request), and the terminal printed the contradictory
+"decision=BLOCKED reason: all risk checks passed".
+
+Root causes (PROVEN in the request builder, not in symbol casing):
+(B1) STALE PRICE: order_send carried decision.entry_price — the ANALYSED
+     M5 candle close — with deviation=20 points ($0.20). Momentum entries
+     by definition fire right after price moved, so the live quote sat
+     outside the deviation window => REQUOTE/INVALID_PRICE. FIXED: market
+     orders now carry the LIVE tick (ask for BUY, bid for SELL), falling
+     back to entry_price only when no tick is available.
+(B2) NO FILLING MODE: the request omitted type_filling; brokers that do not
+     support the terminal default reject with 10030 INVALID_FILL. FIXED:
+     the gateway selects the broker-supported mode from
+     symbol_info.filling_mode (IOC preferred, then FOK, then RETURN);
+     omitted only when symbol_info is unavailable.
+(B3) NO DIAGNOSTICS (Proven Defect): rejections were not persisted. FIXED:
+     every send attempt journals typed events — ORDER_ATTEMPTED /
+     ORDER_SENT / ORDER_REJECTED / ORDER_BLOCKED / ORDER_ERROR — carrying
+     retcode + retcode name + broker comment + the exact request (symbol in
+     EXACT broker case XAUUSDm, volume, type, price, SL, TP, deviation,
+     type_filling) + live bid/ask + symbol trade conditions (trade_mode,
+     volume min/max/step, stops/freeze level, filling mask) + margin check.
+     Searchable: Select-String -Pattern "ORDER_REJECTED","retcode","broker".
+(B4) CONTRADICTORY TERMINAL (Proven Output Defect): a broker rejection now
+     prints decision=ORDER_REJECTED_BY_BROKER with reason=retcode/comment
+     and request_symbol/request_volume/request_price/request_sl/request_tp
+     + symbol conditions + broker quote — never the pipeline's
+     "all risk checks passed".
+(B5) STOPS LEVEL: if the broker publishes trade_stops_level and the SL/TP
+     sit inside the minimum distance, the order is blocked as
+     ORDER_BLOCKED_STOPS_LEVEL (journaled) — an invalid stop is never sent
+     and the stop is never silently widened (risk math must not change).
+(B6) STALE RUNTIME REPORT: trading_service.json/.md now carry the profile
+     and are written at startup (stop_reason=RUNNING) and refreshed after
+     every SENT/SIMULATED/REJECTED/ORDER_ERROR cycle, so the current run is
+     always inspectable.
+
+Symbol-case audit result: the order REQUEST already carried the exact
+broker case XAUUSDm (gateway broker_symbol; F-14). The journal's XAUUSDM is
+the CANONICAL comparison form produced by the TradeDecision schema — it was
+never sent to the broker and is unchanged; the new ORDER_* events record
+the exact broker case for the wire-facing fields.
+
+## Alternatives Considered:
+- Un-normalizing TradeDecision.symbol to the broker case: rejected — the
+  governor/gateway comparisons depend on the canonical form (F-14 design);
+  the wire path was already correct.
+- Auto-widening SL to the broker stops level: rejected — it would silently
+  increase loss-at-stop beyond what sizing approved; explicit block instead.
+
+## Risk:
+None added: changes are diagnostic and request-correctness only; sending
+remains demo-gated, kill-switch-aware, governor-final.
+
+## Files Affected:
+src/execution/gateway.py, src/journal/journal.py,
+src/execution/demo_session.py, src/execution/trading_service.py,
+tests/test_broker_execution.py (new).
+
+## Status:
+Accepted
