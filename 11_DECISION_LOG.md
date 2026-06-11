@@ -3403,3 +3403,55 @@ src/execution/demo_session.py, tests/test_smc_accounting.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-11-05
+
+## Date:
+2026-06-11
+
+## Area:
+Risk / Accounting (DEMO ONLY)
+
+## Decision:
+SMC-EXECUTION-002 D1b: balance operations (deposits/withdrawals) are
+subtracted from the period-start reconstruction in the MT5 loss
+tightening, so a deposit can never dilute the daily/weekly loss
+percentage.
+
+Live evidence: after the -176.59 day the owner topped the account back
+to 2,000.00 with a +176.59 deposit. The deposit-free reconstruction
+(balance - realized) read the daily loss as 8.11% (denominator 2,176.59)
+instead of the true 8.83% (176.59/2,000); a large enough deposit could
+push the figure below the 5% pause threshold — a deposit-funded bypass
+of the loss brakes. Weekly on this account is truly 170.4% of the real
+1,146.02 week start (deposits this week +2,806.96, realized -1,952.98).
+
+Fix: MT5DataAdapter.fetch_balance_ops_since (net of non-trade deals,
+None when unavailable); _mt5_tightened_risk_state denominator becomes
+balance - realized_net - balance_ops_net. Unknown ops fall back to the
+deposit-free reconstruction (still a tighten over the journal figure).
+Withdrawals correctly ENLARGE the period start.
+
+## Alternatives Considered:
+- Using equity snapshots at day/week start: rejected — requires persisted
+  state the service cannot trust across restarts; deal history is the
+  MT5 source of truth and replayable.
+- Treating a deposit as a campaign re-baseline that resets the loss
+  window: rejected — that is structurally a martingale enabler (lose,
+  deposit, keep trading) and weakens 03_RISK_POLICY.
+
+## Risk:
+None loosened — strictly tightening versus 2026-06-11-04. The weekly
+RISK_SHUTDOWN on the current account remains in force until the ISO week
+resets (Monday 2026-06-15 UTC); a genuinely fresh demo account is the
+clean path to restart the 2,000 campaign earlier.
+
+## Files Affected:
+src/broker/mt5_data_adapter.py, src/execution/demo_session.py,
+tests/test_smc_accounting.py.
+
+## Status:
+Accepted

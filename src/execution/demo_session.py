@@ -801,10 +801,12 @@ class SupervisedDemoSession:
         accounting carry fabricated profits), so the governor inputs take the
         WORSE of journal-derived and MT5-derived loss percentages:
 
-            mt5_loss_pct = -realized_net / (balance - realized_net)
+            mt5_loss_pct = -realized_net / (balance - realized_net - ops_net)
 
-        where (balance - realized_net) reconstructs the day/week-start
-        balance from trade deals only. Applied only when the accounting
+        where the denominator reconstructs the day/week-start balance from
+        trade deals AND balance operations (D1b: a deposit must never
+        dilute the loss percentage; unknown ops fall back to the
+        deposit-free reconstruction). Applied only when the accounting
         snapshot is verified; never loosens; profitable periods change
         nothing; a failed weekly fetch leaves the weekly figure untouched.
         """
@@ -815,26 +817,38 @@ class SupervisedDemoSession:
             hour=0, minute=0, second=0, microsecond=0
         )
         week_start = day_start - timedelta(days=day_start.weekday())
-        realized_week = None
-        fetch = getattr(self._adapter, "fetch_realized_pnl_since", None)
-        if fetch is not None:
-            try:
-                realized_week = fetch(week_start, now=now)
-            except Exception:  # noqa: BLE001 - unknown stays unknown
-                realized_week = None
 
-        def tightened(journal_pct: float, realized) -> float:
+        def safe_fetch(method_name: str, start: datetime):
+            fetch = getattr(self._adapter, method_name, None)
+            if fetch is None:
+                return None
+            try:
+                return fetch(start, now=now)
+            except Exception:  # noqa: BLE001 - unknown stays unknown
+                return None
+
+        realized_week = safe_fetch("fetch_realized_pnl_since", week_start)
+        # D1b: deposits/withdrawals in the period must not dilute the loss
+        # percentage — subtract them from the period-start reconstruction.
+        ops_day = safe_fetch("fetch_balance_ops_since", day_start)
+        ops_week = safe_fetch("fetch_balance_ops_since", week_start)
+
+        def tightened(journal_pct: float, realized, balance_ops) -> float:
             if realized is None or realized >= 0:
                 return journal_pct
-            period_start_balance = broker.balance - realized
+            period_start_balance = (
+                broker.balance - realized - (balance_ops or 0.0)
+            )
             if period_start_balance <= 0:
                 return journal_pct
             return max(journal_pct, -realized / period_start_balance)
 
         daily = tightened(
-            risk_state.daily_loss_pct, acct.get("realized_daily_pnl")
+            risk_state.daily_loss_pct, acct.get("realized_daily_pnl"), ops_day
         )
-        weekly = tightened(risk_state.weekly_loss_pct, realized_week)
+        weekly = tightened(
+            risk_state.weekly_loss_pct, realized_week, ops_week
+        )
         if (
             daily == risk_state.daily_loss_pct
             and weekly == risk_state.weekly_loss_pct

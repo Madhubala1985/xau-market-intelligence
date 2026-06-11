@@ -554,6 +554,42 @@ class MT5DataAdapter:
             total += float(_field(d, "commission", 0.0) or 0.0)
         return round(total, 2)
 
+    def fetch_balance_ops_since(
+        self, start_utc: datetime, *, now: Optional[datetime] = None
+    ) -> Optional[float]:
+        """Net of NON-trade deals (deposits/withdrawals/credits) since
+        start_utc, straight from MT5 history (READ-ONLY).
+
+        SMC-EXECUTION-002 (D1b): the daily/weekly loss denominators
+        reconstruct the period-start balance as
+        balance - realized_net - balance_ops_net; without the balance-ops
+        term a deposit inflates the denominator and DILUTES the loss
+        percentage — a deposit must never weaken the daily-pause /
+        weekly-stop checks. Returns None when history is unavailable —
+        callers fall back to the deposit-free reconstruction (still a
+        tighten over the journal figure, never a loosening of it).
+        """
+        if not self._connected:
+            raise BrokerConnectionError("adapter is not connected; call connect() first")
+        mt5 = self._mt5
+        if not hasattr(mt5, "history_deals_get"):
+            return None
+        end = now or datetime.now(timezone.utc)
+        try:
+            deals = mt5.history_deals_get(start_utc, end)
+        except Exception:  # noqa: BLE001
+            return None
+        if deals is None:
+            return None
+        buy_type = getattr(mt5, "DEAL_TYPE_BUY", 0)
+        sell_type = getattr(mt5, "DEAL_TYPE_SELL", 1)
+        total = 0.0
+        for d in deals:
+            if _field(d, "type", buy_type) in (buy_type, sell_type):
+                continue  # trade deals belong to fetch_realized_pnl_since
+            total += float(_field(d, "profit", 0.0) or 0.0)
+        return round(total, 2)
+
     def _to_candle(self, row: Any, timeframe: Timeframe, symbol: str) -> Candle:
         """Convert a single MT5 rate row into a validated Candle."""
         broker_time, time_utc = self._epoch_to_times(int(_row_value(row, "time")))

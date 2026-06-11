@@ -463,3 +463,72 @@ def test_weekly_fetch_failure_still_tightens_daily(tmp_path):
     assert outcome.risk.daily_loss_pct == pytest.approx(0.08113, abs=1e-4)
     assert outcome.risk.weekly_loss_pct == pytest.approx(0.0)  # unknown stays journal-based
     assert outcome.stat.entry_action != "SENT"
+
+
+# -- D1b: deposits must never dilute the loss percentages -----------------------------
+#
+# Live evidence 2026-06-11: the owner topped the account back to 2,000 with
+# a +176.59 deposit after a -176.59 day. The deposit-free reconstruction
+# (balance - realized) put the day start at 2,176.59 and read the daily
+# loss as 8.11% instead of the true 8.83% (176.59/2,000) — a large enough
+# deposit could dilute the figure below the 5% pause threshold.
+
+
+def _balance_op(profit, when):
+    return _Obj(
+        profit=profit, commission=0.0, swap=0.0, type=2, entry=0,
+        position_id=0, price=0.0, time=int(when.timestamp()),
+        reason=0, symbol="",
+    )
+
+
+def test_deposit_does_not_dilute_the_daily_loss_pct(tmp_path):
+    fake = FakeMT5Trading()
+    fake.deals[61] = [_mt5_loss_deal(61, -176.59, NOW - timedelta(hours=2))]
+    fake.deals[62] = [_balance_op(+176.59, NOW - timedelta(hours=1))]
+    session, _, _ = build_session(tmp_path, fake, [approved_smc("smc-1")])
+    outcome = session.run_cycle()
+    # true day start: 2000 - (-176.59) - 176.59 = 2000 -> 0.0883, not the
+    # diluted 176.59/2176.59 = 0.0811
+    assert outcome.risk.daily_loss_pct == pytest.approx(0.08830, abs=1e-4)
+    assert outcome.stat.entry_action != "SENT"
+
+
+def test_withdrawal_enlarges_the_period_start_correctly(tmp_path):
+    fake = FakeMT5Trading()
+    fake.deals[63] = [_mt5_loss_deal(63, -100.0, NOW - timedelta(hours=2))]
+    fake.deals[64] = [_balance_op(-400.0, NOW - timedelta(hours=1))]
+    session, _, _ = build_session(tmp_path, fake, [no_trade()])
+    outcome = session.run_cycle()
+    # day start: 2000 + 100 + 400 = 2500 -> 100/2500 = 4% (below the pause)
+    assert outcome.risk.daily_loss_pct == pytest.approx(0.04)
+
+
+class _BalanceOpsUnavailable(FakeMT5Trading):
+    """history works for everything except a balance-ops style call marker.
+
+    fetch_balance_ops_since and fetch_realized_pnl_since share
+    history_deals_get, so unavailability is simulated by counting date-range
+    calls: the realized fetches (daily, weekly) succeed, later ones fail.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._range_calls = 0
+
+    def history_deals_get(self, *args, **kwargs):
+        if args and isinstance(args[0], datetime):
+            self._range_calls += 1
+            if self._range_calls > 2:  # daily + weekly realized succeed
+                raise RuntimeError("balance ops history unavailable")
+        return super().history_deals_get(*args, **kwargs)
+
+
+def test_unknown_balance_ops_fall_back_to_deposit_free_tighten(tmp_path):
+    fake = _BalanceOpsUnavailable()
+    fake.deals[65] = [_mt5_loss_deal(65, -176.59, NOW - timedelta(hours=2))]
+    session, _, _ = build_session(tmp_path, fake, [approved_smc("smc-1")])
+    outcome = session.run_cycle()
+    # ops unknown -> deposit-free reconstruction (still tightened, 0.0811)
+    assert outcome.risk.daily_loss_pct == pytest.approx(0.08113, abs=1e-4)
+    assert outcome.stat.entry_action != "SENT"

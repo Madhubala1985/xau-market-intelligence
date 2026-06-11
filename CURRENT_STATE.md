@@ -46,6 +46,14 @@ smc_challenge run (2026-06-11, 61 cycles, clean KILL_SWITCH stop).
   net -1952.98. This account is policy-stopped until Monday 2026-06-15
   UTC; recommended: fresh demo account funded at exactly 2,000 (update
   .env) as the clean $2k->$10k campaign baseline.
+- D1b (decision 2026-06-11-05): the owner's +176.59 top-up (balance back
+  to exactly 2,000.00) proved deposits dilute the deposit-free loss
+  denominator (8.11% shown vs true 8.83%). New
+  MT5DataAdapter.fetch_balance_ops_since; tighten denominator is now
+  balance - realized_net - balance_ops_net (withdrawals enlarge it;
+  unknown ops fall back to the deposit-free tighten). True weekly loss
+  on this account: 170.4% of the real 1,146.02 week start. 801 tests
+  pass (+3 D1b); safety check passes.
 
 Previously: SMC-EXECUTION-001: IMPLEMENTED — the retail momentum behavior is REMOVED
 and replaced by the institutional SMC execution mode

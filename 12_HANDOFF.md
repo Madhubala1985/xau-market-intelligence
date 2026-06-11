@@ -25,7 +25,19 @@ six TFs + killzone/liquidity/anchor/trigger gates active, 0 rejections.
 D1 defect found and fixed (decision 2026-06-11-04).
 
 ## Current Status:
-SMC-EXECUTION-002 implemented. 798 tests pass; safety check passes.
+SMC-EXECUTION-002 implemented (D1 + D1b). 801 tests pass; safety check
+passes.
+- D1b (decision 2026-06-11-05): deposits can no longer dilute the
+  MT5-tightened daily/weekly loss percentages — the period-start
+  denominator subtracts balance operations
+  (MT5DataAdapter.fetch_balance_ops_since; unknown ops => deposit-free
+  fallback, still a tighten). Trigger: owner's +176.59 top-up to exactly
+  2,000.00 made the daily figure read 8.11% instead of the true 8.83%.
+- The weekly stop on account *******95 stays in force (true weekly loss
+  170.4% of the 1,146.02 week start) until Monday 2026-06-15 UTC.
+  Deposits do NOT reset it (by design). A genuinely fresh demo login in
+  .env restarts the campaign cleanly; journal-based trades_today=10
+  blocks entries until the UTC rollover either way.
 - D1 (High-Confidence, FIXED): governor daily/weekly loss inputs were
   journal-pnl only; the morning pre-fix run's fabricated WINs hid the
   real MT5 -176.59 day (-8.8% of day start) => DAY_PAUSED never fired
