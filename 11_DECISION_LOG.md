@@ -3344,3 +3344,62 @@ tests/test_session_profiles.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-11-04
+
+## Date:
+2026-06-11
+
+## Area:
+Risk / Accounting (DEMO ONLY)
+
+## Decision:
+SMC-EXECUTION-002 (D1): the Risk Governor's daily/weekly loss inputs are
+tightened with MT5-realized P&L every verified cycle — the journal can
+never under-report a real MT5 loss to the daily-pause / weekly-stop
+checks.
+
+Live evidence (61-cycle smc_challenge run, 2026-06-11): the morning
+pre-fix demo_challenge run journaled real MT5 losses as fabricated WINs
+(+1192.53, +1158.62 x2, +1123.80 x2, ...). RiskStateTracker derives loss
+percentages from journal pnl only, so the governor saw d=0.017 while MT5
+deal history said realized_daily_pnl=-176.59 (-8.8% of the reconstructed
+2,000 day-start balance) — DAY_PAUSED never triggered. The MT5-true
+figure was computed per cycle (SMC-EXECUTION-001) but only displayed.
+
+Fix (src/execution/demo_session.py): after the per-cycle accounting
+snapshot, _mt5_tightened_risk_state() replaces the RiskStateSnapshot's
+daily/weekly loss pct with
+
+    max(journal_pct, -realized_net / (balance - realized_net))
+
+using fetch_realized_pnl_since(day_start / ISO-Monday week_start) —
+trade deals only, balance operations excluded. Applied only when
+accounting is verified; tighten-only (a worse journal figure is kept);
+profitable periods change nothing; a failed weekly fetch leaves the
+weekly figure journal-based. The tightened snapshot feeds EVERY consumer:
+pipeline input, exposure governor, planner risk_inputs, gateway
+RiskContext, CycleOutcome.risk (service DAY_PAUSED label + weekly
+RISK_SHUTDOWN).
+
+## Alternatives Considered:
+- Rewriting the poisoned journal records to MT5 truth: rejected — silent
+  history rewriting; the structural fix makes governance immune to any
+  journal pnl corruption, past or future.
+- Replacing the journal-based figures entirely with MT5: rejected —
+  tighten-only (max of both) keeps the journal as a second safety net and
+  can never loosen a limit.
+
+## Risk:
+None loosened — strictly tightening. After restart the service may
+correctly report DAY_PAUSED / weekly RISK_SHUTDOWN that the journal alone
+would have missed; that is the policy working.
+
+## Files Affected:
+src/execution/demo_session.py, tests/test_smc_accounting.py.
+
+## Status:
+Accepted

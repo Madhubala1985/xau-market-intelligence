@@ -10,7 +10,38 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-SMC-EXECUTION-001: IMPLEMENTED — the retail momentum behavior is REMOVED
+SMC-EXECUTION-002: IMPLEMENTED — live-evidence fix from the first
+smc_challenge run (2026-06-11, 61 cycles, clean KILL_SWITCH stop).
+- LIVE RUN EVIDENCE: 1 order sent (SHORT 0.05 on FVG_RETEST +
+  MITIGATION_REJECTION in the NY kill zone, tactical local-swing stop,
+  rr=2.0), closed LOSS net -30.13 by SL during a ~14 USD/min spike (SL
+  slipped 3.5 — Market Artifact, broker-side slippage). Journal matched
+  MT5 history exactly (ORDER_SENT retcode=10009; CLOSE_DETECTED
+  source=MT5_HISTORY); balance 1853.54 -> 1823.41; accounting_verified
+  EVERY cycle; all six TFs in every cycle (D1/H4/H1/M15/M5 + M1
+  refinement); killzone/liquidity/anchor gates active (SESSION_LIQUIDITY,
+  ASIAN_HIGH_SWEEP at 5.15x displacement correctly refused without a
+  local trigger); reentry_plan/waiting_for printed on every NO_TRADE;
+  0 rejections, 0 violations; MAX_TRADES cap (10/10) enforced.
+- D1 HIGH-CONFIDENCE DEFECT FIXED (decision 2026-06-11-04): the governor's
+  daily/weekly loss inputs came from journal pnl only — the morning
+  pre-fix run's fabricated WINs (+1158.62 etc.) hid the real MT5
+  -176.59 day (-8.8%), so DAY_PAUSED never triggered (printed d=0.017).
+  Now _mt5_tightened_risk_state() tightens the RiskStateSnapshot every
+  verified cycle with max(journal_pct, -realized_net/(balance -
+  realized_net)) from fetch_realized_pnl_since(day_start / ISO week
+  start); tighten-only, never loosens; unverified accounting leaves it
+  untouched (entries already blocked); feeds pipeline, exposure governor,
+  planner, gateway RiskContext, and the service DAY_PAUSED/weekly
+  RISK_SHUTDOWN checks.
+- 798 tests pass (+6 D1 tighten tests in tests/test_smc_accounting.py);
+  pre_demo_safety_check.sh passes.
+- Tracked hypothesis (NOT acted on — sample of one): the lone loss had
+  the stop just past the obvious local swing (retail pool) and was swept;
+  candidate refinement = enter after sweep completion / stop beyond the
+  engineered-liquidity extreme. Needs more session evidence.
+
+Previously: SMC-EXECUTION-001: IMPLEMENTED — the retail momentum behavior is REMOVED
 and replaced by the institutional SMC execution mode
 (--profile smc_challenge; demo_challenge is now a deprecated alias of the
 SAME behavior), and MT5 is the ONLY source of truth for P&L/accounting.

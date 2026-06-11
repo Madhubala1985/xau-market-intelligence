@@ -46,8 +46,8 @@ from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta, timezone
 from typing import Callable, List, Optional, Tuple
 
 from src.broker.mt5_data_adapter import BrokerPosition, MT5DataAdapter
@@ -537,11 +537,16 @@ class SupervisedDemoSession:
             self._event("RECONCILE", f"NOT CLEAN: {reconciliation.detail}")
 
         risk_state = self._risk_state.snapshot(now, broker.balance)
-        self._last_risk_state = risk_state
         # SMC-EXECUTION-001: MT5 is the ONLY source of truth for money facts.
         self._last_accounting = self._assess_accounting(
             now, broker, positions, risk_state
         )
+        # SMC-EXECUTION-002 (D1): MT5 realized P&L tightens the journal-based
+        # daily/weekly loss inputs — journaled profits (e.g. records written
+        # before the accounting fix) can never hide a real MT5 loss from the
+        # daily-pause / weekly-stop checks. Tighten-only, never loosens.
+        risk_state = self._mt5_tightened_risk_state(risk_state, broker, now)
+        self._last_risk_state = risk_state
         news = self._news_guard.assess(now)
 
         result = self._pipeline.decide(
@@ -783,6 +788,61 @@ class SupervisedDemoSession:
             "capital_phase": phase,
             "next_milestone": self._MILESTONES.get(phase),
         }
+
+    def _mt5_tightened_risk_state(
+        self,
+        risk_state: "RiskStateSnapshot",
+        broker: BrokerState,
+        now: datetime,
+    ) -> "RiskStateSnapshot":
+        """Tighten daily/weekly loss pct with MT5 realized P&L (D1 fix).
+
+        The journal can under-report losses (records written by the pre-fix
+        accounting carry fabricated profits), so the governor inputs take the
+        WORSE of journal-derived and MT5-derived loss percentages:
+
+            mt5_loss_pct = -realized_net / (balance - realized_net)
+
+        where (balance - realized_net) reconstructs the day/week-start
+        balance from trade deals only. Applied only when the accounting
+        snapshot is verified; never loosens; profitable periods change
+        nothing; a failed weekly fetch leaves the weekly figure untouched.
+        """
+        acct = self._last_accounting or {}
+        if not acct.get("verified") or broker.balance is None:
+            return risk_state
+        day_start = now.astimezone(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        week_start = day_start - timedelta(days=day_start.weekday())
+        realized_week = None
+        fetch = getattr(self._adapter, "fetch_realized_pnl_since", None)
+        if fetch is not None:
+            try:
+                realized_week = fetch(week_start, now=now)
+            except Exception:  # noqa: BLE001 - unknown stays unknown
+                realized_week = None
+
+        def tightened(journal_pct: float, realized) -> float:
+            if realized is None or realized >= 0:
+                return journal_pct
+            period_start_balance = broker.balance - realized
+            if period_start_balance <= 0:
+                return journal_pct
+            return max(journal_pct, -realized / period_start_balance)
+
+        daily = tightened(
+            risk_state.daily_loss_pct, acct.get("realized_daily_pnl")
+        )
+        weekly = tightened(risk_state.weekly_loss_pct, realized_week)
+        if (
+            daily == risk_state.daily_loss_pct
+            and weekly == risk_state.weekly_loss_pct
+        ):
+            return risk_state
+        return replace(
+            risk_state, daily_loss_pct=daily, weekly_loss_pct=weekly
+        )
 
     def _last_loss_close(self) -> Optional[datetime]:
         losses = [

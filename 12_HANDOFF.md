@@ -13,18 +13,38 @@ Phase 12: Live Demo Readiness — continuous service operational; FINAL
 LAST-CHANCE demo_challenge experiment ready
 
 ## Current Task ID:
-SMC-EXECUTION-001 (implemented; user starts --profile smc_challenge —
-user-started only)
+SMC-EXECUTION-002 (implemented after the first live smc_challenge run;
+owner authorized Claude-supervised runs this session)
 
 ## Current Task Goal:
-Run the institutional SMC execution mode on the Exness MT5 DEMO account:
-trades only on full A+B+C+D qualification (HTF context + kill-zone/
-liquidity context + SMC anchor + executable local trigger with a
-structurally justified tactical stop), MT5-verified accounting on every
-cycle, and verify each CLOSE_DETECTED line against the MT5 history tab.
+Live-run the SMC execution mode, collect evidence, fix only proven/
+high-confidence defects. DONE for run 1 (61 cycles 2026-06-11
+17:27-17:58 UTC, clean KILL_SWITCH stop): 1 trade (LOSS -30.13, SL +
+spike slippage — Market Artifact), journal == MT5 history exactly, all
+six TFs + killzone/liquidity/anchor/trigger gates active, 0 rejections.
+D1 defect found and fixed (decision 2026-06-11-04).
 
 ## Current Status:
-SMC-EXECUTION-001 implemented. 792 tests pass; safety check passes.
+SMC-EXECUTION-002 implemented. 798 tests pass; safety check passes.
+- D1 (High-Confidence, FIXED): governor daily/weekly loss inputs were
+  journal-pnl only; the morning pre-fix run's fabricated WINs hid the
+  real MT5 -176.59 day (-8.8% of day start) => DAY_PAUSED never fired
+  (d=0.017 printed). _mt5_tightened_risk_state() in demo_session.py now
+  tightens the snapshot with MT5 realized P&L (day start + ISO week
+  start) every verified cycle — tighten-only; unverified accounting
+  unchanged (entries already blocked). Tightened snapshot reaches
+  pipeline, exposure governor, planner risk_inputs, gateway RiskContext,
+  CycleOutcome.risk (DAY_PAUSED label + weekly RISK_SHUTDOWN).
+- NOTE for next start: with the fix the service will correctly show
+  DAY_PAUSED until UTC rollover (real day loss -8.8% > 5%) and
+  trades_today=10/10; entries resume after rollover. If the WEEK's MT5
+  net is worse than -10%, RISK_SHUTDOWN at start is correct policy.
+- Tracked hypothesis (sample of one, NOT acted on): stop sat just past
+  the obvious local swing and was swept in a spike; candidate = require
+  sweep completion / anchor stops beyond the engineered-liquidity
+  extreme. Decide only on more session evidence.
+
+SMC-EXECUTION-001 status (previous): implemented; 792 tests then.
 - ACCOUNTING (Proven Defect fixed): history_deals_get(dates, position=)
   silently drops the position filter — every account deal in the window
   (incl. balance ops) was summed, fabricating "WIN pnl=1158.62" on a

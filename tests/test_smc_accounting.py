@@ -30,7 +30,7 @@ import pytest
 from src.broker.mt5_data_adapter import MT5DataAdapter
 from src.broker.mt5_settings import load_mt5_settings
 from src.data.enums import Direction, TradeOutcome
-from src.data.schemas import TradeDecision
+from src.data.schemas import TradeDecision, TradeRecord
 from src.execution.challenge_planner import ChallengeTradePlanner
 from src.execution.demo_session import (
     CONFIRMATION_TOKEN,
@@ -351,3 +351,115 @@ def test_terminal_warns_when_accounting_unverified():
     out = stream.getvalue()
     assert "accounting_verified=false" in out
     assert "ACCOUNTING_UNVERIFIED_BLOCK_NEW_ENTRIES" in out
+
+
+# -- D1 (SMC-EXECUTION-002): MT5 realized P&L tightens governor loss inputs -----------
+#
+# Live evidence 2026-06-11: the morning pre-fix run journaled real MT5 losses
+# as fabricated WINs (+1158.62 etc.), so RiskStateTracker saw a profitable
+# day (d=0.017) while MT5 said -176.59 (-8.8% of day start) — DAY_PAUSED
+# never triggered. The fix takes the WORSE of the journal-derived and the
+# MT5-derived loss percentage; it can only tighten, never loosen.
+
+
+def _mt5_loss_deal(position_id, profit, when):
+    return _Obj(
+        profit=profit, commission=0.0, swap=0.0, type=1, entry=1,
+        position_id=position_id, price=2310.0, time=int(when.timestamp()),
+        reason=4, symbol="XAUUSDm",
+    )
+
+
+def _closed_record(record_id, *, pnl, outcome, closed_at):
+    return TradeRecord(
+        record_id=record_id, created_at_utc=closed_at - timedelta(minutes=5),
+        symbol=SYMBOL, direction=Direction.SHORT, outcome=outcome,
+        opened_at_utc=closed_at - timedelta(minutes=5),
+        closed_at_utc=closed_at, entry_price=2315.0, exit_price=2310.0,
+        lot_size=0.05, pnl=pnl,
+    )
+
+
+def test_fabricated_journal_wins_cannot_hide_mt5_daily_loss(tmp_path):
+    fake = FakeMT5Trading()
+    fake.deals[51] = [_mt5_loss_deal(51, -176.59, NOW - timedelta(hours=2))]
+    session, journal, _ = build_session(tmp_path, fake, [approved_smc("smc-1")])
+    # the pre-fix accounting wrote this real loss as a fabricated WIN
+    journal.log_record(_closed_record(
+        "T-poisoned", pnl=1158.62, outcome=TradeOutcome.WIN,
+        closed_at=NOW - timedelta(hours=2),
+    ))
+    outcome = session.run_cycle()
+    # 176.59 / (2000 + 176.59) = 0.0811 — over the 5% daily envelope
+    assert outcome.risk.daily_loss_pct == pytest.approx(0.08113, abs=1e-4)
+    assert outcome.stat.entry_action != "SENT"
+    assert "daily loss" in outcome.stat.entry_detail.lower()
+
+
+def test_mt5_weekly_loss_tightens_and_blocks(tmp_path):
+    fake = FakeMT5Trading()
+    # NOW is Tuesday 2026-06-09 12:01 UTC; Monday 12:00 is in this ISO week
+    fake.deals[52] = [_mt5_loss_deal(52, -250.0, NOW - timedelta(days=1))]
+    session, _, _ = build_session(tmp_path, fake, [approved_smc("smc-1")])
+    outcome = session.run_cycle()
+    # 250 / (2000 + 250) = 0.111 — over the 10% weekly envelope
+    assert outcome.risk.weekly_loss_pct == pytest.approx(0.1111, abs=1e-4)
+    assert outcome.risk.daily_loss_pct == pytest.approx(0.0)
+    assert outcome.stat.entry_action != "SENT"
+    assert "weekly loss" in outcome.stat.entry_detail.lower()
+
+
+def test_tighten_never_loosens_a_worse_journal_figure(tmp_path):
+    fake = FakeMT5Trading()
+    fake.deals[53] = [_mt5_loss_deal(53, -100.0, NOW - timedelta(hours=1))]
+    session, journal, _ = build_session(tmp_path, fake, [no_trade()])
+    # journal already records a worse real loss than MT5 reports
+    journal.log_record(_closed_record(
+        "T-real-loss", pnl=-300.0, outcome=TradeOutcome.LOSS,
+        closed_at=NOW - timedelta(hours=1),
+    ))
+    outcome = session.run_cycle()
+    # journal: 300/2000 = 0.15; MT5: 100/2100 = 0.0476 -> journal kept
+    assert outcome.risk.daily_loss_pct == pytest.approx(0.15)
+
+
+def test_profitable_mt5_day_changes_nothing_and_allows_entries(tmp_path):
+    fake = FakeMT5Trading()
+    fake.deals[54] = [_mt5_loss_deal(54, +50.0, NOW - timedelta(hours=1))]
+    session, _, _ = build_session(tmp_path, fake, [approved_smc("smc-1")])
+    outcome = session.run_cycle()
+    assert outcome.risk.daily_loss_pct == pytest.approx(0.0)
+    assert outcome.risk.weekly_loss_pct == pytest.approx(0.0)
+    assert outcome.stat.entry_action == "SENT"
+
+
+def test_unverified_accounting_leaves_risk_state_untouched(tmp_path):
+    session, _, _ = build_session(
+        tmp_path, _NoHistoryFake(), [approved_smc("smc-1")],
+    )
+    outcome = session.run_cycle()
+    # the unverified gate blocks entries; the loss figures stay journal-based
+    assert outcome.risk.daily_loss_pct == pytest.approx(0.0)
+    assert outcome.risk.weekly_loss_pct == pytest.approx(0.0)
+    assert "ACCOUNTING_UNVERIFIED_BLOCK_NEW_ENTRIES" in outcome.stat.entry_detail
+
+
+class _WeeklyHistoryFails(FakeMT5Trading):
+    """Daily history works; the week-start fetch raises."""
+
+    def history_deals_get(self, *args, **kwargs):
+        if args and isinstance(args[0], datetime):
+            day_start = NOW.replace(hour=0, minute=0, second=0, microsecond=0)
+            if args[0] < day_start:
+                raise RuntimeError("weekly history unavailable")
+        return super().history_deals_get(*args, **kwargs)
+
+
+def test_weekly_fetch_failure_still_tightens_daily(tmp_path):
+    fake = _WeeklyHistoryFails()
+    fake.deals[55] = [_mt5_loss_deal(55, -176.59, NOW - timedelta(hours=2))]
+    session, _, _ = build_session(tmp_path, fake, [approved_smc("smc-1")])
+    outcome = session.run_cycle()
+    assert outcome.risk.daily_loss_pct == pytest.approx(0.08113, abs=1e-4)
+    assert outcome.risk.weekly_loss_pct == pytest.approx(0.0)  # unknown stays journal-based
+    assert outcome.stat.entry_action != "SENT"
