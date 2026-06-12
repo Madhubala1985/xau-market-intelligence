@@ -220,10 +220,13 @@ class DayNarrativeEngine:
                 pyramids=True,
             )
 
-        # -- RANGE_DAY: failed breaks on both sides --------------------------
+        # -- RANGE_DAY: failed breaks on both sides AND no directional
+        # efficiency (replay 2026-06-11: range fades fired on a +150 USD
+        # trend day whose volatility printed failed breaks on both sides).
         if (
             failed_up >= RANGE_FAILED_BREAKS_MIN
             and failed_down >= RANGE_FAILED_BREAKS_MIN
+            and efficiency < 0.40
         ):
             evidence.append(
                 f"failed breaks: {failed_up} above / {failed_down} below — "
@@ -378,11 +381,24 @@ class DayNarrativeEngine:
         baseline_atr: float = 0.0,
     ) -> float:
         score = 0.0
+        net = 0.0
+        decisive_net = False
         if day and baseline_atr > 0:
             net = day[-1].close - day[0].open
             if abs(net) >= 2.5 * baseline_atr:
+                decisive_net = True
                 score += 0.25 if net > 0 else -0.25
-        if htf_direction is Direction.LONG:
+        # The D3 lesson, replay-confirmed (2026-06-11: a BEARISH D1/H4
+        # suppressed conviction through a +150 USD rally): a stale HTF
+        # bias contributes NOTHING when the day's own tape decisively
+        # opposes it.
+        htf_opposed = decisive_net and (
+            (htf_direction is Direction.LONG and net < 0)
+            or (htf_direction is Direction.SHORT and net > 0)
+        )
+        if htf_opposed:
+            evidence.append("HTF bias zeroed: day tape decisively opposes it")
+        elif htf_direction is Direction.LONG:
             score += 0.3
         elif htf_direction is Direction.SHORT:
             score -= 0.3

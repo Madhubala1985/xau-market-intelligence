@@ -260,8 +260,20 @@ class SmcV2Pipeline(SmcExecutionPipeline):
         smc["direction"] = candidate.value
 
         # -- trade memory: probe limit per direction --------------------------
+        # Replay-confirmed (2026-06-08, +5.3R down-day): trend days pay for
+        # persistence — two pullback stop-outs must not lock out the whole
+        # trend. WITH an established trend the limit is doubled; against or
+        # without one it stays 2.
         probes = self._sl_losses_by_direction.get(candidate, 0)
-        if probes >= PROBE_LIMIT_PER_DIRECTION and not fresh_reclaim:
+        aligned_trend = (
+            narrative.state is DayState.TREND_DAY
+            and narrative.direction is candidate
+        )
+        probe_limit = (
+            PROBE_LIMIT_PER_DIRECTION * 2 if aligned_trend
+            else PROBE_LIMIT_PER_DIRECTION
+        )
+        if probes >= probe_limit and not fresh_reclaim:
             return self._wait(
                 context, smc,
                 f"PROBE_LIMIT: {probes} stop-outs {candidate.value} today — "
