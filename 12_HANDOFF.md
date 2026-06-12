@@ -13,17 +13,56 @@ Phase 12: Live Demo Readiness — continuous service operational; FINAL
 LAST-CHANCE demo_challenge experiment ready
 
 ## Current Task ID:
-SMC-EXECUTION-008 (decision 2026-06-12-07): H8 zone consumption — an
-MT5-verified SL loss consumes its zone for 30 min; a same-direction
-re-entry must clear the violated stop level by max(ATR, 1.0) or it is
-refused (ZONE_CONSUMED). Evidence: trades 18/19 re-faded one zone 3 min
-apart (-34.90, pre-registered test); winners 8/17 cleared the level and
-stay allowed. 821 tests pass; safety passes. Service RUN 13 restarted
-2026-06-12 ~13:3x UTC (owner directive: full autonomous run/monitor/fix
-authority this session) with the SMC-EXECUTION-007 doctrine + 25/day
-owner cap + H8. Campaign account: fresh Exness demo (login ..63,
-Trial14, symbol XAUUSD — plain, not XAUUSDm), balance 1,956.81 at
-restart, trades_today=15/25, day -13.18 net.
+SMC-V2-001 (decisions 2026-06-12-10 and the ownership transfer that
+evening — see memory/ownership-transfer.md): the owner handed the model
+and the demo account to Claude entirely (full power of attorney, no
+approvals), with the standing critique that the model trades like an
+indicator bot (one trade after another) instead of identifying
+institutional moves with patience. DEMO-ONLY and all risk anchors
+remain absolute.
+
+State at handoff (Fri 2026-06-12 ~19:3x UTC, market closed for the
+weekend at 21:00, account week resets Monday 2026-06-15):
+- Service STOPPED flat (kill switch cleared, no open positions).
+  Campaign account login ..63 Trial14 XAUUSD, balance ~1,904.70
+  (-4.8% from the 2,000 baseline). Live day 2026-06-12: trades 20-24
+  (-65.29 net), all stops honored, zero broker/accounting defects.
+- Live fixes shipped during the day: SMC-EXECUTION-008 H8 zone
+  consumption (85774b4), 008b protective-exit scope (9c89d97), 008c
+  clearance cap (772438d). 854 tests green.
+- SMC v2 decision brain BUILT (commits 10b7512..): day_narrative.py
+  (pure day classifier), smc_v2.py (narrative -> conviction ->
+  playbooks -> quality bar; trade memory; institutional cadence cap
+  3/day; trend runner targets; structural-stop mode), decision_replay
+  engine + scripts/decision_replay.py + scripts/v2_sweep.py
+  (walk-forward: tune on 15 train days, judge on unseen days).
+- REPLAY EVIDENCE (25 days real history): v1 -82.7R / DD 96.8 / 636
+  trades — systematically losing, retire it. v2 (pre-knobs) -5.2R /
+  DD 15.1 / 158 trades. 12-day window: v2 +10.7R vs v1 -36.8R. Six
+  manual iterations proved per-day fixes degrade the whole (history in
+  11_DECISION_LOG + commit messages).
+- SHIP BAR (self-imposed, non-negotiable): a v2 variant trades live
+  demo Monday ONLY if its walk-forward VALIDATION days (unseen) are
+  positive. Otherwise NO trading — protecting the 1,904 is the
+  position. v2 sweep over selectivity variants was RUNNING at handoff:
+  logs/v2_sweep_run1.log -> reports/runtime/v2_sweep.md/.json.
+
+Next exact steps:
+1. Read reports/runtime/v2_sweep.md. If the train winner validates
+   positive: wire --profile smc_v2 (challenge family, same envelope)
+   into session_profiles + scripts/trading_service.py with the winning
+   knobs, add profile tests, commit, and start the service Monday after
+   00:00 UTC week reset. smc_challenge stays as fallback only.
+2. If validation is negative: do NOT trade Monday. Next levers (in
+   order): payoff shape (trail runners instead of fixed TP on trend
+   days — extend the replay engine's manage loop), entry timing
+   (limit-style retrace entries to cut the 0.5 adverse cost), session
+   filters from the sweep's by-day data. Iterate replay-first.
+3. Keep updating reports/runtime/supervision_ledger.md (full day log
+   exists there) — it is the owner-facing record.
+
+Previously: SMC-EXECUTION-008/b/c (H8 family, this morning) and
+SMC-EXECUTION-007 doctrine — see CURRENT_STATE.md.
 
 Previously: SMC-EXECUTION-007 (decision 2026-06-12-04): owner-directed decision-layer
 rebuild after the 14-trade live watch (balance 1,946.78, -2.7%; full

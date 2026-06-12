@@ -10,7 +10,19 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-SMC-EXECUTION-008 (decision 2026-06-12-07): IMPLEMENTED — H8 zone
+SMC-V2-001 (decision 2026-06-12-10 + ownership transfer): the owner
+handed the model and demo account to Claude (full autonomy; demo-only
+and risk anchors absolute). v1 (smc_challenge) is RETIRED from live
+trading by replay evidence: -82.7R over 25 replayed days (636 trades,
+DD 96.8R) — the live -4.8% was systematic. The v2 day-narrative brain
+(day classifier + conviction + playbooks + trade memory + quality bar +
+institutional 3/day cadence cap) replays at +10.7R/12d, -5.2R/25d
+pre-tuning; the walk-forward selectivity sweep decides the Monday plan.
+SHIP BAR: positive R on unseen validation days, else no live trading.
+See 12_HANDOFF.md for exact next steps; full day log in
+reports/runtime/supervision_ledger.md.
+
+Previously: SMC-EXECUTION-008 (decision 2026-06-12-07): IMPLEMENTED — H8 zone
 consumption. An MT5-verified SL loss consumes its zone: for 30 min a new
 same-direction entry whose tactical stop sits within 8 USD of the
 violated stop level and does not clear it by max(ATR(M5), 1.0) is
