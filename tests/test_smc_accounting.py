@@ -598,3 +598,34 @@ def test_tp_win_does_not_consume_a_zone(tmp_path):
     fake.close_position(first.sent_ticket, 31.40, price=2310.0, reason=5)
     session.run_cycle()
     assert not calls, "a TP win must not consume any zone"
+
+
+def test_protective_be_exit_does_not_consume_a_zone(tmp_path):
+    """Decision 2026-06-12-08 (live evidence, trade 22): a LOSS whose exit
+    fill sits far on the favorable side of the ORIGINAL stop means the stop
+    had been moved protectively (BE/trail) — the original invalidation
+    never traded, so no zone is consumed."""
+    session, journal, fake = build_session(
+        tmp_path, FakeMT5Trading(), [approved_smc("smc-1"), no_trade()],
+    )
+    calls = []
+    session._pipeline.note_stop_loss = lambda *a: calls.append(a)
+    first = session.run_cycle()
+    # SHORT entry 2315.0, original stop 2317.5; BE-tagged exit pays the
+    # spread: small negative net at ~entry, far below the original stop.
+    fake.close_position(first.sent_ticket, -0.78, price=2315.3, reason=4)
+    session.run_cycle()
+    assert not calls, "a protective BE exit must not consume a zone"
+
+
+def test_slipped_sl_loss_still_consumes_the_zone(tmp_path):
+    session, journal, fake = build_session(
+        tmp_path, FakeMT5Trading(), [approved_smc("smc-1"), no_trade()],
+    )
+    calls = []
+    session._pipeline.note_stop_loss = lambda *a: calls.append(a)
+    first = session.run_cycle()
+    # SL slipped beyond the original 2317.5 stop (run-1 Market Artifact).
+    fake.close_position(first.sent_ticket, -32.0, price=2319.1, reason=4)
+    session.run_cycle()
+    assert calls, "a slipped SL fill beyond the original stop must consume"

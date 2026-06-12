@@ -3781,3 +3781,41 @@ tests/test_smc_execution.py, tests/test_smc_accounting.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-12-08
+
+## Date:
+2026-06-12
+
+## Area:
+SMC execution doctrine (H8 scope correction)
+
+## Decision:
+Only an SL exit filled at/beyond the ORIGINAL journaled stop (0.5 USD
+tolerance; slipped fills count) consumes a zone. A protective exit — a
+break-even or trailed stop tagged on a retrace — does NOT consume.
+
+## Why:
+Live evidence within 3 hours of shipping H8: trade 22 exited via its
+MOVED break-even stop at 4193.41 (net -0.78 spread cost) while its
+original 4200.92 stop was never touched; the session passed the
+record's original stop to note_stop_loss, phantom-consuming 4200.92
+and blocking valid continuation shorts (stop 4195.19 refused). The
+inverse design (consume at close_price) is also wrong by evidence:
+trade 21's BE exit would have blocked trade 22, which earned >= 1R.
+Premise restored: consumption requires the market to have actually
+traded through the planned invalidation.
+
+## Risk:
+Narrows a 3-hour-old tighten-only guard back to its evidenced scope;
+the trade-18/19 churn case (exit at the original stop) is unchanged.
+No brake touched.
+
+## Files Affected:
+src/execution/demo_session.py, tests/test_smc_accounting.py.
+
+## Status:
+Accepted

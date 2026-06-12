@@ -998,12 +998,18 @@ class SupervisedDemoSession:
                 f"source=MT5_HISTORY close_price={closed.close_price} "
                 f"reason={closed.close_reason} deals={closed.deal_count}",
             )
-            # H8 (decision 2026-06-12-07): an SL loss consumes its zone —
-            # the pipeline refuses an immediate same-direction re-fade whose
-            # stop does not clear the violated level.
+            # H8 (decisions 2026-06-12-07/-08): an SL loss at the ORIGINAL
+            # journaled stop consumes its zone — the pipeline refuses an
+            # immediate same-direction re-fade whose stop does not clear the
+            # violated level. A protective exit (break-even/trailed stop
+            # tagged on a retrace) does NOT consume: the thesis invalidation
+            # never traded (live evidence: trade 22's BE exit at 4193.41
+            # phantom-consumed its untouched 4200.92 stop and blocked valid
+            # continuation entries).
             if (
                 outcome is TradeOutcome.LOSS
                 and str(closed.close_reason).upper() == "SL"
+                and self._original_stop_violated(record, closed)
             ):
                 note = getattr(self._pipeline, "note_stop_loss", None)
                 if note is not None:
@@ -1011,6 +1017,20 @@ class SupervisedDemoSession:
                         note(record.direction, record.stop_loss, closed_at)
                     except Exception:  # noqa: BLE001 - advisory only
                         pass
+
+    @staticmethod
+    def _original_stop_violated(record, closed) -> bool:
+        """H8 scope: only an exit at/beyond the ORIGINAL journaled stop
+        proves the thesis invalidation traded (slipped fills count). A
+        favorable-side exit means the stop had been moved protectively."""
+        stop = record.stop_loss
+        price = getattr(closed, "close_price", None)
+        if stop is None or price is None:
+            return False
+        tolerance = 0.5
+        if record.direction is Direction.SHORT:
+            return price >= stop - tolerance
+        return price <= stop + tolerance
 
     def _fetch_closed(self, ticket: int):
         """Verified MT5 close info; None when unverifiable (never zero)."""
