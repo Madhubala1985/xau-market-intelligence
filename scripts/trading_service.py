@@ -218,9 +218,18 @@ def main() -> int:
         # session, gateway, kill switch, journal, reconciliation, stops.
         challenge_mode = profile.name in CHALLENGE_PROFILE_NAMES
         if challenge_mode:
-            pipeline = make_smc_pipeline(
-                canonical, max_spread_price=profile.max_spread_price,
-            )
+            if profile.name == "smc_v2":
+                # SMC-V2-001: day-narrative brain; knobs are the
+                # walk-forward winner from reports/runtime/v2_sweep.md —
+                # changed only with fresh replay evidence.
+                from src.strategy.smc_v2 import make_smc_v2_pipeline
+                pipeline = make_smc_v2_pipeline(
+                    canonical, max_spread_price=profile.max_spread_price,
+                )
+            else:
+                pipeline = make_smc_pipeline(
+                    canonical, max_spread_price=profile.max_spread_price,
+                )
             planner = ChallengeTradePlanner(limits=limits)
             exposure_governor = None
         else:

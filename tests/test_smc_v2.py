@@ -294,3 +294,24 @@ def test_quality_bar_is_tunable():
     result = pipe.decide(pipeline_input(m5))
     assert not result.approved
     assert "QUALITY_BELOW_BAR" in result.reason
+
+
+# -- profile wiring (SMC-V2-001) ---------------------------------------------
+
+def test_smc_v2_profile_registered_with_challenge_envelope():
+    from src.execution.session_profiles import (
+        CHALLENGE_PROFILE_NAMES,
+        get_profile,
+    )
+    assert "smc_v2" in CHALLENGE_PROFILE_NAMES
+    p = get_profile("smc_v2")
+    assert p.envelope == "demo_challenge"
+    assert p.max_risk_per_trade == 0.03
+    assert p.max_daily_loss == 0.05
+    assert p.max_weekly_loss == 0.10
+    assert p.max_open_positions == 3
+
+
+def test_smc_v2_brain_default_cadence_is_institutional():
+    pipe = v2_pipeline(zones=[])
+    assert pipe._max_entries_per_day <= 3

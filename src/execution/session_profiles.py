@@ -68,7 +68,10 @@ CHALLENGE_PROFILE_NAME = "demo_challenge"
 # demo_challenge remains as an alias of the SAME behavior (the retail
 # momentum pipeline no longer exists). Both share the challenge envelope.
 SMC_PROFILE_NAME = "smc_challenge"
-CHALLENGE_PROFILE_NAMES = frozenset({CHALLENGE_PROFILE_NAME, SMC_PROFILE_NAME})
+# SMC-V2-001: the day-narrative decision brain (same envelope; the brain
+# itself is MORE selective: 3 entries/day institutional cadence).
+SMC_V2_PROFILE_NAME = "smc_v2"
+CHALLENGE_PROFILE_NAMES = frozenset({CHALLENGE_PROFILE_NAME, SMC_PROFILE_NAME, SMC_V2_PROFILE_NAME})
 
 _MAX_DURATION_MINUTES = 8 * 60  # SupervisedDemoSession hard ceiling
 
@@ -286,6 +289,29 @@ PROFILES: Dict[str, SessionProfile] = {
                 "DEPRECATED ALIAS of smc_challenge (SMC-EXECUTION-001): the "
                 "retail momentum behavior was removed; this name now runs "
                 "the SAME institutional SMC execution mode. DEMO ONLY."
+            ),
+            duration_minutes=None,
+            poll_seconds=30,
+            max_orders=None,
+            max_open_positions=CHALLENGE_MAX_OPEN_POSITIONS,
+            max_trades_per_day=CHALLENGE_MAX_TRADES_PER_DAY,
+            max_risk_per_trade=CHALLENGE_MAX_RISK_PER_TRADE,
+            max_daily_loss=CHALLENGE_MAX_DAILY_LOSS,
+            max_weekly_loss=CHALLENGE_MAX_WEEKLY_LOSS,
+            envelope="demo_challenge",
+        ),
+        SessionProfile(
+            name=SMC_V2_PROFILE_NAME,
+            description=(
+                "SMC v2 day-narrative brain (SMC-V2-001). DEMO ONLY. The "
+                "DAY is classified first (TREND/RANGE/TRAP/POST_SPIKE/"
+                "EXHAUSTED); playbooks per state; conviction-gated; "
+                "quality-scored; trade memory (probe limits, playbook "
+                "stand-downs, H8); hard institutional cadence cap of 3 "
+                "entries/day inside the brain. Same chassis and envelope "
+                "as smc_challenge; replay-gated (see "
+                "reports/runtime/v2_sweep.md). Use "
+                "scripts/trading_service.py --profile smc_v2."
             ),
             duration_minutes=None,
             poll_seconds=30,
