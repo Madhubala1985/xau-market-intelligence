@@ -522,3 +522,36 @@ def test_no_override_without_confirming_displacement():
     )
     result = pipe.decide(pipeline_input(m5, m1=m1_rising()))
     assert "TREND_DAY_OVERRIDE" not in result.context.challenge["htf_context"]
+
+
+# -- D5 (decision 2026-06-12-03): no drift fades against unanimous consensus ---------
+
+def m5_drift_pullback(*, start=START):
+    """A quiet upward drift with a small pullback rejection — the trade-4
+    signature: no displacement footprint in either direction."""
+    closes = [3340.0 + 0.35 * (i + 1) for i in range(44)]   # gentle rise
+    closes += [3355.6, 3355.9, 3355.5]                      # small pullback
+    return make_candles(closes, start=start)
+
+
+def test_drift_fade_against_unanimous_consensus_is_refused():
+    """Live defect 2026-06-11 (trade 4, -15.50): a SHORT off a fresh CHOCH
+    in 0.87x drift against an all-bullish H1/M15/M5 stack. Fading a
+    unanimous consensus now requires the candidate's own >= 1.3x
+    displacement footprint."""
+    m5 = m5_drift_pullback()
+    pipe = smc_pipeline(
+        structure=structure_result(events=(
+            bos_event(index=len(m5) - 2, price=3355.0,
+                      bias=Bias.BEARISH),  # fresh bearish CHOCH/BOS
+        )),
+        mtf=MtfAlignment(
+            d1=Bias.BEARISH, h4=Bias.BEARISH, h1=Bias.BULLISH,
+            m15=Bias.BULLISH, m5=Bias.BULLISH,
+            direction=Direction.SHORT, score=0.55, reason="stale veto",
+        ),
+    )
+    result = pipe.decide(pipeline_input(m5, m1=m1_with_local_swing(3355.5)))
+    assert not result.approved
+    assert "COUNTER_TREND_NO_DISPLACEMENT" in result.reason
+    assert "footprint" in result.reason

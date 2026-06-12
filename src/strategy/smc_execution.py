@@ -346,35 +346,37 @@ class SmcExecutionPipeline:
                 f"{atr5:.2f}) — that structure is no longer live",
                 waiting=waiting, plan=plan,
             )
-        # (2) counter-trend stand-down: H1+M15+M5 unanimously against the
-        # candidate with confirming displacement => only a fresh
-        # sweep-reclaim may fade the move.
+        # (2) counter-trend stand-down (D5, decision 2026-06-12-03):
+        # fading a UNANIMOUS H1/M15/M5 consensus requires the candidate's
+        # OWN displacement footprint (>= CONFLICT_DISPLACEMENT in the
+        # candidate direction — institutional sellers/buyers leave
+        # footprints; a drift rejection is not one). Sweep-reclaim anchors
+        # satisfy this by construction (ANCHOR_DISPLACEMENT).
         opposing_bias = (
             Bias.BULLISH if candidate is Direction.SHORT else Bias.BEARISH
         )
-        opposing_dir = (
-            Direction.LONG if candidate is Direction.SHORT
-            else Direction.SHORT
-        )
-        if (
-            all(b is opposing_bias for b in (mtf.h1, mtf.m15, mtf.m5))
-            and disp_direction is opposing_dir
-            and displacement >= CONFLICT_DISPLACEMENT
-            and anchor.label != "SWEEP_DISPLACEMENT"
-        ):
-            return self._wait(
-                context, smc,
-                f"LTF_CONSENSUS_CONFLICT: H1/M15/M5 all "
-                f"{opposing_bias.value} with {displacement:.1f}x "
-                f"displacement against the {candidate.value} candidate — "
-                "counter-trend entry requires a fresh sweep-reclaim; "
-                "standing down instead of fading the move",
-                waiting="SWEEP",
-                plan=(
-                    "wait for a liquidity sweep + reclaim or for "
-                    "HTF/LTF realignment"
-                ),
+        if all(b is opposing_bias for b in (mtf.h1, mtf.m15, mtf.m5)):
+            own_footprint = (
+                disp_direction is candidate
+                and displacement >= CONFLICT_DISPLACEMENT
             )
+            if not own_footprint:
+                return self._wait(
+                    context, smc,
+                    f"COUNTER_TREND_NO_DISPLACEMENT: H1/M15/M5 all "
+                    f"{opposing_bias.value} and the {candidate.value} "
+                    f"thesis shows no displacement footprint of its own "
+                    f"(disp {displacement:.1f}x"
+                    f"{' ' + disp_direction.value if disp_direction else ''}"
+                    ") — fading a unanimous intraday consensus requires a "
+                    f"fresh {candidate.value}-side impulse (e.g. a sweep "
+                    "rejection)",
+                    waiting="SWEEP",
+                    plan=(
+                        "wait for a liquidity sweep + rejection impulse in "
+                        "the candidate direction or for HTF/LTF realignment"
+                    ),
+                )
 
         # -- Gate D: executable local trigger ---------------------------------
         trigger = self._entry_trigger(

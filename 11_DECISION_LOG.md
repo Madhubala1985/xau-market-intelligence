@@ -3592,3 +3592,41 @@ src/strategy/smc_execution.py, tests/test_smc_execution.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-12-03
+
+## Date:
+2026-06-12
+
+## Area:
+Strategy gates (DEMO ONLY, tighten-only)
+
+## Decision:
+SMC-EXECUTION-006 (D5): fading a UNANIMOUS H1/M15/M5 consensus now
+requires the candidate's OWN displacement footprint (>= 1.3x in the
+candidate direction). Guard 2 is generalized from "stand down when
+displacement confirms the opposition" to "stand down unless the
+counter-trend thesis shows its own impulse" —
+COUNTER_TREND_NO_DISPLACEMENT. Sweep-reclaim anchors satisfy the
+condition by construction (ANCHOR_DISPLACEMENT = 1.3 in the candidate
+direction).
+
+Live evidence (MT5-verified): trade 4 (2026-06-11 23:51, -15.50) shorted
+0.87x DRIFT against an all-bullish intraday stack off a fresh CHOCH —
+no seller footprint existed; trade 1 (-14.74) had disp 0.76x. The two
+sweep trades with real 2.3-2.6x seller impulses went BREAKEVEN/-15.27.
+D5 would have blocked trades 1 and 4 (-30.24) and kept the sweep fades.
+
+## Risk:
+Tighten-only. Cost: legitimate quiet-range counter-trend entries on
+unanimous-consensus days are delayed until an impulse prints — accepted:
+institutional sellers leave footprints before reversals.
+
+## Files Affected:
+src/strategy/smc_execution.py, tests/test_smc_execution.py.
+
+## Status:
+Accepted
