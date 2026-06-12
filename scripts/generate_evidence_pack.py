@@ -178,6 +178,12 @@ _TABLE: Dict[str, dict] = {
         layer="backtest",
         summary="threshold calibration replay (BACKTEST-001 readiness; offline)",
         test_file="test_calibration.py", test_note="", **_PURE_SHADOW_READY),
+    "src.backtest.decision_replay": dict(
+        layer="backtest",
+        summary="head-to-head decision replay with conservative fills — "
+                "the SMC v2 shipping gate (SMC-V2-001; offline)",
+        test_file="test_decision_replay.py", test_note="",
+        **_PURE_SHADOW_READY),
     "src.strategy.m1_refinement": dict(
         layer="strategy",
         summary="M1 entry refinement: delay/avoid only, never creates trades (FINAL-INTELLIGENCE)",
