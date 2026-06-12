@@ -3714,3 +3714,29 @@ tests/test_smc_accounting.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-12-06
+
+## Date:
+2026-06-12
+
+## Area:
+Challenge envelope (DEMO ONLY, owner-directed)
+
+## Decision:
+Owner amendment: challenge trades/day 15 -> 25. The count cap is an
+overtrading throttle, not a loss brake — the bounded worst case is set
+by the UNCHANGED daily 5% NET pause (~5-6 consecutive 1% losses pause
+the day regardless of the count), per-trade 3% cap, loss cooldowns,
+max 3 open / 2-leg pyramids, and the market-state (chop/volatility)
+gate. Owner directive: do not idle on opportunity because of a count.
+
+## Files Affected:
+src/execution/session_profiles.py, src/strategy/smc_execution.py,
+tests/test_smc_accounting.py.
+
+## Status:
+Accepted
