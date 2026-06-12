@@ -160,6 +160,7 @@ class SmcV2Pipeline(SmcExecutionPipeline):
         narrative = self._narrator.narrate(
             m5, asian=asian, htf_direction=htf_direction,
             swept_levels=swept_levels, reclaim_held=reclaim_held,
+            reclaim_fresh=fresh_reclaim,
         )
 
         killzone = session.value
@@ -265,6 +266,10 @@ class SmcV2Pipeline(SmcExecutionPipeline):
         # trend. WITH an established trend the limit is doubled; against or
         # without one it stays 2.
         probes = self._sl_losses_by_direction.get(candidate, 0)
+        # TREND_DAY only. Replay-measured (12 days): extending the
+        # relaxation to TRAP_REVERSAL cost ~6R net (87 trades, +4.92)
+        # versus the strict form (82 trades, +10.90) — extra trap-state
+        # probes do not pay.
         aligned_trend = (
             narrative.state is DayState.TREND_DAY
             and narrative.direction is candidate

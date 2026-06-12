@@ -85,6 +85,7 @@ class DayNarrativeEngine:
         htf_direction: Optional[Direction] = None,
         swept_levels: Sequence[Tuple[float, Direction]] = (),
         reclaim_held: Optional[bool] = None,
+        reclaim_fresh: Optional[bool] = None,
     ) -> DayNarrative:
         """Classify the day from its own candles.
 
@@ -112,7 +113,13 @@ class DayNarrativeEngine:
 
         # -- TRAP_REVERSAL: key level swept, reclaim held, reversal leg -----
         # Checked BEFORE the spike gate: a held reclaim with reversal
-        # displacement is the richer read of the same violence.
+        # displacement is the richer read of the same violence. NOTE: a
+        # stale held reclaim deliberately KEEPS the day in this state — it
+        # acts as the day's trend-following mode in the reversal direction
+        # (replay-proven: gating traps on fresh reclaims flipped 12-day
+        # net R from +10.9 to -14/-17). reclaim_fresh is accepted for
+        # diagnostics but does not gate the state.
+        _ = reclaim_fresh
         if swept_levels and reclaim_held:
             level, rejection_dir = swept_levels[-1]
             reversal_legs = (
@@ -123,6 +130,10 @@ class DayNarrativeEngine:
                     f"key level {level:.2f} swept, reclaim HELD, reversal "
                     f"displacement {rejection_dir.value} present"
                 )
+                # Trap conviction deliberately EXCLUDES the day-net term
+                # and HTF zeroing: a genuine reversal opposes the day's
+                # net tape by definition (replay-proven: adding the net
+                # term here flipped 12-day net R from +10.9 to -8.6).
                 conviction = self._conviction(
                     htf_direction, legs, swept_levels, reclaim_held, evidence
                 )
@@ -184,7 +195,14 @@ class DayNarrativeEngine:
                 f"grind trend: net {net:+.1f} USD at {efficiency:.0%} "
                 "directional efficiency"
             )
-        if dominant is not None and expansion >= TREND_EXPANSION_MIN:
+        # Expansion proves we LEFT the Asian accumulation — but a day that
+        # trends THROUGH Asia has no accumulation to leave (replay
+        # 2026-06-08: -48 USD inside the Asian session, expansion ~1.0,
+        # never classified). High directional efficiency qualifies instead.
+        trend_confirmed = (
+            expansion >= TREND_EXPANSION_MIN or efficiency >= 0.60
+        )
+        if dominant is not None and trend_confirmed:
             dom_legs = up_legs if dominant is Direction.LONG else down_legs
             evidence.append(
                 f"{len(dom_legs)} {dominant.value} leg(s) totalling "
