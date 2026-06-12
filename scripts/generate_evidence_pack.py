@@ -290,6 +290,17 @@ _TABLE: Dict[str, dict] = {
                 "trigger gates, tactical stops, fixed lots "
                 "(SMC-EXECUTION-001)",
         test_file="test_smc_execution.py", test_note="", **_PURE_SHADOW_READY),
+    "src.strategy.day_narrative": dict(
+        layer="strategy",
+        summary="day-narrative state machine + conviction ledger for the "
+                "SMC v2 brain (SMC-V2-001; pure classifier)",
+        test_file="test_day_narrative.py", test_note="",
+        **_PURE_SHADOW_READY),
+    "src.strategy.smc_v2": dict(
+        layer="strategy",
+        summary="SMC v2 decision brain: narrative gate, playbooks, trade "
+                "memory, quality score (SMC-V2-001; replay-gated)",
+        test_file="test_smc_v2.py", test_note="", **_PURE_SHADOW_READY),
     "src.execution.demo_session": dict(
         layer="execution",
         summary="supervised demo session loop (DEMO-002; gateway-only orders)",
