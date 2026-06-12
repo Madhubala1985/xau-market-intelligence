@@ -555,3 +555,50 @@ def test_drift_fade_against_unanimous_consensus_is_refused():
     assert not result.approved
     assert "COUNTER_TREND_NO_DISPLACEMENT" in result.reason
     assert "footprint" in result.reason
+
+
+# -- D6 market-state gate + H6b sweep freshness (decision 2026-06-12-04) -------------
+
+def test_dangerous_volatility_environment_blocks_entries():
+    """A monster candle in the ENVIRONMENT (not the signal candle) makes
+    conditions untradeable regardless of anchors."""
+    closes = [3400.0 - 0.5 * (i + 1) for i in range(40)]
+    closes += [3360.0]   # ~19-point spike = last ENVIRONMENT candle
+    closes += [3360.5]   # current (signal) candle, excluded from the env
+    m5 = make_candles(closes)
+    pipe = smc_pipeline(zones=[bearish_zone(ZoneKind.FAIR_VALUE_GAP,
+                                            bottom=3360.8, top=3362.0)])
+    result = pipe.decide(pipeline_input(m5, m1=m1_with_local_swing(3360.5)))
+    assert not result.approved
+    assert "VOLATILITY_BLOCK" in result.reason
+    assert "vol=" in result.context.challenge["market_state"]
+
+
+def test_structureless_chop_blocks_entries():
+    """Flat, driftless closes are consolidation: CHOP_BLOCK fires before
+    any anchor can qualify (7 of 9 live losses were chop probes)."""
+    closes = [3380.0 + (0.08 if i % 2 else -0.08) for i in range(46)]
+    m5 = make_candles(closes)
+    pipe = smc_pipeline(zones=[bearish_zone(ZoneKind.FAIR_VALUE_GAP,
+                                            bottom=3379.8, top=3380.6)])
+    result = pipe.decide(pipeline_input(m5, m1=m1_with_local_swing(3380.0)))
+    assert not result.approved
+    assert "CHOP_BLOCK" in result.reason
+
+
+def test_sweep_freshness_uses_rejection_extreme_not_swept_level():
+    """H6b: a sweep of a FAR level whose rejection happened AT price must
+    pass the staleness guard (trade 11 anchored 47 USD away pre-fix)."""
+    m5 = m5_breakdown(3.0)
+    far_sweep = SimpleNamespace(
+        status=SweepStatus.TRUE_SWEEP, rejection_bias=Bias.BEARISH,
+        sweep_index=len(m5) - 2,                      # rejection candle near price
+        level=SimpleNamespace(price=3450.0),          # swept level 70 away
+        swept_side=SimpleNamespace(value="BUY_SIDE"),
+    )
+    pipe = smc_pipeline(sweeps=[far_sweep])
+    result = pipe.decide(pipeline_input(m5, m1=m1_with_local_swing()))
+    assert result.approved, result.reason
+    smc = result.context.challenge
+    assert smc["smc_anchor"] == "SWEEP_DISPLACEMENT"
+    assert "rejected @" in result.decision.thesis or "rejected @" in smc["reason"]

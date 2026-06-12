@@ -207,6 +207,8 @@ class ChallengeTradePlanner:
     # least MIN_PROTECTION_R of its current stop risk. A few cents of
     # floating profit (the live +0.21 case) is spread noise, not protection.
     MIN_PROTECTION_R = 0.5
+    # H7 (decision 2026-06-12-04): base + ONE add-on; never a third leg.
+    MAX_PYRAMID_LEGS = 2
     MIN_ADDON_SPACING_SECONDS = 300.0  # never inside the same M5 candle
 
     def _addon_gate(
@@ -223,6 +225,16 @@ class ChallengeTradePlanner:
             reasons.append(
                 f"{len(open_positions)} open >= max "
                 f"{self._limits.max_open_trades} positions"
+            )
+        # H7 (decision 2026-06-12-04): pyramids cap at TWO legs — live
+        # evidence: both times a third leg was added late into an extended
+        # move it was clipped by a routine pullback (pyramid 2 net -33.86
+        # entirely from legs 2+3 while the base leg was protected).
+        elif len(open_positions) >= self.MAX_PYRAMID_LEGS:
+            reasons.append(
+                f"ADDON_BLOCKED_MAX_PYRAMID_LEGS: {len(open_positions)} "
+                f"legs open; pyramids cap at {self.MAX_PYRAMID_LEGS} "
+                "(late third legs get clipped by routine pullbacks)"
             )
         if any(
             p.direction != decision.direction.value for p in open_positions

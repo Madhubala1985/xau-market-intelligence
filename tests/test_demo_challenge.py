@@ -549,3 +549,19 @@ def test_challenge_stack_sends_an_equity_sized_order_through_the_session(tmp_pat
     assert acct["mt5_balance"] == pytest.approx(2000.0)
     records = journal.records()
     assert any(r.lot_size == pytest.approx(0.11) for r in records)
+
+
+def test_pyramid_caps_at_two_legs():
+    """H7 (decision 2026-06-12-04): base + ONE add-on; a third leg is
+    refused even when both open trades are protected winners (live
+    evidence: both third legs were clipped by routine pullbacks)."""
+    protected = [
+        open_position(profit=15.0, ticket=1),
+        open_position(profit=12.0, ticket=2),
+    ]
+    result = plan(planner(), challenge_decision(lot=0.05),
+                  positions=protected,
+                  risk_inputs={"open_symbols": {SYMBOL},
+                               "seconds_since_last_entry": 600.0})
+    assert not result.approved
+    assert "ADDON_BLOCKED_MAX_PYRAMID_LEGS" in result.reasons[0]

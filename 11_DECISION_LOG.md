@@ -3630,3 +3630,51 @@ src/strategy/smc_execution.py, tests/test_smc_execution.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-12-04
+
+## Date:
+2026-06-12
+
+## Area:
+Strategy decision layer (DEMO ONLY) — owner-directed rebuild
+
+## Decision:
+SMC-EXECUTION-007: after 14 live MT5-verified trades the owner demanded a
+new model. The proven chassis (gateway/accounting/sizing/stops/trailing/
+pyramiding/brakes — ZERO defects in 14 trades) is KEPT; the decision
+layer is rebuilt with the three remaining evidence-backed fixes:
+
+(D6) MARKET-STATE GATE: VolatilityClassifier + ChopClassifier wired into
+SmcExecutionPipeline (new SmcEngines fields), classifying the
+ENVIRONMENT m5[:-1] (the signal impulse never flags itself):
+dangerous volatility => VOLATILITY_BLOCK; DANGEROUS_CHOP/
+LOW_QUALITY_CHOP => CHOP_BLOCK (consolidation is not traded). Evidence:
+7 of 9 losses were chop probes.
+(H6b) Sweep-anchor freshness measured at the REJECTION EXTREME (the
+sweep candle's high/low), not the swept level (trade 11 anchored 47 USD
+away). Stale-anchor guard unchanged otherwise.
+(H7) Pyramids cap at TWO legs (MAX_PYRAMID_LEGS=2,
+ADDON_BLOCKED_MAX_PYRAMID_LEGS). Evidence: both third legs were clipped
+by routine pullbacks (pyramid 2 net -33.86 from late legs while the
+protected base gave back nothing).
+
+Explicitly REFUSED: dismantling the execution chassis and the risk
+brakes; "guaranteed growth" promises. Rationale recorded: the -2,000
+week came from rushing unproven logic live; the chassis is the only
+component with a flawless live record.
+
+## Risk:
+D6/H7 tighten-only; H6b corrects a measurement (can tighten or relax a
+specific anchor's staleness verdict toward the true rejection point).
+All survival anchors unchanged.
+
+## Files Affected:
+src/strategy/smc_execution.py, src/execution/challenge_planner.py,
+tests/test_smc_execution.py, tests/test_demo_challenge.py.
+
+## Status:
+Accepted

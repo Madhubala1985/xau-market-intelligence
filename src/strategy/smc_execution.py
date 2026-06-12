@@ -47,8 +47,10 @@ from src.data.sessions import SessionEngine, SessionType
 from src.data.validation import DataValidator, ValidationConfig, ValidationStatus
 from src.liquidity.liquidity_map import LiquidityMapEngine
 from src.liquidity.sweep import SweepEngine, SweepStatus
+from src.regime.chop_classifier import ChopClassifier, ChopSubtype
 from src.regime.htf_bias import HtfBias, HtfBiasEngine
 from src.regime.regime_engine import Regime
+from src.regime.volatility_classifier import VolatilityClassifier
 from src.risk.governor import RiskContext, RiskGovernor, RiskLimits
 from src.strategy.confluence import MtfAlignment, MtfAlignmentEngine
 from src.strategy.pipeline import (
@@ -131,6 +133,10 @@ class SmcEngines:
     sweep: SweepEngine = field(default_factory=SweepEngine)
     zones: ZoneEngine = field(default_factory=ZoneEngine)
     asian: AsianRangeEngine = field(default_factory=AsianRangeEngine)
+    # D6 (decision 2026-06-12-04): market-state gate — consolidation and
+    # dangerous volatility are not traded.
+    volatility: VolatilityClassifier = field(default_factory=VolatilityClassifier)
+    chop: ChopClassifier = field(default_factory=ChopClassifier)
 
 
 @dataclass(frozen=True)
@@ -293,6 +299,39 @@ class SmcExecutionPipeline:
             )
         if equity <= 0:
             return self._wait(context, smc, "account equity unknown")
+
+        # -- D6 market-state gate (decision 2026-06-12-04) -------------------
+        # Live evidence 2026-06-11/12: 7 of 9 losses were probes into the
+        # post-spike whipsaw. The ENVIRONMENT (m5[:-1], so the current
+        # signal impulse never flags itself) must be tradeable: dangerous
+        # volatility and structureless chop are not traded.
+        environment = m5[:-1] if len(m5) > 1 else m5
+        spread_ratio = spread / self._max_spread if self._max_spread else 0.0
+        vol = e.volatility.classify(environment, spread_ratio=spread_ratio)
+        chop = e.chop.classify(
+            environment, sweeps, spread_ratio=spread_ratio,
+            directional_score=mtf.score,
+        )
+        smc["market_state"] = f"vol={vol.state.value} chop={chop.subtype.value}"
+        if vol.dangerous:
+            return self._wait(
+                context, smc,
+                f"VOLATILITY_BLOCK: {vol.state.value} — {vol.reason}; "
+                "dangerous conditions are not traded",
+                waiting="SWEEP",
+                plan="wait for volatility to normalize, then re-qualify",
+            )
+        if chop.subtype in (ChopSubtype.DANGEROUS_CHOP,
+                            ChopSubtype.LOW_QUALITY_CHOP):
+            return self._wait(
+                context, smc,
+                f"CHOP_BLOCK: {chop.subtype.value} — {chop.reason}; "
+                "consolidation is not traded — waiting for displacement "
+                "or a confirmed liquidity event",
+                waiting="SWEEP",
+                plan="wait for a sweep/displacement out of the range",
+            )
+
         if candidate is None:
             return self._wait(
                 context, smc,
@@ -537,11 +576,23 @@ class SmcExecutionPipeline:
         if aligned_sweeps and displacement >= ANCHOR_DISPLACEMENT \
                 and disp_direction is candidate:
             sweep = max(aligned_sweeps, key=lambda s: s.sweep_index)
+            # H6b (decision 2026-06-12-04): freshness is measured at the
+            # REJECTION EXTREME (where the sweep actually rejected), not
+            # the swept level — trade 11 anchored to a level 47 USD away.
+            level = sweep.level.price
+            try:
+                rejection_candle = m5[sweep.sweep_index]
+                level = (
+                    rejection_candle.high if candidate is Direction.SHORT
+                    else rejection_candle.low
+                )
+            except (IndexError, TypeError):  # stub/edge: keep swept level
+                pass
             return _Anchor(
-                "SWEEP_DISPLACEMENT", level=sweep.level.price,
+                "SWEEP_DISPLACEMENT", level=level,
                 detail=(
                     f"{sweep.swept_side.value} swept @{sweep.level.price:.2f} "
-                    f"disp {displacement:.1f}x"
+                    f"rejected @{level:.2f} disp {displacement:.1f}x"
                 ),
             )
 
