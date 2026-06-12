@@ -391,6 +391,14 @@ class ProgressPrinter:
             f"local_structure_updated={ch.get('local_structure_updated')}"
         )
         self._line(f"  htf_context={ch.get('htf_context')}")
+        # SMC-V2-001: the day-narrative brain's reasoning, when present.
+        if ch.get("narrative"):
+            self._line(f"  narrative={ch.get('narrative')}")
+        if ch.get("playbook") or ch.get("quality"):
+            self._line(
+                f"  playbook={ch.get('playbook', '-')} "
+                f"quality={ch.get('quality', '-')}"
+            )
         self._line(
             f"  killzone={ch.get('killzone')} "
             f"liquidity_context={ch.get('liquidity_context')} "

@@ -315,3 +315,27 @@ def test_smc_v2_profile_registered_with_challenge_envelope():
 def test_smc_v2_brain_default_cadence_is_institutional():
     pipe = v2_pipeline(zones=[])
     assert pipe._max_entries_per_day <= 3
+
+
+def test_terminal_prints_the_narrative_lines():
+    from io import StringIO
+    from src.execution.trading_service import ProgressPrinter
+    out = StringIO()
+    printer = ProgressPrinter(stream=out)
+    printer._challenge_lines({
+        "profile": "smc_v2", "fresh_entry_scan": "ACTIVE",
+        "new_candle_detected": "yes", "local_structure_updated": "no",
+        "htf_context": "d1=BEARISH", "killzone": "LONDON",
+        "liquidity_context": "NONE", "displacement": 1.0,
+        "smc_anchor": "NONE", "entry_trigger": "NONE", "grade": "NONE",
+        "direction": "NONE", "lot_decision": "NONE",
+        "tactical_stop_price": None, "tactical_stop_distance": None,
+        "tactical_stop_source": "none", "stop_logic": "",
+        "narrative": "TREND_DAY/SHORT conviction=-0.70 playbooks=...",
+        "playbook": "TREND_CONTINUATION", "quality": "0.74 [parts]",
+        "reason": "x",
+    })
+    text = out.getvalue()
+    assert "narrative=TREND_DAY/SHORT" in text
+    assert "playbook=TREND_CONTINUATION" in text
+    assert "quality=0.74" in text
