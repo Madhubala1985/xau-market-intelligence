@@ -100,6 +100,13 @@ ANCHOR_DISPLACEMENT = 1.3  # sweep needs real displacement behind it
 # far-away levels (trade 6) are out of scope — that case belongs to D6.
 CONSUMED_STOP_TTL = timedelta(minutes=30)
 CONSUMED_STOP_PROXIMITY = MAX_STOP_ABSOLUTE
+# The clearance must stay strictly INSIDE the proximity radius, or on
+# high-ATR days (live: ATR 10.75 on 2026-06-12) no stop within proximity
+# could ever clear and the guard degenerates into a blanket 8-USD block —
+# refusing structurally deeper re-entries (stop beyond the violated level
+# under fresh structure). Winners 8/17 cleared by 6.98/8.11; trade 19's
+# 0.05 stays blocked at any cap >= 1.
+CONSUMED_STOP_CLEARANCE_CAP = 6.0
 
 _KILL_ZONES = {
     SessionType.LONDON, SessionType.NEW_YORK, SessionType.LONDON_NY_OVERLAP,
@@ -215,7 +222,7 @@ class SmcExecutionPipeline:
             return ""
         if abs(stop_price - level) > CONSUMED_STOP_PROXIMITY:
             return ""
-        clearance = max(atr5, 1.0)
+        clearance = max(1.0, min(atr5, CONSUMED_STOP_CLEARANCE_CAP))
         cleared = (
             stop_price > level + clearance
             if candidate is Direction.SHORT

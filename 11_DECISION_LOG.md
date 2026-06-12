@@ -3819,3 +3819,37 @@ src/execution/demo_session.py, tests/test_smc_accounting.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-12-09
+
+## Date:
+2026-06-12
+
+## Area:
+SMC execution doctrine (H8 clearance geometry)
+
+## Decision:
+The H8 clearance is capped strictly inside the proximity radius:
+clearance = max(1.0, min(ATR(M5), 6.0)) with proximity 8.0 unchanged.
+
+## Why:
+Live evidence ~15:5x UTC: spike-day ATR 10.75 made the required
+clearance LARGER than the 8-USD proximity radius — geometrically no
+stop within proximity could ever clear, degenerating the guard into a
+blanket block that refused a LONG re-entry whose stop (4207.70) sat
+7.16 BEYOND the violated level (4214.86) under the deeper FVG. The
+guard's evidence base: winners 8/17 cleared by 6.98/8.11 (pass a 6.0
+cap), churn trade 19 cleared 0.05 (blocked at any cap >= 1).
+
+## Risk:
+Internal-consistency fix to a same-day guard; the churn case it exists
+for is unchanged. No brake touched.
+
+## Files Affected:
+src/strategy/smc_execution.py, tests/test_smc_execution.py.
+
+## Status:
+Accepted

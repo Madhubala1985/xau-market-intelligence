@@ -672,3 +672,20 @@ def test_opposite_direction_loss_does_not_consume():
     again = pipe.decide(pipeline_input(m5_breakdown(3.0),
                                        m1=m1_with_local_swing()))
     assert again.approved, again.reason
+
+
+def test_high_atr_cannot_make_clearing_unreachable():
+    """Decision 2026-06-12-09 (live evidence, ATR 10.75 spike day): the
+    clearance is capped inside the 8-USD proximity, so a stop materially
+    BEYOND the violated level (deeper structure) always has an escape."""
+    pipe = smc_pipeline()
+    t = datetime(2026, 6, 12, 15, 45, tzinfo=timezone.utc)
+    pipe.note_stop_loss(Direction.LONG, 4214.86, t)
+    # 7.16 beyond the violated level, inside proximity, spike ATR:
+    assert pipe._consumed_stop_block(
+        Direction.LONG, 4207.70, 10.75, t + timedelta(minutes=5)
+    ) == ""
+    # the churn case stays blocked at any ATR:
+    assert "ZONE_CONSUMED" in pipe._consumed_stop_block(
+        Direction.LONG, 4214.40, 10.75, t + timedelta(minutes=5)
+    )
