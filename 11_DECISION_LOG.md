@@ -3853,3 +3853,43 @@ src/strategy/smc_execution.py, tests/test_smc_execution.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-12-10
+
+## Date:
+2026-06-12
+
+## Area:
+Strategy direction (owner-directed rebuild)
+
+## Decision:
+Owner verdict on the live evidence (-4.8% campaign, 24 trades): the
+per-candle gate model trades "like a bot, not an intelligent trader."
+Owner directed a rebuild. Scope agreed: REBUILD THE DECISION BRAIN ONLY
+as a new pipeline/profile (day-narrative state machine, session
+playbooks, conviction-weighted bias, trade memory) — the execution
+chassis (gateway, MT5-truth accounting, equity sizing, tactical stops,
+trailing, ALL brakes) is provably correct and is KEPT. Gate before any
+live demo trading: the new brain must beat the current SMC pipeline on
+replayed real MT5 history (head-to-head decision replay, net R /
+drawdown / per-day breakdown). Current smc_challenge profile kept as
+fallback. "Erase everything" was discussed and narrowed to this scope
+with the owner's agreement (chassis defects already paid for live:
+fabricated P&L, broker rejections, contamination — not re-purchased).
+
+## Risk:
+New decision layer cannot weaken anchors (envelope unchanged); it can
+only be MORE selective. Replay gate prevents live discovery of its
+defects. Service stopped flat 2026-06-12 ~17:3x UTC for the weekend
+build window (Friday close 21:00 UTC).
+
+## Files Affected:
+(new) src/strategy/day_narrative.py, src/strategy/smc_v2.py,
+scripts/decision_replay.py, 26_SMC_V2_DESIGN.md, tests, control docs.
+
+## Status:
+Accepted
+

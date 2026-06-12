@@ -753,3 +753,35 @@ Rules:
 
 Status:
 Completed in commit SMC-EXECUTION-001.
+
+---
+
+## Task SMC-V2-001: Day-Narrative Decision Brain + Replay Validation Gate
+
+Goal:
+Rebuild the DECISION LAYER per 26_SMC_V2_DESIGN.md (decision
+2026-06-12-10): DayNarrative state machine, conviction ledger, per-state
+playbooks with trade memory, quality scoring — as a new pipeline behind
+the UNCHANGED execution chassis, plus scripts/decision_replay.py for the
+head-to-head historical validation gate.
+
+Rules:
+- Chassis untouched: gateway, MT5 accounting, sizing, stops, trailing,
+  brakes, kill switch. Envelope shared with smc_challenge, never widened.
+- v2 trades live demo ONLY after beating v1 on >= 10 days of replayed
+  real MT5 history (net R, max DD, no edge destruction on v1's win days).
+- smc_challenge remains the fallback profile.
+
+Tests:
+- state machine transitions on constructed days (trend/range/trap/spike),
+- conviction accumulation/decay and sign-flip lockout,
+- playbook permissions per state + probe limits + playbook day-cooldown,
+- replay harness: conservative fills (SL-first ambiguity, spread+slippage),
+  deterministic on fixed candles,
+- full safety suite stays green.
+
+Stop condition:
+- replay report committed with the verdict; v2 enabled only on a PASS.
+
+Status:
+In progress (started 2026-06-12).
