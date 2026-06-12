@@ -144,6 +144,7 @@ class DecisionReplay:
         self._spread = spread
         self._symbol = symbol
         self._warmup = max(warmup, 10)
+        self._times_cache: Dict[int, list] = {}
 
     def run(self, pipelines: Dict[str, object]) -> Dict[str, ReplayResult]:
         results = {name: ReplayResult(name) for name in pipelines}
@@ -262,10 +263,20 @@ class DecisionReplay:
         except Exception:  # noqa: BLE001 - a pipeline crash scores no trade
             return None
 
-    @staticmethod
-    def _slice(candles: Sequence[Candle], now, keep: int = 1000):
-        out = [c for c in candles if c.time_utc <= now]
-        return out[-keep:]
+    def _slice(self, candles: Sequence[Candle], now, keep: int = 1000):
+        """Bisect-based time slice (months-long histories: the naive
+        linear scan per step made long replays quadratic)."""
+        if not candles:
+            return []
+        key = id(candles)
+        times = self._times_cache.get(key)
+        if times is None:
+            times = [c.time_utc for c in candles]
+            self._times_cache[key] = times
+        import bisect
+
+        hi = bisect.bisect_right(times, now)
+        return list(candles[max(0, hi - keep):hi])
 
     def _fill_entry(self, open_price: float, direction: Direction) -> float:
         adverse = self._spread + SLIPPAGE
