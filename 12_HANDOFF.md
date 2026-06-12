@@ -67,8 +67,9 @@ Windows PowerShell, repo root:
 3. Start:  py -3.12 scripts\trading_service.py --profile smc_v2 --stdout-progress
 4. Watch per cycle: narrative=STATE conviction playbooks evidence[...],
    accounting_verified=true, CLOSE_DETECTED lines vs MT5 history.
-   Expect FEW trades (cap 3/day) — long NO_TRADE stretches with
-   DAY_NARRATIVE_*/CONVICTION/QUALITY reasons are the design.
+   Expect FEW trades (cap 2/day, quality bar 0.70) — long NO_TRADE
+   stretches with DAY_NARRATIVE_*/CONVICTION/QUALITY reasons are the
+   design, not a fault.
 5. Stop any time: New-Item -ItemType File control\KILL_SWITCH
    (service stops cleanly; remove the file before the next start).
 6. Self-stopping: daily 5% net pause (entries blocked to next UTC
