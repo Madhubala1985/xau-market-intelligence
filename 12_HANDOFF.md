@@ -13,14 +13,22 @@ Phase 12: Live Demo Readiness — continuous service operational; FINAL
 LAST-CHANCE demo_challenge experiment ready
 
 ## Current Task ID:
-SMC-EXECUTION-003 (implemented; owner authorized Claude-supervised runs
-this session). Equity-scaled risk sizing (1.0%/1.5% by tier, compounds
-with equity, 3% cap & all brakes unchanged) + per-account MT5 trade
-count (fetch_entry_count_since). The campaign account is the FRESH
-Exness demo (login ..63, Exness-MT5Trial14, symbol XAUUSD — note: NOT
-XAUUSDm on this server; MT5_SYMBOL updated in .env), funded 2,000.00.
-Owner's "remove the cap" partially refused — envelope brakes intact.
-803 tests pass; safety check passes.
+SMC-EXECUTION-007 (decision 2026-06-12-04): owner-directed decision-layer
+rebuild after the 14-trade live watch (balance 1,946.78, -2.7%; full
+evidence in reports/runtime/supervision_ledger.md). Doctrine now: D2
+stale-anchor guard, D3 trend-day consensus override, D5 counter-consensus
+displacement requirement, D6 market-state gate (volatility+chop on the
+m5[:-1] environment — consolidation is NOT traded), H6b sweep freshness
+at the rejection extreme, H7 two-leg pyramid cap. Chassis (gateway/
+accounting/equity sizing/stops/trailing/brakes) unchanged — zero
+execution defects in 14 live trades. 814 tests pass; safety passes.
+Campaign account: fresh Exness demo (login ..63, Trial14, symbol XAUUSD
+— plain, not XAUUSDm), DAY_PAUSED until 2026-06-13 00:00 UTC.
+
+Previously: SMC-EXECUTION-003: equity-scaled risk sizing (1.0%/1.5% by tier,
+compounds with equity, 3% cap & all brakes unchanged) + per-account MT5
+trade count (fetch_entry_count_since). Owner's "remove the cap"
+partially refused — envelope brakes intact.
 
 Previously: SMC-EXECUTION-002 (implemented after the first live smc_challenge run;
 owner authorized Claude-supervised runs this session)
