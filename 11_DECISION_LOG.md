@@ -3941,3 +3941,41 @@ src/backtest/decision_replay.py, scripts/v2_sweep.py, tests.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-12-12
+
+## Date:
+2026-06-12
+
+## Area:
+SMC v2 Monday knobs (supersedes the knob choice in 2026-06-12-11; the
+runbook, retirement of v1, and the -5% evidence-week stop are unchanged)
+
+## Decision:
+--profile smc_v2 runs with quality_bar 0.70, max 2 entries/day, 3R
+trend targets (cap2_bar70_t3). The 2026-06-12-11 default knobs are
+superseded: the 8.5-month longhaul (reports/runtime/v2_longhaul.md,
+50k M5 candles 2025-09-28..2026-06-12, conservative fills) measured
+the defaults at -12.9R (4/10 months positive) while cap2_bar70_t3
+scored +7.0R (7/10 months positive, DD 22.3R) — and the SAME variant
+independently won the walk-forward sweep's unseen validation days
+(+8.16R, best of 10). Two independent confirmations across different
+horizons is evidence, not curve-fitting; shipping a configuration
+measured at -12.9R/8.5mo would be knowingly wrong.
+
+## Honest expectancy statement:
++0.038 R/day under punitive replay fills — POSITIVE but below the
++0.15 R/day goal-grade bar. Live fills measured ~0.06-0.1R cheaper per
+trade at ~2 trades/day may close much of the gap; week 1 live is the
+evidence week (early stop at -5% weekly net; hard floor 10% unchanged).
+The $2k->$20k goal remains contingent on the live-confirmed edge, and
+that is stated to the owner plainly.
+
+## Files Affected:
+scripts/trading_service.py.
+
+## Status:
+Accepted

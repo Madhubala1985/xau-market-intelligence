@@ -219,22 +219,22 @@ def main() -> int:
         challenge_mode = profile.name in CHALLENGE_PROFILE_NAMES
         if challenge_mode:
             if profile.name == "smc_v2":
-                # SMC-V2-001 final config (decision 2026-06-12-11): the
-                # walk-forward sweep (reports/runtime/v2_sweep.md) showed
-                # train/validate INVERSION across variants — regime noise
-                # at n~35 trades, no robust winner — so the PRE-REGISTERED
-                # defaults ship, not a sweep-picked config. Replay says
-                # ~breakeven with DD ~10R (v1: -83R, DD 97R); live fills
-                # are ~0.3-0.5 cheaper per trade than the replay's
-                # deliberately punitive model. Changed only with fresh
-                # replay evidence.
+                # SMC-V2-001 final config (decision 2026-06-12-12): the
+                # maximum-selectivity variant, confirmed on TWO independent
+                # measures — 8.5-month longhaul (+7.0R, 7/10 months
+                # positive, DD 22R; defaults scored -12.9R) and the
+                # walk-forward sweep's unseen validation days (+8.16R,
+                # best of 10). reports/runtime/v2_longhaul.md +
+                # v2_sweep.md. Edge is small (+0.038 R/day under punitive
+                # fills) — week 1 live is the evidence week. Changed only
+                # with fresh replay evidence.
                 from src.strategy.smc_v2 import make_smc_v2_pipeline
                 pipeline = make_smc_v2_pipeline(
                     canonical, max_spread_price=profile.max_spread_price,
-                    quality_bar=0.62,
+                    quality_bar=0.70,
                     strong_bar=0.78,
-                    max_entries_per_day=3,
-                    trend_target_r=2.0,
+                    max_entries_per_day=2,
+                    trend_target_r=3.0,
                     structural_stops_only=False,
                 )
             else:

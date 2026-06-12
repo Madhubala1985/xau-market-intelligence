@@ -47,13 +47,17 @@ weekend at 21:00, account week resets Monday 2026-06-15):
   position. v2 sweep over selectivity variants was RUNNING at handoff:
   logs/v2_sweep_run1.log -> reports/runtime/v2_sweep.md/.json.
 
-RESOLVED (decision 2026-06-12-11): the sweep showed train/validate
-inversion (no robust variant winner at n~35 trades/split), so smc_v2
-ships Monday with the PRE-REGISTERED defaults (bar 0.62 / strong 0.78 /
-3 entries/day / 2R / structural-stops off), wired explicitly in
-scripts/trading_service.py. v1 (smc_challenge) is RETIRED from live
-use (-82.7R/25 replayed days). Week 1 = evidence week with a
-self-imposed early stop at -5% weekly net (hard floor 10% unchanged).
+RESOLVED (decisions 2026-06-12-11/-12): smc_v2 ships Monday with the
+MAXIMUM-SELECTIVITY knobs (quality bar 0.70, 2 entries/day, 3R trend
+targets), confirmed on two independent measures — the 8.5-month
+longhaul replay (+7.0R, 7/10 months positive, DD 22R; the defaults
+measured -12.9R and were superseded) and the walk-forward sweep's
+unseen validation days (+8.16R, best of 10). Honest expectancy: +0.038
+R/day under punitive fills — positive, below the +0.15 goal-grade bar;
+live fills are cheaper, week 1 measures the truth. v1 (smc_challenge)
+is RETIRED from live use (-82.7R/25d, -12.9R..-83R everywhere). Week 1
+= evidence week with a self-imposed early stop at -5% weekly net (hard
+floor 10% unchanged). Reports: v2_longhaul.md, v2_sweep.md.
 
 ## MONDAY RUNBOOK (2026-06-15, after 00:00 UTC week reset) — operator
 Windows PowerShell, repo root:
