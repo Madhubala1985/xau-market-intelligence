@@ -3893,3 +3893,51 @@ scripts/decision_replay.py, 26_SMC_V2_DESIGN.md, tests, control docs.
 ## Status:
 Accepted
 
+
+---
+
+## Decision ID:
+2026-06-12-11
+
+## Date:
+2026-06-12
+
+## Area:
+SMC v2 final configuration and Monday plan (Claude-owned per the
+ownership transfer)
+
+## Decision:
+v1 (smc_challenge / demo_challenge) is RETIRED from live use: 25
+replayed days score -82.7R / DD 96.8R over 636 trades — the live -4.8%
+was systematic. --profile smc_v2 ships Monday 2026-06-15 with the
+PRE-REGISTERED default knobs (quality_bar 0.62, strong_bar 0.78,
+max 3 entries/day, 2R targets, structural_stops_only off) as a
+risk-bounded live forward test. NOT a sweep-picked config: the
+walk-forward sweep showed train/validate inversion across all 10
+variants (regime noise at n~35 trades/split) — picking a winner from
+it would be the overfitting this day's six measured iterations proved
+harmful.
+
+## Why ship a replay-breakeven model:
+(1) v2's worst replay drawdown is ~10-15R vs v1's 97R — risk is
+bounded by construction and by the unchanged envelope (5% day pause,
+10% week stop, 3%/trade, max 3 open). (2) The replay fill model
+deliberately overcharges ~0.3-0.5 USD/trade slippage that 22 live
+trades did not pay (fills at tick, stops exact) — worth ~+0.06-0.1R
+per trade, the plausible difference between replay-breakeven and live
+positive. (3) The campaign needs live forward evidence at the
+institutional cadence (~3/day) to settle the edge question; the cost
+of that evidence is capped.
+
+## Stop conditions (self-imposed):
+Week 1 on smc_v2 is an evidence week: if MT5-verified weekly net is
+<= -5% before Friday, stop the service early and return to
+replay-first iteration; the 10% weekly anchor remains the hard floor.
+
+## Files Affected:
+scripts/trading_service.py, src/execution/session_profiles.py,
+src/strategy/smc_v2.py, src/strategy/day_narrative.py,
+src/backtest/decision_replay.py, scripts/v2_sweep.py, tests.
+
+## Status:
+Accepted

@@ -47,19 +47,31 @@ weekend at 21:00, account week resets Monday 2026-06-15):
   position. v2 sweep over selectivity variants was RUNNING at handoff:
   logs/v2_sweep_run1.log -> reports/runtime/v2_sweep.md/.json.
 
-Next exact steps:
-1. Read reports/runtime/v2_sweep.md. If the train winner validates
-   positive: wire --profile smc_v2 (challenge family, same envelope)
-   into session_profiles + scripts/trading_service.py with the winning
-   knobs, add profile tests, commit, and start the service Monday after
-   00:00 UTC week reset. smc_challenge stays as fallback only.
-2. If validation is negative: do NOT trade Monday. Next levers (in
-   order): payoff shape (trail runners instead of fixed TP on trend
-   days — extend the replay engine's manage loop), entry timing
-   (limit-style retrace entries to cut the 0.5 adverse cost), session
-   filters from the sweep's by-day data. Iterate replay-first.
-3. Keep updating reports/runtime/supervision_ledger.md (full day log
-   exists there) — it is the owner-facing record.
+RESOLVED (decision 2026-06-12-11): the sweep showed train/validate
+inversion (no robust variant winner at n~35 trades/split), so smc_v2
+ships Monday with the PRE-REGISTERED defaults (bar 0.62 / strong 0.78 /
+3 entries/day / 2R / structural-stops off), wired explicitly in
+scripts/trading_service.py. v1 (smc_challenge) is RETIRED from live
+use (-82.7R/25 replayed days). Week 1 = evidence week with a
+self-imposed early stop at -5% weekly net (hard floor 10% unchanged).
+
+## MONDAY RUNBOOK (2026-06-15, after 00:00 UTC week reset) — operator
+Windows PowerShell, repo root:
+1. Verify no kill switch:   Test-Path control\KILL_SWITCH   (False)
+   If True: Remove-Item control\KILL_SWITCH
+2. Preflight (13 gates):    py -3.12 scripts\demo_preflight.py
+3. Start:  py -3.12 scripts\trading_service.py --profile smc_v2 --stdout-progress
+4. Watch per cycle: narrative=STATE conviction playbooks evidence[...],
+   accounting_verified=true, CLOSE_DETECTED lines vs MT5 history.
+   Expect FEW trades (cap 3/day) — long NO_TRADE stretches with
+   DAY_NARRATIVE_*/CONVICTION/QUALITY reasons are the design.
+5. Stop any time: New-Item -ItemType File control\KILL_SWITCH
+   (service stops cleanly; remove the file before the next start).
+6. Self-stopping: daily 5% net pause (entries blocked to next UTC
+   day), weekly 10% net stop (service exits), kill switch, Ctrl+C.
+7. Do NOT run --profile smc_challenge or demo_challenge (retired;
+   replay -82.7R/25d). Reports: reports/runtime/supervision_ledger.md,
+   v2_sweep.md, smc_v2_replay.md.
 
 Previously: SMC-EXECUTION-008/b/c (H8 family, this morning) and
 SMC-EXECUTION-007 doctrine — see CURRENT_STATE.md.
