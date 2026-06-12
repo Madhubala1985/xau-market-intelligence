@@ -243,3 +243,54 @@ def test_sweep_reclaim_playbook_fires_on_post_spike_reclaim():
         # acceptable refusals: stop construction or quality — but the
         # narrative must have armed a playbook for SHORT only
         assert "LONG" not in str(result.context.challenge.get("direction"))
+
+
+# -- selectivity knobs (owner-directed 2026-06-12: institutional cadence) --
+
+def test_daily_selectivity_cap_stops_the_day():
+    m5 = trend_down_m5()
+    pipe = v2_pipeline(zones=[fvg_for(m5)])
+    pipe._max_entries_per_day = 1
+    first = pipe.decide(pipeline_input(m5))
+    assert first.approved, first.reason
+    again = pipe.decide(pipeline_input(m5))
+    assert not again.approved
+    assert "DAILY_SELECTIVITY_CAP" in again.reason
+
+
+def test_structural_stops_only_refuses_naked_swings():
+    m5 = trend_down_m5()
+    pipe = v2_pipeline(zones=[fvg_for(m5)])
+    pipe._structural_stops_only = True
+    result = pipe.decide(pipeline_input(m5))
+    if not result.approved:
+        assert ("STOP_SOURCE_NOT_STRUCTURAL" in result.reason
+                or "stop" in result.reason.lower())
+    else:
+        assert result.context.challenge["tactical_stop_source"] in (
+            "FVG_boundary", "OB_boundary", "rejection_wick",
+        )
+
+
+def test_trend_target_r_extends_aligned_trend_targets():
+    m5 = trend_down_m5()
+    base = v2_pipeline(zones=[fvg_for(m5)])
+    r2 = base.decide(pipeline_input(m5))
+    assert r2.approved, r2.reason
+    extended = v2_pipeline(zones=[fvg_for(m5)])
+    extended._trend_target_r = 3.0
+    r3 = extended.decide(pipeline_input(m5))
+    assert r3.approved, r3.reason
+    risk = r3.decision.stop_loss - r3.decision.entry_price
+    reward = r3.decision.entry_price - r3.decision.take_profits[0]
+    assert abs(reward - 3.0 * risk) < 0.02
+    assert r3.decision.take_profits[0] < r2.decision.take_profits[0]
+
+
+def test_quality_bar_is_tunable():
+    m5 = trend_down_m5()
+    pipe = v2_pipeline(zones=[fvg_for(m5)])
+    pipe._quality_bar = 0.99
+    result = pipe.decide(pipeline_input(m5))
+    assert not result.approved
+    assert "QUALITY_BELOW_BAR" in result.reason

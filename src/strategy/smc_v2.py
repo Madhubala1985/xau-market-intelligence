@@ -71,11 +71,31 @@ RANGE_FADE_EXTREME_PCT = 0.30   # entry within this fraction of the extreme
 class SmcV2Pipeline(SmcExecutionPipeline):
     """Day-narrative + playbook + quality-score decision brain."""
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(
+        self, *args,
+        quality_bar: float = S_NORMAL,
+        strong_bar: float = S_STRONG,
+        max_entries_per_day: int = 3,
+        trend_target_r: float = 2.0,
+        structural_stops_only: bool = False,
+        **kwargs,
+    ) -> None:
+        """Selectivity knobs (owner-directed 2026-06-12: institutional
+        cadence, not indicator-bot cadence). max_entries_per_day is the
+        brain's OWN cap (institutional 1-3/day) — far tighter than the
+        envelope's 25 and tighten-only. trend_target_r lets aligned
+        TREND_DAY trades run beyond 2R. structural_stops_only refuses
+        naked local-swing stops. All tuned ONLY by walk-forward replay."""
         super().__init__(*args, **kwargs)
         self.threshold_profile = "smc_v2"
         self._narrator = DayNarrativeEngine()
+        self._quality_bar = quality_bar
+        self._strong_bar = strong_bar
+        self._max_entries_per_day = max_entries_per_day
+        self._trend_target_r = trend_target_r
+        self._structural_stops_only = structural_stops_only
         self._memory_day = None
+        self._entries_today = 0
         self._sl_losses_by_direction: Dict[Direction, int] = {}
         self._sl_losses_by_playbook: Dict[str, int] = {}
         self._playbook_by_direction: Dict[Direction, str] = {}
@@ -101,6 +121,7 @@ class SmcV2Pipeline(SmcExecutionPipeline):
         day = now.date() if now is not None else None
         if day != self._memory_day:
             self._memory_day = day
+            self._entries_today = 0
             self._sl_losses_by_direction.clear()
             self._sl_losses_by_playbook.clear()
             self._playbook_by_direction.clear()
@@ -246,6 +267,17 @@ class SmcV2Pipeline(SmcExecutionPipeline):
                 plan=narrative.rearm_condition,
             )
 
+        # -- institutional cadence: the brain's own daily entry cap ----------
+        if self._entries_today >= self._max_entries_per_day:
+            return self._wait(
+                context, smc,
+                f"DAILY_SELECTIVITY_CAP: {self._entries_today}/"
+                f"{self._max_entries_per_day} institutional entries taken — "
+                "done deciding for the day (open positions still managed)",
+                waiting="SWEEP",
+                plan="next UTC day re-arms the cap",
+            )
+
         # -- conviction gate ----------------------------------------------------
         candidate = self._candidate_from(narrative)
         if candidate is None:
@@ -330,6 +362,15 @@ class SmcV2Pipeline(SmcExecutionPipeline):
                 plan=plan or "wait for a fresh local swing / zone boundary",
             )
         stop_price, stop_distance, stop_source, stop_logic = stop
+        if self._structural_stops_only and stop_source == "local_swing":
+            waiting, plan = self._reentry_plan(candidate, zones, anchor)
+            return self._wait(
+                context, smc,
+                "STOP_SOURCE_NOT_STRUCTURAL: only FVG/OB-boundary or "
+                "sweep-rejection stops qualify (naked local swings get "
+                "swept — H1) — waiting for a structural invalidation",
+                waiting=waiting, plan=plan,
+            )
         if self._last_stop_price != stop_price:
             smc["local_structure_updated"] = "yes"
             self._last_stop_price = stop_price
@@ -362,17 +403,19 @@ class SmcV2Pipeline(SmcExecutionPipeline):
             liquidity_context, atr5, entry,
         )
         smc["quality"] = f"{score:.2f} [{score_detail}]"
-        if score < S_NORMAL:
+        if score < self._quality_bar:
             return self._wait(
                 context, smc,
-                f"QUALITY_BELOW_BAR: score {score:.2f} < {S_NORMAL:.2f} "
-                f"[{score_detail}] — only clean setups trade",
+                f"QUALITY_BELOW_BAR: score {score:.2f} < "
+                f"{self._quality_bar:.2f} [{score_detail}] — only clean "
+                "setups trade",
                 waiting="SWEEP",
                 plan="wait for a higher-quality setup (better stop source, "
                      "fresher event, or kill-zone timing)",
             )
         grade = (
-            SetupGrade.STRONG if score >= S_STRONG else SetupGrade.NORMAL
+            SetupGrade.STRONG if score >= self._strong_bar
+            else SetupGrade.NORMAL
         )
         smc["grade"] = grade
 
@@ -398,6 +441,20 @@ class SmcV2Pipeline(SmcExecutionPipeline):
             anchor, trigger, grade, lot,
             f"{narrative.state.value}:{playbook}",
         )
+        # Aligned trend-day trades may run beyond 2R (replay-tuned).
+        if (
+            self._trend_target_r != 2.0
+            and narrative.state is DayState.TREND_DAY
+            and narrative.direction is candidate
+        ):
+            target = (
+                entry - self._trend_target_r * stop_distance
+                if candidate is Direction.SHORT
+                else entry + self._trend_target_r * stop_distance
+            )
+            decision = decision.model_copy(
+                update={"take_profits": (round(target, 2),)}
+            )
         confidence = self._confidence(grade, anchor, trigger)
         smc["reason"] = (
             f"{grade} {candidate.value} [{playbook} @ "
@@ -423,6 +480,8 @@ class SmcV2Pipeline(SmcExecutionPipeline):
                 inp.broker.open_positions > 0 and narrative.pyramids_allowed
             ),
         ))
+        if verdict.approved:
+            self._entries_today += 1
         return PipelineResult(
             stage=PipelineStage.RISK_EVALUATED,
             approved=verdict.approved,
@@ -591,8 +650,10 @@ class SmcV2Pipeline(SmcExecutionPipeline):
 
 
 def make_smc_v2_pipeline(canonical_symbol: str, *, max_spread_price: float = 1.0,
-                         max_staleness=None):
-    """Build the SMC v2 pipeline for live XAU data (same envelope as v1)."""
+                         max_staleness=None, **brain_kwargs):
+    """Build the SMC v2 pipeline for live XAU data (same envelope as v1).
+    brain_kwargs forward the selectivity knobs (quality_bar, strong_bar,
+    max_entries_per_day, trend_target_r, structural_stops_only)."""
     from datetime import timedelta
 
     from src.data.validation import DataValidator, ValidationConfig
@@ -610,4 +671,5 @@ def make_smc_v2_pipeline(canonical_symbol: str, *, max_spread_price: float = 1.0
         make_challenge_limits(canonical),
         max_spread=max_spread_price,
         engines=engines,
+        **brain_kwargs,
     )
