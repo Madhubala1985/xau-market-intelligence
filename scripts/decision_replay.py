@@ -99,8 +99,21 @@ def main() -> int:
     v2 = results["v2_day_narrative"]
     gate = verdict(v1, v2)
 
+    def dump(trades):
+        return [
+            {
+                "day": str(t.day), "time": str(t.entry_time),
+                "dir": t.direction.value, "entry": t.entry, "stop": t.stop,
+                "target": t.target, "setup": t.setup,
+                "outcome": t.outcome, "r": t.r_multiple,
+            }
+            for t in trades
+        ]
+
     report = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "v1_trades": dump(v1.trades),
+        "v2_trades": dump(v2.trades),
         "days_requested": args.days,
         "symbol": canonical,
         "fill_model": "entry next open, spread+0.30 slippage, SL-first, "
