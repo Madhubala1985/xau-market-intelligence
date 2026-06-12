@@ -3678,3 +3678,39 @@ tests/test_smc_execution.py, tests/test_demo_challenge.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-12-05
+
+## Date:
+2026-06-12
+
+## Area:
+Risk measure semantics + challenge envelope (DEMO ONLY, owner-directed)
+
+## Decision:
+(A) Daily/weekly loss = NET drawdown: RiskStateTracker._realized_loss now
+nets wins against losses (floored at 0), matching the MT5-truth net
+measure (fetch_realized_pnl_since) that tightens it. The old
+gross-losses-only sum paused 2026-06-12 at -1.2% net as if -5.4%. The
+5% daily / 10% weekly NET brakes are unchanged and remain MT5-tightened
+and deposit-proof.
+(B) Owner amendment: challenge envelope trades/day 10 -> 15 so the
+rebuilt decision layer (SMC-EXECUTION-007) can be live-tested today
+(the old doctrine had consumed all 10 slots). Per-trade 3%, max 3 open,
+2-leg pyramids, cooldowns, daily/weekly brakes unchanged.
+
+## Risk:
+(A) is a semantic correction toward the policy's plain meaning, not a
+brake change; (B) loosens only the entry-count throttle, bounded by the
+unchanged loss brakes (worst case unchanged: the daily 5% net pause).
+
+## Files Affected:
+src/risk/state_tracker.py, src/execution/session_profiles.py,
+src/strategy/smc_execution.py, tests/test_risk_state_tracker.py,
+tests/test_smc_accounting.py.
+
+## Status:
+Accepted

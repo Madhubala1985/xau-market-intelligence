@@ -94,14 +94,20 @@ class RiskStateTracker:
     def _realized_loss(
         records: List[TradeRecord], *, since: datetime, until: datetime
     ) -> float:
-        """Sum of realized losses (positive number) closed in [since, until]."""
-        loss = 0.0
+        """NET realized loss (positive number, floored at 0) in the window.
+
+        Decision 2026-06-12-05: "daily/weekly loss" means net drawdown —
+        wins offset losses, matching the MT5-truth net measure
+        (fetch_realized_pnl_since) that tightens this figure. The old
+        gross-losses-only sum paused a -1.2% net day as if it were -5.4%.
+        """
+        net = 0.0
         for r in records:
             if r.closed_at_utc is None or r.pnl is None:
                 continue
-            if since <= r.closed_at_utc <= until and r.pnl < 0:
-                loss += -r.pnl
-        return loss
+            if since <= r.closed_at_utc <= until:
+                net += r.pnl
+        return max(0.0, -net)
 
     @staticmethod
     def _trades_opened(

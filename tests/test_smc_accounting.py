@@ -560,10 +560,11 @@ def test_other_account_journal_trades_do_not_consume_the_daily_cap(tmp_path):
 
 def test_mt5_entries_today_enforce_the_daily_cap(tmp_path):
     fake = FakeMT5Trading()
-    for i in range(10):  # this account already opened 10 trades today
+    # owner amendment 2026-06-12-05: the challenge cap is 15/day
+    for i in range(15):  # this account already opened 15 trades today
         fake.deals[200 + i] = [_in_deal(200 + i, NOW - timedelta(hours=2))]
     session, _, _ = build_session(tmp_path, fake, [approved_smc("smc-1")])
     outcome = session.run_cycle()
-    assert outcome.risk.trades_today == 10
+    assert outcome.risk.trades_today == 15
     assert outcome.stat.entry_action != "SENT"
     assert "trades today" in outcome.stat.entry_detail.lower()

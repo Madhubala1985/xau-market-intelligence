@@ -114,7 +114,7 @@ def make_challenge_limits(expected_symbol: str) -> RiskLimits:
         max_risk_per_trade=0.030,
         max_daily_loss=0.05,
         max_weekly_loss=0.10,
-        max_trades_per_day=10,
+        max_trades_per_day=15,  # owner amendment 2026-06-12-05 (was 10)
         max_open_trades=3,
         max_spread=1.0,
     )

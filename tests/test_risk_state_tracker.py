@@ -62,11 +62,12 @@ def test_daily_loss_fraction_from_todays_closed_losses(journal):
                               opened=today, closed=today))
     journal.log_record(record("L2", outcome=TradeOutcome.LOSS, pnl=-30.0,
                               opened=today, closed=today))
-    # A win today must NOT offset the loss total (losses are tracked, not net).
+    # Decision 2026-06-12-05: the daily loss is NET drawdown — wins offset
+    # losses, matching the MT5-truth net measure that tightens this figure.
     journal.log_record(record("W1", outcome=TradeOutcome.WIN, pnl=25.0,
                               opened=today, closed=NOW - timedelta(hours=1)))
     snap = RiskStateTracker(journal).snapshot(NOW, BALANCE)
-    assert snap.daily_loss_pct == pytest.approx(40.0 / BALANCE)  # 2%
+    assert snap.daily_loss_pct == pytest.approx(15.0 / BALANCE)  # net -15
 
 
 def test_weekly_includes_earlier_weekdays_but_not_last_week(journal):
