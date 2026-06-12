@@ -10,7 +10,19 @@ Phase 12: Live Demo Readiness — continuous service operational
 
 ## Current Task
 
-SMC-EXECUTION-003 (decision 2026-06-11-06, owner-directed): IMPLEMENTED.
+SMC-EXECUTION-008 (decision 2026-06-12-07): IMPLEMENTED — H8 zone
+consumption. An MT5-verified SL loss consumes its zone: for 30 min a new
+same-direction entry whose tactical stop sits within 8 USD of the
+violated stop level and does not clear it by max(ATR(M5), 1.0) is
+refused (ZONE_CONSUMED) with a re-entry plan. Pre-registered live test:
+trades 18/19 re-faded one zone 3 min apart, -34.90; winners 8/17
+(which cleared the violated level) stay allowed; distant prior losses
+(trade 6) are out of scope (D6 territory). Session notifies the
+pipeline on CLOSE_DETECTED reason=SL. 821 tests pass; safety passes.
+Service run 13 restarted 2026-06-12 ~13:3x UTC with SMC-EXECUTION-007
+doctrine + 25/day cap + H8.
+
+Previously: SMC-EXECUTION-003 (decision 2026-06-11-06, owner-directed): IMPLEMENTED.
 - EQUITY-SCALED SIZING replaces fixed challenge lots: tier 0.10/0.05 in
   setup_type selects 1.5%/1.0% of balance risked to the tactical stop;
   lot = floor(budget / loss_per_lot, step) — size compounds with equity

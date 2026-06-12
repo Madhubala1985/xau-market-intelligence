@@ -13,7 +13,19 @@ Phase 12: Live Demo Readiness — continuous service operational; FINAL
 LAST-CHANCE demo_challenge experiment ready
 
 ## Current Task ID:
-SMC-EXECUTION-007 (decision 2026-06-12-04): owner-directed decision-layer
+SMC-EXECUTION-008 (decision 2026-06-12-07): H8 zone consumption — an
+MT5-verified SL loss consumes its zone for 30 min; a same-direction
+re-entry must clear the violated stop level by max(ATR, 1.0) or it is
+refused (ZONE_CONSUMED). Evidence: trades 18/19 re-faded one zone 3 min
+apart (-34.90, pre-registered test); winners 8/17 cleared the level and
+stay allowed. 821 tests pass; safety passes. Service RUN 13 restarted
+2026-06-12 ~13:3x UTC (owner directive: full autonomous run/monitor/fix
+authority this session) with the SMC-EXECUTION-007 doctrine + 25/day
+owner cap + H8. Campaign account: fresh Exness demo (login ..63,
+Trial14, symbol XAUUSD — plain, not XAUUSDm), balance 1,956.81 at
+restart, trades_today=15/25, day -13.18 net.
+
+Previously: SMC-EXECUTION-007 (decision 2026-06-12-04): owner-directed decision-layer
 rebuild after the 14-trade live watch (balance 1,946.78, -2.7%; full
 evidence in reports/runtime/supervision_ledger.md). Doctrine now: D2
 stale-anchor guard, D3 trend-day consensus override, D5 counter-consensus
@@ -22,8 +34,6 @@ m5[:-1] environment — consolidation is NOT traded), H6b sweep freshness
 at the rejection extreme, H7 two-leg pyramid cap. Chassis (gateway/
 accounting/equity sizing/stops/trailing/brakes) unchanged — zero
 execution defects in 14 live trades. 814 tests pass; safety passes.
-Campaign account: fresh Exness demo (login ..63, Trial14, symbol XAUUSD
-— plain, not XAUUSDm), DAY_PAUSED until 2026-06-13 00:00 UTC.
 
 Previously: SMC-EXECUTION-003: equity-scaled risk sizing (1.0%/1.5% by tier,
 compounds with equity, 3% cap & all brakes unchanged) + per-account MT5

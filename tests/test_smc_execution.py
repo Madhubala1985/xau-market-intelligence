@@ -602,3 +602,73 @@ def test_sweep_freshness_uses_rejection_extreme_not_swept_level():
     smc = result.context.challenge
     assert smc["smc_anchor"] == "SWEEP_DISPLACEMENT"
     assert "rejected @" in result.decision.thesis or "rejected @" in smc["reason"]
+
+
+# -- H8: zone consumption after an SL loss (decision 2026-06-12-07) ------------
+# Live evidence 2026-06-12: trade 18 stopped at 4211.60 and trade 19 re-faded
+# the same zone 3 minutes later with a stop at 4211.65 — both lost (-34.90).
+# Winners 8 and 17 placed their stops well BEYOND the prior violated level
+# and must stay allowed; far-away prior losses (trade 6) are out of scope.
+
+def _approved_short(pipe):
+    result = pipe.decide(pipeline_input(m5_breakdown(3.0),
+                                        m1=m1_with_local_swing()))
+    assert result.approved, result.reason
+    return result
+
+
+def test_sl_loss_consumes_the_zone():
+    pipe = smc_pipeline(zones=[bearish_zone(ZoneKind.FAIR_VALUE_GAP)])
+    first = _approved_short(pipe)
+    pipe.note_stop_loss(Direction.SHORT, first.decision.stop_loss,
+                        first.decision.time_utc)
+    again = pipe.decide(pipeline_input(m5_breakdown(3.0),
+                                       m1=m1_with_local_swing()))
+    assert not again.approved
+    assert "ZONE_CONSUMED" in again.reason
+    smc = again.context.challenge
+    assert smc["waiting_for"] == "LOCAL_SWING"
+    assert smc["reentry_plan"]
+
+
+def test_reentry_clearing_the_consumed_level_is_allowed():
+    pipe = smc_pipeline(zones=[bearish_zone(ZoneKind.FAIR_VALUE_GAP)])
+    first = _approved_short(pipe)
+    # the violated level sits 6 USD below the new stop: cleared (trade 17/8)
+    pipe.note_stop_loss(Direction.SHORT, first.decision.stop_loss - 6.0,
+                        first.decision.time_utc)
+    again = pipe.decide(pipeline_input(m5_breakdown(3.0),
+                                       m1=m1_with_local_swing()))
+    assert again.approved, again.reason
+
+
+def test_consumed_level_expires_after_ttl():
+    pipe = smc_pipeline(zones=[bearish_zone(ZoneKind.FAIR_VALUE_GAP)])
+    first = _approved_short(pipe)
+    pipe.note_stop_loss(Direction.SHORT, first.decision.stop_loss,
+                        first.decision.time_utc - timedelta(minutes=31))
+    again = pipe.decide(pipeline_input(m5_breakdown(3.0),
+                                       m1=m1_with_local_swing()))
+    assert again.approved, again.reason
+
+
+def test_distant_consumed_level_is_out_of_scope():
+    # trade-6 analogue: the prior loss was ~20 USD away — D6 territory,
+    # not zone consumption.
+    pipe = smc_pipeline(zones=[bearish_zone(ZoneKind.FAIR_VALUE_GAP)])
+    first = _approved_short(pipe)
+    pipe.note_stop_loss(Direction.SHORT, first.decision.stop_loss + 20.0,
+                        first.decision.time_utc)
+    again = pipe.decide(pipeline_input(m5_breakdown(3.0),
+                                       m1=m1_with_local_swing()))
+    assert again.approved, again.reason
+
+
+def test_opposite_direction_loss_does_not_consume():
+    pipe = smc_pipeline(zones=[bearish_zone(ZoneKind.FAIR_VALUE_GAP)])
+    first = _approved_short(pipe)
+    pipe.note_stop_loss(Direction.LONG, first.decision.stop_loss,
+                        first.decision.time_utc)
+    again = pipe.decide(pipeline_input(m5_breakdown(3.0),
+                                       m1=m1_with_local_swing()))
+    assert again.approved, again.reason

@@ -3740,3 +3740,44 @@ tests/test_smc_accounting.py.
 
 ## Status:
 Accepted
+
+---
+
+## Decision ID:
+2026-06-12-07
+
+## Date:
+2026-06-12
+
+## Area:
+SMC execution doctrine (H8 zone consumption)
+
+## Decision:
+An MT5-verified SL loss CONSUMES its zone: for 30 minutes, a new entry in
+the same direction whose tactical stop sits within 8 USD of the violated
+stop level and does not clear it by max(ATR(M5), 1.0) is refused
+(ZONE_CONSUMED) with a re-entry plan. The session notifies the pipeline
+on every CLOSE_DETECTED reason=SL (note_stop_loss; advisory, never breaks
+close handling). In-memory only; a restart forgets the record.
+
+## Why:
+Pre-registered live test (supervision ledger, trade 19): trade 18 stopped
+at 4211.60 (11:47 UTC) and trade 19 re-faded the SAME zone 3 minutes
+later with a stop at 4211.65 — both lost (-34.90 on one zone in 6
+minutes). The ledger recorded "H8 churn test: lose => zone-consumption
+rule" BEFORE the outcome. Validation against all prior live re-entries:
+winners 8 and 17 cleared the prior violated stop by 7-8 USD (still
+allowed); trade 6's prior loss was ~18 USD away (out of proximity —
+that whipsaw case belongs to the D6 market-state gate).
+
+## Risk:
+Tighten-only entry guard; cannot widen stops, cannot create trades, does
+not touch brakes. Worst case: a valid re-entry is delayed up to 30 min
+or until its stop clears the violated level — by design.
+
+## Files Affected:
+src/strategy/smc_execution.py, src/execution/demo_session.py,
+tests/test_smc_execution.py, tests/test_smc_accounting.py.
+
+## Status:
+Accepted

@@ -568,3 +568,33 @@ def test_mt5_entries_today_enforce_the_daily_cap(tmp_path):
     assert outcome.risk.trades_today == 25
     assert outcome.stat.entry_action != "SENT"
     assert "trades today" in outcome.stat.entry_detail.lower()
+
+
+# -- H8: SL losses notify the pipeline's zone-consumption guard ----------------
+
+def test_sl_loss_notifies_pipeline_zone_consumption(tmp_path):
+    session, journal, fake = build_session(
+        tmp_path, FakeMT5Trading(), [approved_smc("smc-1"), no_trade()],
+    )
+    calls = []
+    session._pipeline.note_stop_loss = lambda *a: calls.append(a)
+    first = session.run_cycle()
+    fake.close_position(first.sent_ticket, -25.19, price=2317.5, reason=4)
+    session.run_cycle()
+    assert calls, "an SL loss must notify the pipeline"
+    direction, stop, when = calls[0]
+    assert direction is Direction.SHORT
+    assert stop == pytest.approx(2317.5)
+    assert when is not None
+
+
+def test_tp_win_does_not_consume_a_zone(tmp_path):
+    session, journal, fake = build_session(
+        tmp_path, FakeMT5Trading(), [approved_smc("smc-1"), no_trade()],
+    )
+    calls = []
+    session._pipeline.note_stop_loss = lambda *a: calls.append(a)
+    first = session.run_cycle()
+    fake.close_position(first.sent_ticket, 31.40, price=2310.0, reason=5)
+    session.run_cycle()
+    assert not calls, "a TP win must not consume any zone"

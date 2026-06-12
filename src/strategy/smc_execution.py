@@ -90,6 +90,17 @@ STALE_ANCHOR_ATR_MULT = 10.0
 CONFLICT_DISPLACEMENT = 1.3
 ANCHOR_DISPLACEMENT = 1.3  # sweep needs real displacement behind it
 
+# H8 zone consumption (decision 2026-06-12-07): an SL loss proves the market
+# trades through that invalidation. While the record is fresh, a new
+# same-direction entry whose stop sits near the violated level WITHOUT
+# clearing it is refused — re-fading the same zone minutes after it failed
+# pays twice for one piece of information. Live evidence: trades 18/19
+# (2026-06-12, -34.90 on one zone in 6 minutes, stops 4211.60/4211.65);
+# winners 8 and 17 both cleared the prior violated stop and stay allowed;
+# far-away levels (trade 6) are out of scope — that case belongs to D6.
+CONSUMED_STOP_TTL = timedelta(minutes=30)
+CONSUMED_STOP_PROXIMITY = MAX_STOP_ABSOLUTE
+
 _KILL_ZONES = {
     SessionType.LONDON, SessionType.NEW_YORK, SessionType.LONDON_NY_OVERLAP,
 }
@@ -170,8 +181,61 @@ class SmcExecutionPipeline:
         self._last_m5_time = None
         self._last_m1_time = None
         self._last_stop_price: Optional[float] = None
+        # H8: Direction -> (violated stop level, loss time). In-memory only
+        # (a restart forgets it; the TTL is 30 minutes).
+        self._consumed_stops: dict = {}
 
     # -- public ------------------------------------------------------------
+    def note_stop_loss(self, direction, stop_price, time_utc) -> None:
+        """H8: record an SL loss — that stop level is consumed (the market
+        just traded through it). Called by the session on CLOSE_DETECTED
+        reason=SL; only the most recent loss per direction is kept."""
+        if direction is None or stop_price is None:
+            return
+        self._consumed_stops[direction] = (float(stop_price), time_utc)
+
+    def _consumed_stop_block(
+        self, candidate: Direction, stop_price: float, atr5: float, now,
+    ) -> str:
+        """Reason string when the candidate re-fades a consumed zone;
+        empty when the entry is allowed."""
+        consumed = self._consumed_stops.get(candidate)
+        if consumed is None:
+            return ""
+        level, when = consumed
+        try:
+            expired = (
+                when is None or now is None
+                or (now - when) > CONSUMED_STOP_TTL
+            )
+        except TypeError:  # incomparable timestamps never wedge the scan
+            expired = True
+        if expired:
+            self._consumed_stops.pop(candidate, None)
+            return ""
+        if abs(stop_price - level) > CONSUMED_STOP_PROXIMITY:
+            return ""
+        clearance = max(atr5, 1.0)
+        cleared = (
+            stop_price > level + clearance
+            if candidate is Direction.SHORT
+            else stop_price < level - clearance
+        )
+        if cleared:
+            return ""
+        need = (
+            level + clearance if candidate is Direction.SHORT
+            else level - clearance
+        )
+        minutes = int(CONSUMED_STOP_TTL.total_seconds() // 60)
+        return (
+            f"ZONE_CONSUMED: a {candidate.value} stop at {level:.2f} was "
+            f"swept within the last {minutes} min and the new stop "
+            f"{stop_price:.2f} does not clear it (need beyond {need:.2f}) "
+            "— the zone is consumed; a re-entry needs fresh structure "
+            "beyond the violated level"
+        )
+
     def decide(self, inp: PipelineInput) -> PipelineResult:
         e = self._e
         now = inp.now or (
@@ -459,6 +523,20 @@ class SmcExecutionPipeline:
                 f"({stop_source}: {anchor.label} setup broken)"
             ),
         )
+
+        # -- H8 zone-consumption guard (decision 2026-06-12-07) ---------------
+        consumed_block = self._consumed_stop_block(
+            candidate, stop_price, atr5, now
+        )
+        if consumed_block:
+            return self._wait(
+                context, smc, consumed_block,
+                waiting="LOCAL_SWING",
+                plan=(
+                    "wait for structure beyond the consumed level or for "
+                    "it to go stale (30 min)"
+                ),
+            )
 
         # -- grade + fixed lot -------------------------------------------------
         grade = self._grade(in_killzone, anchor, displacement, mtf)

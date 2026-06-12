@@ -998,6 +998,19 @@ class SupervisedDemoSession:
                 f"source=MT5_HISTORY close_price={closed.close_price} "
                 f"reason={closed.close_reason} deals={closed.deal_count}",
             )
+            # H8 (decision 2026-06-12-07): an SL loss consumes its zone —
+            # the pipeline refuses an immediate same-direction re-fade whose
+            # stop does not clear the violated level.
+            if (
+                outcome is TradeOutcome.LOSS
+                and str(closed.close_reason).upper() == "SL"
+            ):
+                note = getattr(self._pipeline, "note_stop_loss", None)
+                if note is not None:
+                    try:
+                        note(record.direction, record.stop_loss, closed_at)
+                    except Exception:  # noqa: BLE001 - advisory only
+                        pass
 
     def _fetch_closed(self, ticket: int):
         """Verified MT5 close info; None when unverifiable (never zero)."""
