@@ -28,12 +28,14 @@ def test_liquidity_intel_is_continuous_and_uncapped():
     assert p.envelope == "liquidity_intel"
 
 
-def test_envelope_matches_the_standing_anchors():
+def test_envelope_is_aggressive_growth_mode():
+    # Owner directive 2026-06-15: throttles OFF, aggression in size/compounding.
     limits = get_profile("liquidity_intel").risk_limits("XAUUSDM")
-    assert limits.max_risk_per_trade == INTEL_MAX_RISK_PER_TRADE == 0.030
-    assert limits.max_daily_loss == INTEL_MAX_DAILY_LOSS == 0.05
-    assert limits.max_weekly_loss == INTEL_MAX_WEEKLY_LOSS == 0.10
-    assert limits.max_open_trades == INTEL_MAX_OPEN_POSITIONS == 3
+    assert limits.max_risk_per_trade == INTEL_MAX_RISK_PER_TRADE == 0.10
+    assert limits.max_daily_loss == INTEL_MAX_DAILY_LOSS == 1.0     # off
+    assert limits.max_weekly_loss == INTEL_MAX_WEEKLY_LOSS == 1.0   # off
+    assert limits.max_open_trades == INTEL_MAX_OPEN_POSITIONS == 5
+    assert limits.max_trades_per_day == 1000                        # off
 
 
 @pytest.mark.parametrize("name", sorted(RETIRED_PROFILES))

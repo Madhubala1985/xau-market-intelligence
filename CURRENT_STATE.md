@@ -10,6 +10,24 @@ Phase 13: Single-model rebuild — liquidity_intel (LIQUIDITY-INTEL-001)
 
 ## Current Task
 
+LIQUIDITY-INTEL-001 — UPDATE 2026-06-15 (AGGRESSIVE GROWTH MODE,
+owner-directed): owner directed removal of the throttling risk engine to
+chase $2k->$10k on DEMO. Implemented + evidence-checked:
+- REMOVED (throttles): daily-loss pause, weekly-loss stop, loss cooldown,
+  open-position cap (->5), per-day entry throttle relaxed.
+- AGGRESSIVE SIZE: per-trade risk 8% STRONG / 5% NORMAL (cap 10%),
+  compounding (was 1.5%/1.0%). This is the real $2k->$10k lever.
+- KEPT ABSOLUTE (owner's own rebuild non-negotiables): mandatory SL, no
+  martingale/averaging, MT5 truth, kill switch, demo-only.
+- EVIDENCE that forced one keep: the entries/day sweep (10d real history)
+  showed +2.43R (2/day), +2.30R (3/day), then NEGATIVE at 4+/day
+  (-2.69R) and unlimited (-1.07R). Overtrading destroys the edge, so the
+  per-day cadence is set to 3 (the most aggressive value that still makes
+  money), NOT unlimited. Final config replay: see
+  reports/runtime/liquidity_intel_replay.md. 864 tests pass.
+- Governor daily/weekly block MECHANISM retained in code (off in this
+  profile; covered by test_risk_governor) so it can be re-enabled.
+
 LIQUIDITY-INTEL-001 — UPDATE 2026-06-15 (OPTION 1, owner-directed): the
 first-pass FROM-SCRATCH posture engine FAILED its replay ship gate
 (real history 10d: -27.05R, 92 trades ~9/day, 18% win — it overtraded and

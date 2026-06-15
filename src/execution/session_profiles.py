@@ -36,16 +36,23 @@ POLICY_MAX_TRADES_PER_DAY = 6
 POLICY_MAX_OPEN_POSITIONS = 2
 POLICY_MAX_SPREAD_PRICE = 1.0
 
-# The single liquidity_intel envelope (owner's standing campaign anchors —
-# demo only, never weakened): 3%/trade survival cap, daily 5% net pause,
-# weekly 10% net stop, max 3 open, a 25/day survival CEILING (the engine's
-# quality bar governs the real cadence — there is no artificial fixed per-day
-# trade cap), spread <= 1.0. Real mode is forbidden for this envelope.
-INTEL_MAX_RISK_PER_TRADE = 0.030
-INTEL_MAX_DAILY_LOSS = 0.05
-INTEL_MAX_WEEKLY_LOSS = 0.10
-INTEL_MAX_TRADES_PER_DAY = 25
-INTEL_MAX_OPEN_POSITIONS = 3
+# The single liquidity_intel envelope — AGGRESSIVE GROWTH MODE (owner
+# directive 2026-06-15: $2k -> $10k on DEMO; remove the throttles). The
+# survival circuit-breakers are OFF and aggression goes into position size +
+# compounding. DEMO ONLY — real mode forbidden for this envelope.
+#   - per-trade risk ceiling 10% (the planner sizes STRONG 8% / NORMAL 5%);
+#   - daily/weekly loss circuit-breakers DISABLED (1.0 = 100%, i.e. only a
+#     full wipe stops it — there is no daily pause / weekly stop);
+#   - trades/day and open-position caps lifted (the engine's quality bar +
+#     trade memory still preserve the edge — those are not throttles);
+#   - spread cap kept (execution quality, not a throttle).
+# Structural safety is UNCHANGED and absolute: mandatory stop-loss, no
+# martingale/grid/averaging-down, MT5 truth, kill switch, demo-only.
+INTEL_MAX_RISK_PER_TRADE = 0.10
+INTEL_MAX_DAILY_LOSS = 1.0
+INTEL_MAX_WEEKLY_LOSS = 1.0
+INTEL_MAX_TRADES_PER_DAY = 1000
+INTEL_MAX_OPEN_POSITIONS = 5
 
 PROFILE_NAME = "liquidity_intel"
 INTEL_PROFILE_NAMES = frozenset({PROFILE_NAME})
@@ -169,16 +176,16 @@ PROFILES: Dict[str, SessionProfile] = {
             name=PROFILE_NAME,
             description=(
                 "The single autonomous XAU/USD liquidity-intelligence engine "
-                "(LIQUIDITY-INTEL-001). DEMO ONLY — never for real funds. The "
-                "engine classifies the market POSTURE each cycle "
-                "(TREND/LIQUIDITY_REVERSAL/RANGE_SCALP/WAIT/FLAT) from the "
-                "full D1/H4/H1/M15/M5/M1 picture, liquidity map, sweeps, "
-                "structure, FVG/OB and premium/discount, and decides for "
-                "itself whether to engage, wait, or stay flat. Stops sit "
-                "beyond the engineered liquidity (never at the naked pool); "
-                "equity-scaled sizing; quality-bar gated; MT5 is the only "
-                "source of truth for P&L. One execution path. Use "
-                "scripts/trading_service.py --profile liquidity_intel."
+                "(LIQUIDITY-INTEL-001) in AGGRESSIVE GROWTH MODE ($2k->$10k, "
+                "owner directive 2026-06-15). DEMO ONLY — never for real "
+                "funds. The day-narrative brain decides for itself; aggression "
+                "is in size + compounding (STRONG 8% / NORMAL 5% per trade, up "
+                "to 10% cap). The daily/weekly loss circuit-breakers and the "
+                "trades/day + open-position throttles are OFF; the quality bar "
+                "and trade memory still preserve the edge. Structural safety "
+                "kept absolute: mandatory stop-loss, no martingale/averaging, "
+                "MT5 truth, kill switch. Use scripts/trading_service.py "
+                "--profile liquidity_intel."
             ),
             duration_minutes=None,
             poll_seconds=30,

@@ -553,10 +553,13 @@ class SmcExecutionPipeline:
         if lot is None:
             return self._wait(context, smc, lot_why, waiting="LOCAL_SWING",
                               plan="wait for a tighter local invalidation")
-        # Decision 2026-06-11-06: the tier lot selects the planner's equity
-        # risk percentage; display the BUDGETED risk (the planner's floored
-        # lot risks at most this), never the obsolete fixed-lot dollars.
-        risk_pct = 0.015 if lot == LOT_STRONG else 0.010
+        # The tier lot selects the planner's equity risk percentage; display
+        # the BUDGETED risk. Aggressive growth mode (2026-06-15): STRONG 8% /
+        # NORMAL 5% (matches IntelTradePlanner.RISK_PCT_*), but never above the
+        # envelope's per-trade cap — so the engine respects whatever limits it
+        # is constructed with.
+        tier_pct = 0.08 if lot == LOT_STRONG else 0.05
+        risk_pct = min(tier_pct, self._limits.max_risk_per_trade)
         budget_usd = equity * risk_pct
         est_lot = max(
             int(budget_usd / (100.0 * (stop_distance + spread)) / 0.01) * 0.01,

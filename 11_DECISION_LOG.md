@@ -48,6 +48,72 @@ Proposed / Accepted / Rejected / Superseded
 # Latest Decisions
 
 ## Decision ID:
+2026-06-15-02
+
+## Date:
+2026-06-15
+
+## Area:
+Risk / Strategy (owner-directed)
+
+## Decision:
+AGGRESSIVE GROWTH MODE for the single liquidity_intel profile (DEMO ONLY,
+goal $2k->$10k). Remove the THROTTLING risk controls and put aggression
+into position size + compounding:
+- per-trade risk raised to 8% STRONG / 5% NORMAL (cap 10%), was 1.5%/1.0%;
+- daily-loss pause, weekly-loss stop, loss cooldown, and open-position cap
+  (->5) DISABLED;
+- per-day entry cadence set to 3 (the most aggressive value that still
+  makes money — see Evidence), not unlimited.
+KEPT ABSOLUTE (the owner's own LIQUIDITY-INTEL rebuild non-negotiables):
+mandatory stop-loss, no martingale/grid/averaging-down, MT5 accounting as
+the only source of truth, kill switch, demo-only (real forbidden).
+
+## Reason:
+Owner directive (repeated, explicit) to remove the risk engine and trade
+aggressively for the first $10k. It is a DEMO account the owner controls;
+the survival circuit-breakers are the owner's to remove. Aggression that
+actually compounds $2k->$10k is bigger SIZE, not more trades.
+
+## Evidence:
+Entries/day sweep on 10 days of real XAUUSD history (8%/5% sizing,
+quality 0.70): net R +2.43 (2/day), +2.30 (3/day), -2.69 (4/day), -5.98
+(6/day), -1.07 (unlimited). Overtrading destroys the edge (same failure
+as the from-scratch posture engine: -27R/92 trades). So the per-day cap
+is load-bearing edge, kept at 3; the loss/cooldown breakers do NOT affect
+per-trade edge and were removed per the directive. 864 tests pass.
+
+## Alternatives Considered:
+Fully uncapped entries (owner's literal ask) — REJECTED on evidence
+(loses on every window); offered to the owner as an override if insisted.
+Removing mandatory SL / no-averaging — REFUSED (the owner's own rebuild
+non-negotiables; unbounded per-trade loss is instant ruin with no upside).
+
+## Risk:
+8%/trade with no daily/weekly stop means a losing streak draws the demo
+account down hard (replay max drawdown ~8.5R ~= deep % drawdown at 8%
+sizing); the edge is small and measured on one short window under punitive
+fills. No config guarantees $10k.
+
+## Mitigation:
+Mandatory SL bounds each trade; the quality bar + 3/day cadence keep the
+positive edge; equity-scaled sizing shrinks the lot as the balance falls;
+kill switch; demo-only; the daily/weekly breaker MECHANISM is retained in
+code (test_risk_governor) and can be re-enabled. Tuned only by replay.
+
+## Files Affected:
+src/execution/session_profiles.py (aggressive envelope),
+src/execution/intel_planner.py (8%/5% tiers, cap-bounded, max-open 10),
+src/strategy/liquidity_intel.py (3/day cadence), src/strategy/
+smc_execution.py (display risk, cap-bounded), scripts/trading_service.py
+(loss cooldown disabled), tests updated, 03_RISK_POLICY.md, this log.
+
+## Status:
+Accepted (IMPLEMENTED; live demo gated by the final replay ship bar).
+
+---
+
+## Decision ID:
 2026-06-15-01
 
 ## Date:

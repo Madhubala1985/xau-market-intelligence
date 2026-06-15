@@ -21,6 +21,13 @@ anchors absolute. IMPLEMENTED on branch rebuild/liquidity_intel; 810
 tests pass; all modules compile. See 27_LIQUIDITY_INTEL_DESIGN.md.
 
 State at handoff (2026-06-15):
+- AGGRESSIVE GROWTH MODE (decision 2026-06-15-02, owner-directed, DEMO):
+  throttles removed (daily/weekly loss stops, cooldown, open cap->5,
+  per-day cadence relaxed to 3); per-trade size 8%/5% (cap 10%),
+  compounding. KEPT: mandatory SL, no martingale/averaging, MT5 truth,
+  kill switch, demo-only. Cadence pinned at 3/day by the entries sweep
+  (positive to 3/day: +2.30R; negative at 4+/day) — overtrading kills the
+  edge. 03_RISK_POLICY.md updated; 864 tests pass.
 - OPTION 1 SHIPPED: the from-scratch posture engine FAILED its replay
   ship gate (-27R/10d, 92 trades, 18% win). The liquidity_intel ENGINE is
   now the proven smc_v2 day-narrative brain on the same single path

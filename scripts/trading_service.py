@@ -228,15 +228,17 @@ def main() -> int:
             kill_switch=kill_switch,
             max_orders=profile.max_orders,
             profile_name=profile.name,
-            # Adaptive Demo Risk Policy: this is the STATIC ceiling the
-            # pipeline/governor enforce; the AdaptiveRiskEngine's per-phase
-            # ceilings and evidence budget decide the actual risk below it.
+            # Aggressive growth mode (owner directive 2026-06-15): the envelope
+            # ceiling is the per-trade risk cap; the planner sizes 8%/5% below
+            # it and compounds. Daily/weekly limits are 1.0 (circuit-breakers
+            # off) and the loss cooldown is disabled — no throttling.
             risk_pct=limits.max_risk_per_trade,
             exposure_governor=exposure_governor,
             hard_max_trades=limits.max_trades_per_day,
             hard_max_open=limits.max_open_trades,
             max_daily_loss=limits.max_daily_loss,
             max_weekly_loss=limits.max_weekly_loss,
+            loss_cooldown_losses=10 ** 9,
         )
 
         now = datetime.now(timezone.utc)

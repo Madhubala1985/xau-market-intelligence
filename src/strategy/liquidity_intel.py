@@ -45,11 +45,17 @@ from src.strategy.smc_v2 import SmcV2Pipeline
 # Single profile identity.
 PROFILE_NAME = "liquidity_intel"
 
-# Shipped defaults (the smc_v2 maximum-selectivity config that produced the
-# only positive replay; +7.0R/8.5mo, +8.16R unseen validation days).
+# AGGRESSIVE GROWTH MODE defaults (owner directive 2026-06-15, DEMO $2k->$10k).
+# Aggression is in position size (intel_planner: 8%/5% per trade) + compounding.
+# The per-day cadence is set to the MOST AGGRESSIVE value that still makes
+# money on real history: the 2026-06-15 entries/day sweep showed net R +2.43
+# (2/day) and +2.30 (3/day), then it goes NEGATIVE at 4+/day (-2.69) and
+# unlimited (-1.07) — overtrading destroys the edge. 3/day is the chosen
+# sweet spot (~50% more trades than 2/day, still positive). The quality bar is
+# the edge and is kept. Tune ONLY by replay, never live.
 DEFAULT_QUALITY_BAR = 0.70
 DEFAULT_STRONG_BAR = 0.78
-DEFAULT_MAX_ENTRIES_PER_DAY = 2
+DEFAULT_MAX_ENTRIES_PER_DAY = 3
 DEFAULT_TREND_TARGET_R = 3.0
 
 

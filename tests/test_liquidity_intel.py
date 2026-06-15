@@ -70,10 +70,13 @@ def test_engine_is_the_proven_day_narrative_brain():
     assert eng.threshold_profile == PROFILE_NAME
 
 
-def test_shipped_selectivity_knobs_are_institutional():
+def test_aggressive_cadence_is_the_max_profitable_setting():
     eng = make_liquidity_intel_pipeline(SYM)
-    # the brain's OWN cadence cap is far tighter than the 25/day envelope.
-    assert eng._max_entries_per_day == DEFAULT_MAX_ENTRIES_PER_DAY == 2
+    # the entries/day sweep (2026-06-15) put the edge at +2.43R (2/day) /
+    # +2.30R (3/day), NEGATIVE at 4+/day — so 3/day is the most aggressive
+    # cadence that still makes money.
+    assert eng._max_entries_per_day == DEFAULT_MAX_ENTRIES_PER_DAY == 3
+    # the quality bar (the EDGE) is kept.
     assert eng._quality_bar == DEFAULT_QUALITY_BAR == 0.70
 
 

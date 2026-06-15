@@ -6,6 +6,25 @@ This file defines the risk policy for the XAU/USD adaptive trading intelligence 
 
 Risk control has final authority. No signal, confidence score, model output, Claude suggestion, backtest result, futures confirmation, or order-flow proxy may override risk protection.
 
+## AGGRESSIVE GROWTH MODE — DEMO ONLY (owner directive, decision 2026-06-15-02)
+
+For the single `liquidity_intel` DEMO profile only, the owner has directed an
+aggressive growth posture ($2k -> $10k). This OVERRIDES the conservative demo
+caps below FOR THAT PROFILE ONLY and is recorded here so policy matches code:
+
+- DISABLED throttles: daily-loss pause, weekly-loss stop, loss cooldown,
+  per-day trade cap, open-position cap (raised to 5).
+- AGGRESSIVE sizing: 8% (STRONG) / 5% (NORMAL) per trade, 10% ceiling,
+  compounding — the growth lever is size, not trade frequency.
+- Per-day cadence capped at 3 by REPLAY EVIDENCE (overtrading goes negative);
+  the quality bar is kept (it is the edge).
+
+ABSOLUTE and UNCHANGED (never weakened, real-money policy untouched):
+mandatory stop-loss, no martingale/grid/averaging-down, MT5 accounting as the
+only source of truth, kill switch, demo-only. REAL trading remains FORBIDDEN;
+this aggressive envelope is forbidden for real mode. The daily/weekly
+circuit-breaker mechanism remains in the code and can be re-enabled.
+
 ## Core Risk Philosophy
 
 The system must survive first, protect capital second, seek profit third, and scale only after evidence.

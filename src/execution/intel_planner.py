@@ -50,11 +50,14 @@ from src.risk.news_guard import NewsRiskState
 from src.risk.pyramiding import PyramidAction, PyramidResult
 from src.strategy.scoring import ConfidenceResult
 
-# Risk TIER lots (parsed from setup_type). They select the EQUITY RISK TIER
-# (0.10 => 1.5%, 0.05 => 1.0%); the broker lot is derived from the stop.
+# Risk TIER lots (parsed from setup_type). They select the EQUITY RISK TIER;
+# the broker lot is derived from the stop so size compounds with equity.
+# AGGRESSIVE GROWTH MODE (owner directive 2026-06-15, DEMO): STRONG 8% /
+# NORMAL 5% per trade, bounded by the 10% survival cap. Mandatory SL keeps
+# each trade's loss bounded; aggression rides position size + compounding.
 TIER_LOTS = (0.05, 0.10)
-RISK_PCT_NORMAL = 0.010
-RISK_PCT_STRONG = 0.015
+RISK_PCT_NORMAL = 0.05
+RISK_PCT_STRONG = 0.08
 
 _LOT_PATTERN = re.compile(r"lot=(\d+\.\d+)")
 
@@ -81,8 +84,10 @@ class IntelTradePlanner:
         if mode is not TradingMode.DEMO:
             raise ValueError(
                 "IntelTradePlanner is DEMO-only; real mode is forbidden")
-        if limits.max_open_trades > 3:
-            raise ValueError("liquidity_intel allows at most 3 open positions")
+        # Aggressive growth mode lifts the open-position throttle; structural
+        # safety (mandatory SL, no averaging-down) is enforced per-trade below.
+        if limits.max_open_trades > 10:
+            raise ValueError("liquidity_intel allows at most 10 open positions")
         self._limits = limits
         self._spec = spec or SymbolSpec()
         self._governor = governor or RiskGovernor(limits)
@@ -277,8 +282,12 @@ class IntelTradePlanner:
         stop."""
         spec = self._spec
         requested = self._requested_tier(decision)
-        risk_pct = (RISK_PCT_STRONG if requested >= max(TIER_LOTS) - 1e-9
+        tier_pct = (RISK_PCT_STRONG if requested >= max(TIER_LOTS) - 1e-9
                     else RISK_PCT_NORMAL)
+        # Never budget above the envelope's per-trade cap, so the planner
+        # respects whatever limits it is constructed with (aggressive 10% live,
+        # tighter in tests).
+        risk_pct = min(tier_pct, self._limits.max_risk_per_trade)
         effective_stop = (abs(decision.entry_price - decision.stop_loss)
                           + max(spread_price, 0.0))
         loss_per_lot = spec.loss_per_lot(effective_stop)

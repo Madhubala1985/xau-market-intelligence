@@ -314,33 +314,38 @@ def test_kill_switch_stops_cleanly(tmp_path):
     assert payload["stop_reason"] == "KILL_SWITCH"
 
 
-def test_weekly_loss_risk_shutdown_stops_cleanly(tmp_path):
+def test_aggressive_mode_does_not_weekly_stop(tmp_path):
+    # AGGRESSIVE GROWTH MODE (owner directive 2026-06-15): the weekly-loss
+    # circuit-breaker is OFF (limit 1.0). A 12.5% weekly loss does NOT stop the
+    # service. (The breaker MECHANISM is still covered at the governor level in
+    # test_risk_governor.py.)
     journal = TradeJournal(tmp_path / "journal.jsonl")
     earlier = NOW - timedelta(hours=2)
     journal.log_record(TradeRecord(
         record_id="L-1", created_at_utc=earlier, symbol="XAUUSDM",
         direction=Direction.LONG, outcome=TradeOutcome.LOSS, pnl=-250.0,
         opened_at_utc=earlier, closed_at_utc=earlier,
-    ))  # -250 on a 2000 balance = 12.5% weekly loss (limit 10%)
+    ))  # -250 on a 2000 balance = 12.5% weekly loss; breaker OFF
     service, *_ , stream = make_service(
-        tmp_path, results=[no_trade_result()] * 5, journal=journal,
-        max_cycles=5,
+        tmp_path, results=[no_trade_result()] * 3, journal=journal,
+        max_cycles=3,
     )
     report = service.run()
-    assert report.stop_reason == StopReason.RISK_SHUTDOWN
-    assert report.cycles == 1
-    assert "weekly loss" in report.detail
-    assert "SERVICE STOPPED: RISK_SHUTDOWN" in stream.getvalue()
+    assert report.stop_reason == StopReason.MAX_CYCLES  # did NOT stop
+    assert report.cycles == 3
+    assert "RISK_SHUTDOWN" not in stream.getvalue()
 
 
-def test_daily_loss_pauses_but_service_keeps_running(tmp_path):
+def test_aggressive_mode_does_not_daily_pause(tmp_path):
+    # AGGRESSIVE GROWTH MODE: the daily-loss pause is OFF (limit 1.0). A 6% day
+    # does NOT pause new entries.
     journal = TradeJournal(tmp_path / "journal.jsonl")
     earlier = NOW - timedelta(hours=2)
     journal.log_record(TradeRecord(
         record_id="L-1", created_at_utc=earlier, symbol="XAUUSDM",
         direction=Direction.LONG, outcome=TradeOutcome.LOSS, pnl=-120.0,
         opened_at_utc=earlier, closed_at_utc=earlier,
-    ))  # -120 = 6% daily (limit 5%) but only 6% weekly (limit 10%)
+    ))  # -120 = 6% daily; breaker OFF
     service, *_ , stream = make_service(
         tmp_path, results=[no_trade_result()] * 2, journal=journal,
         max_cycles=2,
@@ -348,8 +353,7 @@ def test_daily_loss_pauses_but_service_keeps_running(tmp_path):
     report = service.run()
     assert report.stop_reason == StopReason.MAX_CYCLES  # did NOT stop
     assert report.cycles == 2
-    out = stream.getvalue()
-    assert "DAY_PAUSED" in out
+    assert "DAY_PAUSED" not in stream.getvalue()
 
 
 def test_ctrl_c_stops_cleanly(tmp_path):
