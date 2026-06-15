@@ -391,14 +391,14 @@ class ProgressPrinter:
             f"local_structure_updated={ch.get('local_structure_updated')}"
         )
         self._line(f"  htf_context={ch.get('htf_context')}")
-        # LIQUIDITY-INTEL-001: posture-driven autonomy + full SMC context.
-        if ch.get("posture") or ch.get("narrative"):
+        # LIQUIDITY-INTEL-001: the day-narrative brain's reasoning.
+        if ch.get("narrative"):
+            self._line(f"  narrative={ch.get('narrative')}")
+        if ch.get("playbook") or ch.get("quality"):
             self._line(
-                f"  posture={ch.get('posture', '-')} "
-                f"narrative={ch.get('narrative', '-')}"
+                f"  playbook={ch.get('playbook', '-')} "
+                f"quality={ch.get('quality', '-')}"
             )
-        if ch.get("quality"):
-            self._line(f"  quality={ch.get('quality')}")
         self._line(
             f"  killzone={ch.get('killzone')} "
             f"liquidity_context={ch.get('liquidity_context')} "

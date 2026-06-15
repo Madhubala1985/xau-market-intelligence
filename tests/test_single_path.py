@@ -24,15 +24,31 @@ def test_retired_profiles_cannot_run(name):
         get_profile(name)
 
 
-@pytest.mark.parametrize("module", [
-    "src.strategy.smc_v2",
-    "src.strategy.smc_execution",
-    "src.strategy.day_narrative",
-    "src.execution.challenge_planner",
-])
-def test_retired_modules_are_deleted(module):
+def test_dual_planner_module_is_deleted():
+    """The fixed-lot ChallengeTradePlanner path is gone; IntelTradePlanner is
+    the one planner."""
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module(module)
+        importlib.import_module("src.execution.challenge_planner")
+
+
+def test_v2_sweep_scripts_are_deleted():
+    """The per-profile sweep/longhaul scripts (a second decision pathway's
+    tooling) are gone; the one ship gate is scripts/decision_replay.py."""
+    import os
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for gone in ("scripts/v2_sweep.py", "scripts/v2_longhaul.py",
+                 "scripts/demo_session_run.py"):
+        assert not os.path.exists(os.path.join(repo, gone))
+
+
+def test_the_one_engine_is_the_proven_brain_on_the_single_path():
+    """The single engine composes the validated day-narrative brain (option 1)
+    rather than re-deriving an unproven one — restored modules are INTERNALS of
+    the one engine, not selectable profiles."""
+    from src.strategy.liquidity_intel import LiquidityIntelEngine
+    from src.strategy.smc_v2 import SmcV2Pipeline
+
+    assert issubclass(LiquidityIntelEngine, SmcV2Pipeline)
 
 
 def test_service_builds_one_pipeline_and_one_planner():

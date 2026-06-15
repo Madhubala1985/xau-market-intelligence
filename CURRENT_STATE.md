@@ -10,6 +10,22 @@ Phase 13: Single-model rebuild — liquidity_intel (LIQUIDITY-INTEL-001)
 
 ## Current Task
 
+LIQUIDITY-INTEL-001 — UPDATE 2026-06-15 (OPTION 1, owner-directed): the
+first-pass FROM-SCRATCH posture engine FAILED its replay ship gate
+(real history 10d: -27.05R, 92 trades ~9/day, 18% win — it overtraded and
+lost at every selectivity). Per owner direction, the single liquidity_intel
+ENGINE was rebuilt around the only logic with a positive replay record —
+the smc_v2 day-narrative brain — on the SAME clean single path
+(LiquidityIntelEngine now subclasses SmcV2Pipeline; smc_execution/smc_v2/
+day_narrative are INTERNAL to the one engine, not selectable profiles; the
+planner/profile/path/anchors are unchanged). RE-RUN ship gate (same 10d
+real history): net R +2.43 over 23 trades (~2/day), 39% win, DD 6.3R ->
+SHIP: YES (reports/runtime/liquidity_intel_replay.md). 864 tests pass.
+Shipped knobs: quality_bar 0.70, 2 entries/day, 3R trend targets.
+Honest caveat: small sample/one window under punitive fills; the broader
+smc_v2 validation was +7.0R/8.5mo. Below the original Current-Task text
+(the from-scratch posture description) is SUPERSEDED by this update.
+
 LIQUIDITY-INTEL-001 (owner-directed, 2026-06-15): FULL REBUILD into ONE
 clean autonomous XAU/USD model. Every prior decision profile
 (demo_challenge, smc_challenge, smc_v2) and the dual/institutional

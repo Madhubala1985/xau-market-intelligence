@@ -293,12 +293,27 @@ _TABLE: Dict[str, dict] = {
         test_file="test_intel_planner.py", test_note="", **_MT5_BOUNDARY),
     "src.strategy.liquidity_intel": dict(
         layer="strategy",
-        summary="the single autonomous decision engine: posture model "
-                "(TREND/LIQUIDITY_REVERSAL/RANGE_SCALP/WAIT/FLAT), protected "
-                "stops beyond engineered liquidity, quality bar "
-                "(LIQUIDITY-INTEL-001; replay-gated)",
+        summary="the single autonomous decision engine: the day-narrative "
+                "brain re-branded for --profile liquidity_intel "
+                "(LIQUIDITY-INTEL-001 option 1; replay-gated)",
         test_file="test_liquidity_intel.py", test_note="",
         **_PURE_SHADOW_READY),
+    "src.strategy.smc_execution": dict(
+        layer="strategy",
+        summary="A+B+C+D gate chassis (HTF+liquidity+anchor+trigger, tactical "
+                "stops) — INTERNAL base of the liquidity_intel engine",
+        test_file="test_smc_execution.py", test_note="", **_PURE_SHADOW_READY),
+    "src.strategy.day_narrative": dict(
+        layer="strategy",
+        summary="day-narrative state machine + conviction ledger — INTERNAL to "
+                "the liquidity_intel engine",
+        test_file="test_day_narrative.py", test_note="",
+        **_PURE_SHADOW_READY),
+    "src.strategy.smc_v2": dict(
+        layer="strategy",
+        summary="day-narrative brain (playbooks, trade memory, quality score) "
+                "— the decision logic of the liquidity_intel engine",
+        test_file="test_smc_v2.py", test_note="", **_PURE_SHADOW_READY),
     "src.execution.demo_session": dict(
         layer="execution",
         summary="supervised demo session loop (DEMO-002; gateway-only orders)",

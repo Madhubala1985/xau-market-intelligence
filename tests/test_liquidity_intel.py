@@ -1,39 +1,35 @@
-"""LiquidityIntelEngine tests (LIQUIDITY-INTEL-001).
+"""LiquidityIntelEngine tests (LIQUIDITY-INTEL-001, option 1).
 
-Covers the autonomy + safety requirements:
-- the stop is placed BEYOND the engineered liquidity pool, never at it;
-- a stop that cannot be protected within budget returns None (engine WAITs);
-- all six timeframes are consumed (not just printed);
-- news risk / featureless tape produce FLAT / WAIT with an explicit re-arm
-  reason (never a silent permanent block);
-- the consumed-stop (H8) guard refuses re-fading a just-swept level;
-- the reclaim detector only fires when the reclaim holds.
+The single engine is the proven day-narrative brain (SmcV2Pipeline) re-branded
+for the one profile. Deep decision logic is covered by test_smc_v2.py and
+test_smc_execution.py; here we assert the single-path contract:
+- it IS the proven brain (composition, not a from-scratch re-derivation);
+- decide() runs end-to-end and the output is branded liquidity_intel;
+- all six timeframes feed the decision (htf_context), the engine WAITs with a
+  reason rather than going silent, and news/dangerous conditions block;
+- the note_stop_loss trade-memory hook is wired.
 """
 
 from datetime import datetime, timedelta, timezone
 
-from src.data.enums import BrokerConnectionStatus, Direction, Timeframe
+from src.data.enums import BrokerConnectionStatus, Direction
 from src.data.schemas import BrokerState, Candle
-from src.liquidity.liquidity_map import (
-    LiquidityKind,
-    LiquidityLevel,
-    LiquidityMap,
-    LiquiditySide,
-)
-from src.liquidity.sweep import SweepEvent, SweepStatus
 from src.strategy.liquidity_intel import (
+    DEFAULT_MAX_ENTRIES_PER_DAY,
+    DEFAULT_QUALITY_BAR,
     PROFILE_NAME,
-    Posture,
+    LiquidityIntelEngine,
+    make_intel_limits,
     make_liquidity_intel_pipeline,
 )
 from src.strategy.pipeline import PipelineInput
-from src.structure.market_structure import Bias
+from src.strategy.smc_v2 import SmcV2Pipeline
 
 NOW = datetime(2026, 6, 15, 13, 0, tzinfo=timezone.utc)
 SYM = "XAUUSD"
 
 
-def _candle(tf, t, o, h, l, c, v=500):
+def _candle(tf, t, o, h, l, c, v=400):
     return Candle(symbol=SYM, timeframe=tf, broker_time=t, time_utc=t,
                   open=o, high=h, low=l, close=c, tick_volume=v)
 
@@ -56,154 +52,78 @@ def _broker(balance=2000.0, open_positions=0):
 
 
 def _input(**kw):
-    m5 = kw.pop("m5", _series("5M", 120, 3300, 5, 0.0, 1.2))
     return PipelineInput(
-        symbol="XAUUSDm", exec_candles=m5,
-        daily_candles=kw.pop("d1", _series("1D", 30, 2500, 1440, 5.0, 20.0)),
-        h4_candles=kw.pop("h4", _series("4H", 40, 2900, 240, 2.0, 8.0)),
-        m15_candles=kw.pop("m15", _series("15M", 80, 3250, 15, 0.5, 2.0)),
-        h1_candles=kw.pop("h1", _series("1H", 60, 3100, 60, 1.0, 4.0)),
-        m1_candles=kw.pop("m1", _series("1M", 60, 3380, 1, 0.0, 0.5)),
-        broker=kw.pop("broker", _broker()), current_spread=kw.pop("spread", 0.3),
-        now=NOW, **kw)
+        symbol="XAUUSDm",
+        exec_candles=kw.pop("m5", _series("5M", 120, 3300, 5, 0.0, 1.2)),
+        daily_candles=_series("1D", 30, 2500, 1440, 5.0, 20.0),
+        h4_candles=_series("4H", 40, 2900, 240, 2.0, 8.0),
+        m15_candles=_series("15M", 80, 3250, 15, 0.5, 2.0),
+        h1_candles=_series("1H", 60, 3100, 60, 1.0, 4.0),
+        m1_candles=_series("1M", 60, 3380, 1, 0.0, 0.5),
+        broker=_broker(), current_spread=kw.pop("spread", 0.3), now=NOW, **kw)
 
 
-# -- the protected-stop doctrine (deterministic) ---------------------------
-
-def _engine():
-    return make_liquidity_intel_pipeline(SYM)
-
-
-def test_short_stop_is_pushed_beyond_a_buy_side_pool():
-    """A SHORT entry at 3350 with invalidation just above at 3352; a resting
-    buy-side pool sits at 3353. The stop MUST end up beyond 3353, not at the
-    naked 3352 swing where the pool would be hunted."""
-    eng = _engine()
-    pool = LiquidityLevel(kind=LiquidityKind.EQUAL_HIGHS,
-                          side=LiquiditySide.BUY_SIDE, price=3353.0,
-                          time_utc=NOW)
-    lmap = LiquidityMap(levels=(pool,))
-    result = eng._protect_stop_from_pool(
-        Direction.SHORT, entry=3350.0, base_level=3352.0, atr5=2.0,
-        spread=0.3, liquidity_map=lmap)
-    assert result is not None
-    stop_price, distance = result
-    assert stop_price > 3353.0          # beyond the pool
-    assert stop_price > 3350.0          # correct side of entry for a SHORT
-    assert distance > 0
+def test_engine_is_the_proven_day_narrative_brain():
+    eng = make_liquidity_intel_pipeline(SYM)
+    assert isinstance(eng, LiquidityIntelEngine)
+    assert isinstance(eng, SmcV2Pipeline)          # composed, not re-derived
+    assert eng.threshold_profile == PROFILE_NAME
 
 
-def test_long_stop_is_pushed_below_a_sell_side_pool():
-    eng = _engine()
-    pool = LiquidityLevel(kind=LiquidityKind.EQUAL_LOWS,
-                          side=LiquiditySide.SELL_SIDE, price=3347.0,
-                          time_utc=NOW)
-    lmap = LiquidityMap(levels=(pool,))
-    result = eng._protect_stop_from_pool(
-        Direction.LONG, entry=3350.0, base_level=3348.0, atr5=2.0,
-        spread=0.3, liquidity_map=lmap)
-    assert result is not None
-    stop_price, _ = result
-    assert stop_price < 3347.0          # beyond (below) the pool
-    assert stop_price < 3350.0
+def test_shipped_selectivity_knobs_are_institutional():
+    eng = make_liquidity_intel_pipeline(SYM)
+    # the brain's OWN cadence cap is far tighter than the 25/day envelope.
+    assert eng._max_entries_per_day == DEFAULT_MAX_ENTRIES_PER_DAY == 2
+    assert eng._quality_bar == DEFAULT_QUALITY_BAR == 0.70
 
 
-def test_unprotectable_stop_returns_none_so_engine_waits():
-    eng = _engine()
-    lmap = LiquidityMap(levels=())
-    # base level 40 USD away -> distance far beyond the 8 USD ceiling.
-    result = eng._protect_stop_from_pool(
-        Direction.SHORT, entry=3350.0, base_level=3390.0, atr5=1.0,
-        spread=0.3, liquidity_map=lmap)
-    assert result is None
+def test_envelope_is_the_single_anchor_set():
+    limits = make_intel_limits(SYM)
+    assert limits.max_risk_per_trade == 0.030
+    assert limits.max_daily_loss == 0.05
+    assert limits.max_weekly_loss == 0.10
+    assert limits.max_open_trades == 3
 
 
-def test_wrong_side_base_level_is_rejected():
-    eng = _engine()
-    lmap = LiquidityMap(levels=())
-    # a SHORT cannot have its invalidation BELOW entry.
-    assert eng._protect_stop_from_pool(
-        Direction.SHORT, entry=3350.0, base_level=3349.0, atr5=1.0,
-        spread=0.3, liquidity_map=lmap) is None
+def test_decide_runs_and_is_branded_liquidity_intel():
+    eng = make_liquidity_intel_pipeline(SYM)
+    ch = eng.decide(_input()).context.challenge
+    assert ch["profile"] == PROFILE_NAME
+    assert ch["mode"] == PROFILE_NAME
+    # day-narrative reasoning is present.
+    assert "narrative" in ch
 
-
-# -- reclaim detection ------------------------------------------------------
-
-def test_reclaim_only_fires_when_the_reclaim_holds():
-    eng = _engine()
-    # build M5 where index -2 swept below 3300 and -1 closed back above (held).
-    m5 = _series("5M", 40, 3320, 5, -0.5, 0.5)
-    swept_level = 3300.0
-    m5[-2] = _candle("5M", m5[-2].time_utc, 3301, 3302, 3298, 3299)  # dipped
-    m5[-1] = _candle("5M", m5[-1].time_utc, 3299, 3304, 3299, 3303)  # reclaimed
-    pool = LiquidityLevel(kind=LiquidityKind.SWING_LOW,
-                          side=LiquiditySide.SELL_SIDE, price=swept_level,
-                          time_utc=m5[-2].time_utc)
-    sweep = SweepEvent(level=pool, swept_side=LiquiditySide.SELL_SIDE,
-                       rejection_bias=Bias.BULLISH, sweep_index=len(m5) - 2,
-                       sweep_time=m5[-2].time_utc, status=SweepStatus.TRUE_SWEEP)
-    held = eng._fresh_reclaimed_sweep(Bias.BULLISH, m5, [sweep])
-    assert held is sweep
-
-    # if the latest close is still BELOW the level, the reclaim did not hold.
-    m5[-1] = _candle("5M", m5[-1].time_utc, 3299, 3299.5, 3296, 3297)
-    assert eng._fresh_reclaimed_sweep(Bias.BULLISH, m5, [sweep]) is None
-
-
-# -- decide(): full context, safety, anti-silence ---------------------------
 
 def test_decide_consumes_all_six_timeframes():
-    eng = _engine()
-    result = eng.decide(_input())
-    ch = result.context.challenge
+    eng = make_liquidity_intel_pipeline(SYM)
+    ch = eng.decide(_input()).context.challenge
     htf = ch["htf_context"]
     for tf in ("d1=", "h4=", "h1=", "m15=", "m5="):
-        assert tf in htf            # HTF/MTF frames are read, not just printed
+        assert tf in htf
     assert "mtf_score=" in htf
 
 
-def test_decide_populates_every_required_output_field():
-    eng = _engine()
+def test_no_setup_waits_with_a_reason_not_silence():
+    eng = make_liquidity_intel_pipeline(SYM)
     ch = eng.decide(_input()).context.challenge
-    required = ["htf_context", "killzone", "liquidity_context", "liquidity_map",
-               "sweep_status", "structure_state", "fvg_ob_status", "orderflow",
-               "premium_discount", "direction", "posture", "reason",
-               "sl_tp_trail"]
-    assert all(k in ch for k in required)
-    assert ch["profile"] == PROFILE_NAME
+    assert not eng.decide(_input()).approved
+    assert ch["reason"]                       # never empty
+    assert ch.get("waiting_for") or ch.get("reentry_plan") or ch.get("narrative")
 
 
-def test_news_risk_forces_flat_and_blocks_entries():
-    eng = _engine()
+def test_news_risk_blocks_new_entries():
+    eng = make_liquidity_intel_pipeline(SYM)
     result = eng.decide(_input(news_risk=True))
     assert not result.approved
-    ch = result.context.challenge
-    assert ch["posture"] == Posture.FLAT
-    assert "NEWS_RISK" in ch["reason"]
 
 
-def test_featureless_tape_waits_with_a_rearm_reason_not_silence():
-    eng = _engine()
-    ch = eng.decide(_input()).context.challenge
-    # No qualified posture, but the engine always says what it is waiting for.
-    assert ch["posture"] in (Posture.WAIT, Posture.FLAT)
-    assert ch["reason"]                       # never empty
-    assert ch["waiting_for"] or ch["reentry_plan"]
+def test_wide_spread_does_not_trade():
+    eng = make_liquidity_intel_pipeline(SYM)
+    assert not eng.decide(_input(spread=5.0)).approved
 
 
-def test_wide_spread_is_flat():
-    eng = _engine()
-    result = eng.decide(_input(spread=5.0))
-    assert not result.approved
-    assert "spread too high" in result.context.challenge["reason"]
-
-
-def test_consumed_stop_guard_blocks_refading_a_just_swept_level():
-    eng = _engine()
-    # record a SHORT stop loss at 3352, then a near new SHORT stop is refused.
+def test_note_stop_loss_memory_hook_is_wired():
+    eng = make_liquidity_intel_pipeline(SYM)
+    # the trade-memory hook accepts an SL notification without error.
     eng.note_stop_loss(Direction.SHORT, 3352.0, NOW)
-    block = eng._consumed_stop_block(Direction.SHORT, 3352.5, atr5=2.0, now=NOW)
-    assert "ZONE_CONSUMED" in block
-    # a stop that clears the level by the clearance is allowed.
-    assert eng._consumed_stop_block(
-        Direction.SHORT, 3360.0, atr5=2.0, now=NOW) == ""
+    assert eng._sl_losses_by_direction.get(Direction.SHORT) == 1

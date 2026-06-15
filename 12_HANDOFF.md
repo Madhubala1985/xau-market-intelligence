@@ -21,9 +21,13 @@ anchors absolute. IMPLEMENTED on branch rebuild/liquidity_intel; 810
 tests pass; all modules compile. See 27_LIQUIDITY_INTEL_DESIGN.md.
 
 State at handoff (2026-06-15):
-- NEW ENGINE src/strategy/liquidity_intel.py (LiquidityIntelEngine,
-  posture model TREND/LIQUIDITY_REVERSAL/RANGE_SCALP/WAIT/FLAT;
-  protected stops beyond engineered liquidity; quality-bar gated).
+- OPTION 1 SHIPPED: the from-scratch posture engine FAILED its replay
+  ship gate (-27R/10d, 92 trades, 18% win). The liquidity_intel ENGINE is
+  now the proven smc_v2 day-narrative brain on the same single path
+  (LiquidityIntelEngine subclasses SmcV2Pipeline; smc_execution/smc_v2/
+  day_narrative are internal, not profiles). Re-run ship gate (10d real
+  history): +2.43R / 23 trades / 39% win / DD 6.3R -> SHIP: YES. 864
+  tests pass. Report: reports/runtime/liquidity_intel_replay.md.
 - NEW PLANNER src/execution/intel_planner.py (IntelTradePlanner; the one
   equity-scaled, fully-gated planner; never sends).
 - SINGLE PATH: scripts/trading_service.py builds only the

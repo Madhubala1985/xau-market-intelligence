@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from src.data.enums import BrokerConnectionStatus, Direction
 from src.data.schemas import BrokerState, Candle, TradeDecision
+from src.strategy.pipeline import PipelineInput
 
 SYMBOL = "XAUUSDM"
 BROKER_SYMBOL = "XAUUSDm"  # exact Exness case
@@ -36,6 +37,18 @@ def broker_state(now, *, balance=2000.0, open_positions=0) -> BrokerState:
         time_utc=now, connection_status=BrokerConnectionStatus.CONNECTED,
         symbol=SYMBOL, balance=balance, equity=balance, free_margin=balance,
         leverage=200, open_positions=open_positions, trade_allowed=True,
+    )
+
+
+def pipeline_input(m5, *, m15=None, m1=None, balance=2000.0, spread=0.2,
+                   open_positions=0, **kwargs):
+    now = m5[-1].time_utc
+    return PipelineInput(
+        symbol=SYMBOL, exec_candles=m5, daily_candles=[], h4_candles=[],
+        broker=broker_state(now, balance=balance,
+                            open_positions=open_positions),
+        current_spread=spread, m15_candles=m15, m1_candles=m1,
+        risk_pct=0.030, now=now, **kwargs,
     )
 
 
