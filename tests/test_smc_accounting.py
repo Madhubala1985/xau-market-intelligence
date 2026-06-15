@@ -31,7 +31,7 @@ from src.broker.mt5_data_adapter import MT5DataAdapter
 from src.broker.mt5_settings import load_mt5_settings
 from src.data.enums import Direction, TradeOutcome
 from src.data.schemas import TradeDecision, TradeRecord
-from src.execution.challenge_planner import ChallengeTradePlanner
+from src.execution.intel_planner import IntelTradePlanner as ChallengeTradePlanner
 from src.execution.demo_session import (
     CONFIRMATION_TOKEN,
     CycleStat,
@@ -44,9 +44,9 @@ from src.journal.journal import TradeJournal
 from src.risk.governor import RiskGovernor
 from src.strategy.pipeline import PipelineContext, PipelineResult, PipelineStage
 from src.strategy.scoring import ConfidenceResult, ScoreRecommendation
-from src.strategy.smc_execution import make_challenge_limits
+from src.strategy.liquidity_intel import make_intel_limits as make_challenge_limits
 from tests.test_broker_execution import _cycle_outcome
-from tests.test_demo_challenge import BROKER_SYMBOL, SYMBOL
+from tests.intel_helpers import BROKER_SYMBOL, SYMBOL
 from tests.test_demo_session import (
     NOW,
     FakeMT5Trading,

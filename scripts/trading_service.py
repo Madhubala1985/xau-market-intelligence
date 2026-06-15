@@ -59,8 +59,7 @@ from src.broker.mt5_data_adapter import (  # noqa: E402
     verify_demo_account,
 )
 from src.broker.mt5_settings import load_mt5_settings  # noqa: E402
-from src.execution.challenge_planner import ChallengeTradePlanner  # noqa: E402
-from src.execution.demo_planner import DemoTradePlanner  # noqa: E402
+from src.execution.intel_planner import IntelTradePlanner  # noqa: E402
 from src.execution.demo_session import (  # noqa: E402
     CONFIRMATION_TOKEN,
     SupervisedDemoSession,
@@ -71,15 +70,13 @@ from src.execution.gateway import (  # noqa: E402
     load_execution_flags,
 )
 from src.execution.kill_switch import KillSwitch  # noqa: E402
-from src.execution.live_shadow import make_live_pipeline  # noqa: E402
 from src.execution.preflight import DemoPreflight  # noqa: E402
 from src.execution.session_profiles import (  # noqa: E402
-    CHALLENGE_PROFILE_NAMES,
+    PROFILE_NAME,
     PROFILES,
     get_profile,
 )
-from src.strategy.smc_execution import make_smc_pipeline  # noqa: E402
-from src.strategy.pipeline import THRESHOLD_PROFILES  # noqa: E402
+from src.strategy.liquidity_intel import make_liquidity_intel_pipeline  # noqa: E402
 from src.execution.trading_service import (  # noqa: E402
     BannerInfo,
     ProgressPrinter,
@@ -90,7 +87,6 @@ from src.execution.trading_service import (  # noqa: E402
 from src.journal.journal import TradeJournal  # noqa: E402
 from src.orderflow.macro_context import FileMacroProvider  # noqa: E402
 from src.risk.adaptive_risk import CapitalPhase  # noqa: E402
-from src.risk.exposure_governor import AdaptiveExposureGovernor  # noqa: E402
 from src.risk.governor import RiskGovernor  # noqa: E402
 from src.risk.news_guard import NewsRiskGuard  # noqa: E402
 
@@ -133,8 +129,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--profile", default="continuous",
-                        choices=sorted(PROFILES))
+    parser.add_argument("--profile", default=PROFILE_NAME,
+                        choices=sorted(PROFILES),
+                        help="the single trading profile (liquidity_intel); "
+                             "retired names are refused")
     parser.add_argument("--dry-run", action="store_true",
                         help="run the identical loop with order sending "
                              "DISABLED (plans simulated)")
@@ -147,10 +145,6 @@ def main() -> int:
                         help="override the profile poll interval")
     parser.add_argument("--max-cycles", type=int, default=None,
                         help="diagnostic: stop after N cycles")
-    parser.add_argument("--thresholds", default="current",
-                        choices=sorted(THRESHOLD_PROFILES),
-                        help="threshold profile (explicit operator choice; "
-                             "default: current)")
     args = parser.parse_args()
 
     profile = get_profile(args.profile)
@@ -211,47 +205,16 @@ def main() -> int:
             kill_switch=kill_switch,
         )
         journal = TradeJournal(JOURNAL_PATH)
-        # SMC-EXECUTION-001: the challenge profiles (smc_challenge and its
-        # deprecated alias demo_challenge) swap the DECISION layer for the
-        # institutional SMC execution pipeline + fixed-lot planner (no
-        # exposure governor) while every safety layer stays identical: same
-        # session, gateway, kill switch, journal, reconciliation, stops.
-        challenge_mode = profile.name in CHALLENGE_PROFILE_NAMES
-        if challenge_mode:
-            if profile.name == "smc_v2":
-                # SMC-V2-001 final config (decision 2026-06-12-12): the
-                # maximum-selectivity variant, confirmed on TWO independent
-                # measures — 8.5-month longhaul (+7.0R, 7/10 months
-                # positive, DD 22R; defaults scored -12.9R) and the
-                # walk-forward sweep's unseen validation days (+8.16R,
-                # best of 10). reports/runtime/v2_longhaul.md +
-                # v2_sweep.md. Edge is small (+0.038 R/day under punitive
-                # fills) — week 1 live is the evidence week. Changed only
-                # with fresh replay evidence.
-                from src.strategy.smc_v2 import make_smc_v2_pipeline
-                pipeline = make_smc_v2_pipeline(
-                    canonical, max_spread_price=profile.max_spread_price,
-                    quality_bar=0.70,
-                    strong_bar=0.78,
-                    max_entries_per_day=2,
-                    trend_target_r=3.0,
-                    structural_stops_only=False,
-                )
-            else:
-                pipeline = make_smc_pipeline(
-                    canonical, max_spread_price=profile.max_spread_price,
-                )
-            planner = ChallengeTradePlanner(limits=limits)
-            exposure_governor = None
-        else:
-            pipeline = make_live_pipeline(
-                canonical, max_spread_price=profile.max_spread_price,
-                threshold_profile=args.thresholds,
-            )
-            planner = DemoTradePlanner(limits=limits)
-            # Adaptive Exposure Policy (OPERATIONAL-001): condition-driven
-            # entry allowance, hard-bounded by the profile.
-            exposure_governor = AdaptiveExposureGovernor()
+        # LIQUIDITY-INTEL-001: ONE decision engine, ONE planner, ONE path.
+        # There is no profile fork — the single liquidity_intel engine and
+        # its equity-scaled planner are always built; every safety layer
+        # (session, gateway, kill switch, journal, reconciliation, stops) is
+        # the proven chassis, reused unchanged.
+        pipeline = make_liquidity_intel_pipeline(
+            canonical, max_spread_price=profile.max_spread_price,
+        )
+        planner = IntelTradePlanner(limits=limits)
+        exposure_governor = None
         session = SupervisedDemoSession(
             adapter=adapter,
             pipeline=pipeline,
@@ -315,13 +278,11 @@ def main() -> int:
             ).assess(now).summary(),
             capital_phase=f"{phase.value} (equity ~{equity:,.0f})",
             thresholds=(
-                "smc_challenge: HTF+killzone/liquidity+SMC anchor+local "
-                "trigger required; fixed lots 0.05/0.10; tactical stops; "
+                "liquidity_intel: posture-driven "
+                "(TREND/LIQUIDITY_REVERSAL/RANGE_SCALP/WAIT/FLAT) from "
+                "D1/H4/H1/M15/M5/M1; protected stops beyond engineered "
+                "liquidity; equity-scaled sizing; quality-bar gated; "
                 "add-ons only onto protected winners (>=0.5R/BE); max 3 open"
-                if challenge_mode else
-                f"profile={args.thresholds} "
-                + " ".join(f"{k}={v}" for k, v in
-                           THRESHOLD_PROFILES[args.thresholds].items())
             ),
         )
 

@@ -9,17 +9,56 @@ This file allows Claude sessions to resume without losing direction.
 # Current Project State
 
 ## Current Phase:
-Phase 12: Live Demo Readiness — continuous service operational; FINAL
-LAST-CHANCE demo_challenge experiment ready
+Phase 13: Single-model rebuild — liquidity_intel (LIQUIDITY-INTEL-001)
 
 ## Current Task ID:
-SMC-V2-001 (decisions 2026-06-12-10 and the ownership transfer that
-evening — see memory/ownership-transfer.md): the owner handed the model
-and the demo account to Claude entirely (full power of attorney, no
-approvals), with the standing critique that the model trades like an
-indicator bot (one trade after another) instead of identifying
-institutional moves with patience. DEMO-ONLY and all risk anchors
-remain absolute.
+LIQUIDITY-INTEL-001 (owner-directed, 2026-06-15): full rebuild into ONE
+clean autonomous XAU/USD model. All prior profiles (demo_challenge,
+smc_challenge, smc_v2) and the dual execution paths RETIRED. One account
+source (.env), one execution path, one journal, one accounting source
+(MT5), one trading service, one decision engine. DEMO-ONLY and all risk
+anchors absolute. IMPLEMENTED on branch rebuild/liquidity_intel; 810
+tests pass; all modules compile. See 27_LIQUIDITY_INTEL_DESIGN.md.
+
+State at handoff (2026-06-15):
+- NEW ENGINE src/strategy/liquidity_intel.py (LiquidityIntelEngine,
+  posture model TREND/LIQUIDITY_REVERSAL/RANGE_SCALP/WAIT/FLAT;
+  protected stops beyond engineered liquidity; quality-bar gated).
+- NEW PLANNER src/execution/intel_planner.py (IntelTradePlanner; the one
+  equity-scaled, fully-gated planner; never sends).
+- SINGLE PATH: scripts/trading_service.py builds only the
+  liquidity_intel engine + IntelTradePlanner (fork removed);
+  session_profiles.py has ONE profile + a RETIRED-name guard; the four
+  old decision modules and the v2 scripts + demo_session_run.py deleted.
+- CHASSIS reused unchanged (MT5 truth, gateway, governor, kill switch,
+  journal, reconciliation, trailing).
+- VALIDATION pending on the Windows host: run the replay ship gate
+  (below) over real history before any live trading.
+
+## SINGLE RUNBOOK (Windows PowerShell, repo root) —
+1. Verify no kill switch:   Test-Path control\KILL_SWITCH   (False)
+   If True: Remove-Item control\KILL_SWITCH
+2. REPLAY SHIP GATE (decides go/no-go; reads real MT5 history, sends
+   nothing):  py -3.12 scripts\decision_replay.py --days 25
+   -> reports/runtime/liquidity_intel_replay.md. SHIP only if net R
+   positive, DD <= 12R, >= 10 trades. Otherwise stay FLAT (do not trade).
+3. Preflight (13 gates):    py -3.12 scripts\demo_preflight.py
+4. Start (only if the ship gate passed):
+   py -3.12 scripts\trading_service.py --profile liquidity_intel --stdout-progress
+5. Watch per cycle: accounting line (mt5_balance/equity/free_margin,
+   realized_daily_pnl, floating_pnl, accounting_verified), htf_context
+   (all six TFs), posture + narrative, liquidity_map + sweep_status,
+   structure_state + fvg_ob + premium_discount + orderflow,
+   smc_anchor/entry_trigger, tactical_stop + stop_logic (SL beyond the
+   pool) + sl_tp_trail, reentry_plan/waiting_for on every NO_TRADE.
+   Verify each CLOSE_DETECTED vs the MT5 history tab (source=MT5_HISTORY).
+6. Stop any time: New-Item -ItemType File control\KILL_SWITCH (remove
+   before the next start). Self-stops: daily 5% pause, weekly 10% stop,
+   kill switch, Ctrl+C.
+7. Do NOT pass --profile smc_v2 / smc_challenge / demo_challenge /
+   continuous (RETIRED — get_profile refuses them).
+
+Previously (RETIRED by this rebuild): SMC-V2-001 day-narrative brain.
 
 State at handoff (Fri 2026-06-12 ~19:3x UTC, market closed for the
 weekend at 21:00, account week resets Monday 2026-06-15):
@@ -47,38 +86,14 @@ weekend at 21:00, account week resets Monday 2026-06-15):
   position. v2 sweep over selectivity variants was RUNNING at handoff:
   logs/v2_sweep_run1.log -> reports/runtime/v2_sweep.md/.json.
 
-RESOLVED (decisions 2026-06-12-11/-12): smc_v2 ships Monday with the
-MAXIMUM-SELECTIVITY knobs (quality bar 0.70, 2 entries/day, 3R trend
-targets), confirmed on two independent measures — the 8.5-month
-longhaul replay (+7.0R, 7/10 months positive, DD 22R; the defaults
-measured -12.9R and were superseded) and the walk-forward sweep's
-unseen validation days (+8.16R, best of 10). Honest expectancy: +0.038
-R/day under punitive fills — positive, below the +0.15 goal-grade bar;
-live fills are cheaper, week 1 measures the truth. v1 (smc_challenge)
-is RETIRED from live use (-82.7R/25d, -12.9R..-83R everywhere). Week 1
-= evidence week with a self-imposed early stop at -5% weekly net (hard
-floor 10% unchanged). Reports: v2_longhaul.md, v2_sweep.md.
+SUPERSEDED by LIQUIDITY-INTEL-001 (2026-06-15): smc_v2 (and the whole
+SMC/challenge family) is RETIRED. The runbook is now the SINGLE RUNBOOK
+above (--profile liquidity_intel, gated by the decision_replay ship bar).
+smc_v2's prior result (+7.0R/8.5mo longhaul, +8.16R unseen validation)
+is recorded for history only; the new engine is from-scratch and must
+re-earn its edge on the real-history replay before any live trading.
 
-## MONDAY RUNBOOK (2026-06-15, after 00:00 UTC week reset) — operator
-Windows PowerShell, repo root:
-1. Verify no kill switch:   Test-Path control\KILL_SWITCH   (False)
-   If True: Remove-Item control\KILL_SWITCH
-2. Preflight (13 gates):    py -3.12 scripts\demo_preflight.py
-3. Start:  py -3.12 scripts\trading_service.py --profile smc_v2 --stdout-progress
-4. Watch per cycle: narrative=STATE conviction playbooks evidence[...],
-   accounting_verified=true, CLOSE_DETECTED lines vs MT5 history.
-   Expect FEW trades (cap 2/day, quality bar 0.70) — long NO_TRADE
-   stretches with DAY_NARRATIVE_*/CONVICTION/QUALITY reasons are the
-   design, not a fault.
-5. Stop any time: New-Item -ItemType File control\KILL_SWITCH
-   (service stops cleanly; remove the file before the next start).
-6. Self-stopping: daily 5% net pause (entries blocked to next UTC
-   day), weekly 10% net stop (service exits), kill switch, Ctrl+C.
-7. Do NOT run --profile smc_challenge or demo_challenge (retired;
-   replay -82.7R/25d). Reports: reports/runtime/supervision_ledger.md,
-   v2_sweep.md, smc_v2_replay.md.
-
-Previously: SMC-EXECUTION-008/b/c (H8 family, this morning) and
+Previously: SMC-EXECUTION-008/b/c (H8 family) and
 SMC-EXECUTION-007 doctrine — see CURRENT_STATE.md.
 
 Previously: SMC-EXECUTION-007 (decision 2026-06-12-04): owner-directed decision-layer

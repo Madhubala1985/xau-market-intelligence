@@ -19,7 +19,7 @@ from src.backtest.decision_replay import (
 )
 from src.data.enums import Direction
 from src.strategy.pipeline import PipelineResult, PipelineStage
-from tests.test_demo_challenge import make_candles
+from tests.intel_helpers import make_candles
 from tests.test_smc_accounting import approved_smc
 
 START = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)

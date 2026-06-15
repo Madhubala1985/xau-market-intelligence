@@ -391,19 +391,31 @@ class ProgressPrinter:
             f"local_structure_updated={ch.get('local_structure_updated')}"
         )
         self._line(f"  htf_context={ch.get('htf_context')}")
-        # SMC-V2-001: the day-narrative brain's reasoning, when present.
-        if ch.get("narrative"):
-            self._line(f"  narrative={ch.get('narrative')}")
-        if ch.get("playbook") or ch.get("quality"):
+        # LIQUIDITY-INTEL-001: posture-driven autonomy + full SMC context.
+        if ch.get("posture") or ch.get("narrative"):
             self._line(
-                f"  playbook={ch.get('playbook', '-')} "
-                f"quality={ch.get('quality', '-')}"
+                f"  posture={ch.get('posture', '-')} "
+                f"narrative={ch.get('narrative', '-')}"
             )
+        if ch.get("quality"):
+            self._line(f"  quality={ch.get('quality')}")
         self._line(
             f"  killzone={ch.get('killzone')} "
             f"liquidity_context={ch.get('liquidity_context')} "
             f"disp={ch.get('displacement')}x"
         )
+        if ch.get("liquidity_map"):
+            self._line(
+                f"  liquidity_map={ch.get('liquidity_map')} "
+                f"sweep_status={ch.get('sweep_status')}"
+            )
+        if ch.get("structure_state"):
+            self._line(
+                f"  structure_state={ch.get('structure_state')} "
+                f"fvg_ob={ch.get('fvg_ob_status')} "
+                f"premium_discount={ch.get('premium_discount')} "
+                f"orderflow={ch.get('orderflow')}"
+            )
         self._line(
             f"  smc_anchor={ch.get('smc_anchor')} "
             f"entry_trigger={ch.get('entry_trigger')} "
@@ -427,6 +439,8 @@ class ProgressPrinter:
                 + (f"${risk_hit:.2f}" if risk_hit is not None else "n/a")
             )
             self._line(f"  invalidation_reason={ch.get('invalidation_reason')}")
+        if ch.get("sl_tp_trail"):
+            self._line(f"  sl_tp_trail={ch.get('sl_tp_trail')}")
         if ch.get("waiting_for") or ch.get("reentry_plan"):
             self._line(
                 f"  reentry_plan={ch.get('reentry_plan') or '-'} "

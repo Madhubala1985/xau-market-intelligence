@@ -1,23 +1,21 @@
-"""Session risk profiles for supervised demo evaluation (Task DEMO-EVAL).
+"""Session risk profiles — ONE trading profile: liquidity_intel.
 
-A SessionProfile names ONE approved configuration of a supervised demo
-evaluation session: how long it runs, how often it polls, how many orders the
-SESSION itself may send, and which RiskLimits the governor and planner enforce.
+The rebuild (Task LIQUIDITY-INTEL-001) collapsed every prior decision profile
+into the single autonomous engine. There is exactly ONE live trading profile,
+`liquidity_intel`; every earlier profile (demo_challenge, smc_challenge,
+smc_v2, continuous, growth_evaluation, and the bounded evaluation profiles) is
+RETIRED and CANNOT be selected — `get_profile` raises with an explicit pointer
+to the new profile so an old name can never accidentally run.
+
+A SessionProfile names the ONE approved configuration: how often the service
+polls and which RiskLimits the governor and planner enforce.
 
 Design rules (03_RISK_POLICY.md is the authority):
-
-- A profile may TIGHTEN the demo risk policy, never loosen it. Construction
-  raises if any limit is looser than the policy bounds below, so a future
-  profile (or a careless edit) cannot silently weaken risk.
-- `max_orders=None` means the session imposes NO artificial per-session order
-  cap: the number of trades is then governed purely by the risk policy
-  (max trades/day, daily/weekly loss, open-position and duplicate checks),
-  confidence tiers, regime, and setup quality. This is the serious-evaluation
-  default.
-- `max_orders=1` exists ONLY in the smoke profile, as an optional first-run /
-  smoke-test parameter — it is not the system's design.
-- The same profiles shape a future real session: real mode would add its own
-  (tighter) policy bounds and readiness gates, not a different execution stack.
+- A profile may TIGHTEN the risk policy, never loosen it. Construction raises
+  if any limit is looser than the envelope bounds below.
+- `max_orders=None` means no artificial per-session order cap: cadence is
+  governed by the risk policy and the engine's quality bar — never a fixed
+  artificial per-day trade cap.
 
 This module holds no credentials, performs no trading, and reads no env.
 """
@@ -29,78 +27,61 @@ from typing import Dict, Optional
 
 from src.risk.governor import RiskLimits
 
-# 03_RISK_POLICY.md "Adaptive Demo Risk Policy" (decision 2026-06-10-08):
-# the ABSOLUTE demo per-trade ceiling. The AdaptiveRiskEngine applies tighter
-# per-phase ceilings (1.0%/0.8%/0.6%/0.5%) and an evidence-driven budget
-# below them; this static bound is what the governor/planner enforce.
+# Standard demo policy bounds (03_RISK_POLICY.md) — retained as the reference
+# ceiling for the "demo" envelope.
 POLICY_MAX_RISK_PER_TRADE = 0.010
 POLICY_MAX_DAILY_LOSS = 0.02
 POLICY_MAX_WEEKLY_LOSS = 0.05
-# Adaptive Exposure Policy (decision 2026-06-10-11): the static trades/day
-# bound becomes the ADAPTIVE EXPOSURE GOVERNOR's hard maximum (reached only
-# in AGGRESSIVE conditions); ordinary conditions remain at 3 and adverse
-# conditions go to 1 or 0. Daily 2% / weekly 5% anchors are unchanged.
 POLICY_MAX_TRADES_PER_DAY = 6
-# 03_RISK_POLICY says max 1 open trade; decision log 2026-06-10-03 resolved
-# the contradiction with 20_LEVERAGE_AND_PYRAMIDING_POLICY tightest-rule-wins:
-# a second position may exist ONLY as a guard-approved protected add-on.
 POLICY_MAX_OPEN_POSITIONS = 2
-# Live price-unit spread limit established in make_live_pipeline (LIVE-001).
 POLICY_MAX_SPREAD_PRICE = 1.0
 
-# DEMO-CHALLENGE-001 (owner decision 2026-06-11-01): a SEPARATE, DEMO-ONLY
-# risk envelope for the aggressive fixed-lot momentum profile. This is NOT a
-# loosening of the standard demo policy: it is an explicitly owner-directed
-# carve-out, available EXCLUSIVELY to the profile literally named
-# "demo_challenge" (construction refuses it anywhere else), forbidden for
-# real mode, and still bounded: per-trade worst case 3% (0.10 lot at the
-# widest tactical stop), daily 5% pauses entries (account-survival guard,
-# not conservative sizing), weekly 10% stops the service, max 3 open
-# same-direction positions, stop-loss mandatory, no martingale structurally.
-CHALLENGE_MAX_RISK_PER_TRADE = 0.030
-CHALLENGE_MAX_DAILY_LOSS = 0.05
-CHALLENGE_MAX_WEEKLY_LOSS = 0.10
-CHALLENGE_MAX_TRADES_PER_DAY = 25  # owner amendment 2026-06-12-06 (was 15/10)
-CHALLENGE_MAX_OPEN_POSITIONS = 3
-CHALLENGE_PROFILE_NAME = "demo_challenge"
-# SMC-EXECUTION-001 (owner decision 2026-06-11-03): the challenge profile is
-# the institutional SMC execution mode; smc_challenge is the primary name,
-# demo_challenge remains as an alias of the SAME behavior (the retail
-# momentum pipeline no longer exists). Both share the challenge envelope.
-SMC_PROFILE_NAME = "smc_challenge"
-# SMC-V2-001: the day-narrative decision brain (same envelope; the brain
-# itself is MORE selective: 3 entries/day institutional cadence).
-SMC_V2_PROFILE_NAME = "smc_v2"
-CHALLENGE_PROFILE_NAMES = frozenset({CHALLENGE_PROFILE_NAME, SMC_PROFILE_NAME, SMC_V2_PROFILE_NAME})
+# The single liquidity_intel envelope (owner's standing campaign anchors —
+# demo only, never weakened): 3%/trade survival cap, daily 5% net pause,
+# weekly 10% net stop, max 3 open, a 25/day survival CEILING (the engine's
+# quality bar governs the real cadence — there is no artificial fixed per-day
+# trade cap), spread <= 1.0. Real mode is forbidden for this envelope.
+INTEL_MAX_RISK_PER_TRADE = 0.030
+INTEL_MAX_DAILY_LOSS = 0.05
+INTEL_MAX_WEEKLY_LOSS = 0.10
+INTEL_MAX_TRADES_PER_DAY = 25
+INTEL_MAX_OPEN_POSITIONS = 3
 
-_MAX_DURATION_MINUTES = 8 * 60  # SupervisedDemoSession hard ceiling
+PROFILE_NAME = "liquidity_intel"
+INTEL_PROFILE_NAMES = frozenset({PROFILE_NAME})
 
-_UNSET = object()  # "not overridden" marker (None is a meaningful value here)
+# Every retired profile name -> the same hard-stop message. These can never be
+# constructed or selected; the guard in get_profile points the operator at the
+# one live profile (replay evidence retired the SMC/challenge family).
+RETIRED_PROFILES = frozenset({
+    "demo_challenge", "smc_challenge", "smc_v2", "continuous",
+    "growth_evaluation", "evaluation", "london", "newyork", "full_day",
+    "smoke",
+})
+
+_MAX_DURATION_MINUTES = 8 * 60
+_UNSET = object()
 
 
 @dataclass(frozen=True)
 class SessionProfile:
-    """One approved supervised-demo session configuration (policy-bounded)."""
+    """The single approved trading-session configuration (policy-bounded)."""
 
     name: str
     description: str
-    # None = no fixed duration: the profile is for the CONTINUOUS trading
-    # service, which runs until kill switch / risk shutdown / operator stop.
-    # Bounded session runners must refuse a None-duration profile.
-    duration_minutes: Optional[float]
+    duration_minutes: Optional[float]  # None = continuous service
     poll_seconds: float = 30.0
-    # None = no artificial session cap; the risk policy governs.
     max_orders: Optional[int] = None
-    max_open_positions: int = POLICY_MAX_OPEN_POSITIONS
-    max_trades_per_day: int = POLICY_MAX_TRADES_PER_DAY
-    max_risk_per_trade: float = POLICY_MAX_RISK_PER_TRADE
-    max_daily_loss: float = POLICY_MAX_DAILY_LOSS
-    max_weekly_loss: float = POLICY_MAX_WEEKLY_LOSS
+    max_open_positions: int = INTEL_MAX_OPEN_POSITIONS
+    max_trades_per_day: int = INTEL_MAX_TRADES_PER_DAY
+    max_risk_per_trade: float = INTEL_MAX_RISK_PER_TRADE
+    max_daily_loss: float = INTEL_MAX_DAILY_LOSS
+    max_weekly_loss: float = INTEL_MAX_WEEKLY_LOSS
     max_spread_price: float = POLICY_MAX_SPREAD_PRICE
-    # "demo" validates against the standard demo policy bounds above;
-    # "demo_challenge" validates against the CHALLENGE_* envelope and is
-    # accepted ONLY for the profile named demo_challenge (DEMO-CHALLENGE-001).
-    envelope: str = "demo"
+    # "demo" validates against the standard demo bounds; "liquidity_intel"
+    # validates against the INTEL_* envelope and is accepted ONLY for the
+    # profile named liquidity_intel.
+    envelope: str = "liquidity_intel"
 
     def __post_init__(self) -> None:
         if self.duration_minutes is not None and not (
@@ -108,36 +89,29 @@ class SessionProfile:
         ):
             raise ValueError(
                 f"profile {self.name!r}: duration_minutes must be in "
-                f"(0, {_MAX_DURATION_MINUTES}] or None (continuous service)"
-            )
+                f"(0, {_MAX_DURATION_MINUTES}] or None (continuous service)")
         if self.poll_seconds <= 0:
             raise ValueError(f"profile {self.name!r}: poll_seconds must be > 0")
         if self.max_orders is not None and self.max_orders < 0:
             raise ValueError(f"profile {self.name!r}: max_orders must be >= 0")
-        if self.envelope not in ("demo", "demo_challenge"):
+        if self.envelope not in ("demo", "liquidity_intel"):
             raise ValueError(
-                f"profile {self.name!r}: unknown envelope {self.envelope!r}"
-            )
-        # The demo_challenge envelope is an owner-directed, DEMO-ONLY
-        # carve-out (DEMO-CHALLENGE-001 / SMC-EXECUTION-001) tied to the
-        # challenge profiles only — no other profile can adopt it.
-        if self.envelope == "demo_challenge" \
-                and self.name not in CHALLENGE_PROFILE_NAMES:
+                f"profile {self.name!r}: unknown envelope {self.envelope!r}")
+        if self.envelope == "liquidity_intel" \
+                and self.name not in INTEL_PROFILE_NAMES:
             raise ValueError(
-                f"profile {self.name!r}: the demo_challenge envelope is "
-                f"reserved for {sorted(CHALLENGE_PROFILE_NAMES)}"
-            )
-        if self.envelope == "demo_challenge":
+                f"profile {self.name!r}: the liquidity_intel envelope is "
+                f"reserved for {sorted(INTEL_PROFILE_NAMES)}")
+        if self.envelope == "liquidity_intel":
             bounds = {
-                "max_risk_per_trade": CHALLENGE_MAX_RISK_PER_TRADE,
-                "max_daily_loss": CHALLENGE_MAX_DAILY_LOSS,
-                "max_weekly_loss": CHALLENGE_MAX_WEEKLY_LOSS,
-                "max_trades_per_day": CHALLENGE_MAX_TRADES_PER_DAY,
-                "max_open_positions": CHALLENGE_MAX_OPEN_POSITIONS,
+                "max_risk_per_trade": INTEL_MAX_RISK_PER_TRADE,
+                "max_daily_loss": INTEL_MAX_DAILY_LOSS,
+                "max_weekly_loss": INTEL_MAX_WEEKLY_LOSS,
+                "max_trades_per_day": INTEL_MAX_TRADES_PER_DAY,
+                "max_open_positions": INTEL_MAX_OPEN_POSITIONS,
                 "max_spread_price": POLICY_MAX_SPREAD_PRICE,
             }
         else:
-            # Profiles may only TIGHTEN the demo risk policy.
             bounds = {
                 "max_risk_per_trade": POLICY_MAX_RISK_PER_TRADE,
                 "max_daily_loss": POLICY_MAX_DAILY_LOSS,
@@ -152,12 +126,10 @@ class SessionProfile:
         ]
         if violations:
             raise ValueError(
-                f"profile {self.name!r} is looser than 03_RISK_POLICY.md demo "
-                f"limits: {violations}"
-            )
+                f"profile {self.name!r} is looser than 03_RISK_POLICY.md "
+                f"limits: {violations}")
 
     def risk_limits(self, expected_symbol: str) -> RiskLimits:
-        """The RiskLimits the governor and planner enforce for this profile."""
         return RiskLimits(
             expected_symbol=expected_symbol,
             max_risk_per_trade=self.max_risk_per_trade,
@@ -176,11 +148,6 @@ class SessionProfile:
         max_orders: object = _UNSET,
         max_open_positions: Optional[int] = None,
     ) -> "SessionProfile":
-        """Apply operator CLI overrides; __post_init__ re-validates the result.
-
-        `max_orders` accepts None explicitly ("no session cap"), so a distinct
-        sentinel marks "not overridden".
-        """
         changes: dict = {}
         if duration_minutes is not None:
             changes["duration_minutes"] = duration_minutes
@@ -193,160 +160,35 @@ class SessionProfile:
         return replace(self, **changes) if changes else self
 
 
-# -- registry -----------------------------------------------------------------
+# -- registry: ONE profile -----------------------------------------------------
 
 PROFILES: Dict[str, SessionProfile] = {
     p.name: p
     for p in (
         SessionProfile(
-            name="smoke",
+            name=PROFILE_NAME,
             description=(
-                "Short smoke validation: ONE order maximum, single position. "
-                "The only profile with an artificial one-order cap."
-            ),
-            duration_minutes=10,
-            poll_seconds=30,
-            max_orders=1,
-            max_open_positions=1,
-            max_trades_per_day=3,
-        ),
-        SessionProfile(
-            name="evaluation",
-            description=(
-                "Default supervised demo evaluation (~1 hour): no artificial "
-                "session order cap; risk policy, confidence, regime, and setup "
-                "quality govern."
-            ),
-            duration_minutes=60,
-            poll_seconds=30,
-            max_orders=None,
-            max_trades_per_day=3,
-        ),
-        SessionProfile(
-            name="london",
-            description=(
-                "London-session evaluation (~4 hours): start at the London "
-                "open; policy-governed."
-            ),
-            duration_minutes=240,
-            poll_seconds=60,
-            max_orders=None,
-            max_trades_per_day=3,
-        ),
-        SessionProfile(
-            name="newyork",
-            description=(
-                "New York-session evaluation (~4 hours, covers the LDN/NY "
-                "overlap): start at the NY open; policy-governed."
-            ),
-            duration_minutes=240,
-            poll_seconds=60,
-            max_orders=None,
-            max_trades_per_day=3,
-        ),
-        SessionProfile(
-            name="full_day",
-            description=(
-                "Full-day supervised evaluation (8 hours, the hard session "
-                "ceiling): policy-governed."
-            ),
-            duration_minutes=480,
-            poll_seconds=60,
-            max_orders=None,
-            max_trades_per_day=3,
-        ),
-        SessionProfile(
-            name="continuous",
-            description=(
-                "Continuous MT5 trading service (the MAIN mode): no fixed "
-                "duration, no artificial order cap; runs until kill switch, "
-                "risk shutdown, or operator stop. Pauses while the market is "
-                "closed. Use scripts/trading_service.py."
-            ),
-            duration_minutes=None,
-            poll_seconds=60,
-            max_orders=None,
-            max_trades_per_day=3,
-        ),
-        SessionProfile(
-            name="growth_evaluation",
-            description=(
-                "Serious demo GROWTH evaluation (the milestone campaign "
-                "$2k -> $10k -> $15k -> $25k): continuous, no artificial "
-                "duration or order caps, adaptive exposure governor decides "
-                "the entry allowance per conditions (up to 6/day only in "
-                "AGGRESSIVE conditions; 0 in poor ones). Daily 2% / weekly "
-                "5% anchors unchanged. Use scripts/trading_service.py."
-            ),
-            duration_minutes=None,
-            poll_seconds=60,
-            max_orders=None,
-            max_trades_per_day=6,
-        ),
-        SessionProfile(
-            name=CHALLENGE_PROFILE_NAME,
-            description=(
-                "DEPRECATED ALIAS of smc_challenge (SMC-EXECUTION-001): the "
-                "retail momentum behavior was removed; this name now runs "
-                "the SAME institutional SMC execution mode. DEMO ONLY."
+                "The single autonomous XAU/USD liquidity-intelligence engine "
+                "(LIQUIDITY-INTEL-001). DEMO ONLY — never for real funds. The "
+                "engine classifies the market POSTURE each cycle "
+                "(TREND/LIQUIDITY_REVERSAL/RANGE_SCALP/WAIT/FLAT) from the "
+                "full D1/H4/H1/M15/M5/M1 picture, liquidity map, sweeps, "
+                "structure, FVG/OB and premium/discount, and decides for "
+                "itself whether to engage, wait, or stay flat. Stops sit "
+                "beyond the engineered liquidity (never at the naked pool); "
+                "equity-scaled sizing; quality-bar gated; MT5 is the only "
+                "source of truth for P&L. One execution path. Use "
+                "scripts/trading_service.py --profile liquidity_intel."
             ),
             duration_minutes=None,
             poll_seconds=30,
             max_orders=None,
-            max_open_positions=CHALLENGE_MAX_OPEN_POSITIONS,
-            max_trades_per_day=CHALLENGE_MAX_TRADES_PER_DAY,
-            max_risk_per_trade=CHALLENGE_MAX_RISK_PER_TRADE,
-            max_daily_loss=CHALLENGE_MAX_DAILY_LOSS,
-            max_weekly_loss=CHALLENGE_MAX_WEEKLY_LOSS,
-            envelope="demo_challenge",
-        ),
-        SessionProfile(
-            name=SMC_V2_PROFILE_NAME,
-            description=(
-                "SMC v2 day-narrative brain (SMC-V2-001). DEMO ONLY. The "
-                "DAY is classified first (TREND/RANGE/TRAP/POST_SPIKE/"
-                "EXHAUSTED); playbooks per state; conviction-gated; "
-                "quality-scored; trade memory (probe limits, playbook "
-                "stand-downs, H8); hard institutional cadence cap of 3 "
-                "entries/day inside the brain. Same chassis and envelope "
-                "as smc_challenge; replay-gated (see "
-                "reports/runtime/v2_sweep.md). Use "
-                "scripts/trading_service.py --profile smc_v2."
-            ),
-            duration_minutes=None,
-            poll_seconds=30,
-            max_orders=None,
-            max_open_positions=CHALLENGE_MAX_OPEN_POSITIONS,
-            max_trades_per_day=CHALLENGE_MAX_TRADES_PER_DAY,
-            max_risk_per_trade=CHALLENGE_MAX_RISK_PER_TRADE,
-            max_daily_loss=CHALLENGE_MAX_DAILY_LOSS,
-            max_weekly_loss=CHALLENGE_MAX_WEEKLY_LOSS,
-            envelope="demo_challenge",
-        ),
-        SessionProfile(
-            name=SMC_PROFILE_NAME,
-            description=(
-                "Institutional SMC execution mode (SMC-EXECUTION-001). DEMO "
-                "ONLY — never for real funds. A trade requires ALL gates: "
-                "HTF context (D1/H4/H1/M15), session/liquidity context "
-                "(kill zone, Asian/session sweep, liquidity target), an SMC "
-                "anchor (sweep+displacement, FVG/OB retest, break-retest, "
-                "BOS/CHOCH), and an executable M5/M1 trigger with a "
-                "structurally justified tactical stop. Fixed lots "
-                "0.05/0.10; add-ons only onto protected winners (>=0.5R or "
-                "break-even); max 3 open; MT5 is the only source of truth "
-                "for P&L. Use scripts/trading_service.py --profile "
-                "smc_challenge."
-            ),
-            duration_minutes=None,
-            poll_seconds=30,
-            max_orders=None,
-            max_open_positions=CHALLENGE_MAX_OPEN_POSITIONS,
-            max_trades_per_day=CHALLENGE_MAX_TRADES_PER_DAY,
-            max_risk_per_trade=CHALLENGE_MAX_RISK_PER_TRADE,
-            max_daily_loss=CHALLENGE_MAX_DAILY_LOSS,
-            max_weekly_loss=CHALLENGE_MAX_WEEKLY_LOSS,
-            envelope="demo_challenge",
+            max_open_positions=INTEL_MAX_OPEN_POSITIONS,
+            max_trades_per_day=INTEL_MAX_TRADES_PER_DAY,
+            max_risk_per_trade=INTEL_MAX_RISK_PER_TRADE,
+            max_daily_loss=INTEL_MAX_DAILY_LOSS,
+            max_weekly_loss=INTEL_MAX_WEEKLY_LOSS,
+            envelope="liquidity_intel",
         ),
     )
 }
@@ -354,6 +196,12 @@ PROFILES: Dict[str, SessionProfile] = {
 
 def get_profile(name: str) -> SessionProfile:
     key = name.strip().lower()
+    if key in RETIRED_PROFILES:
+        raise ValueError(
+            f"profile {name!r} is RETIRED and cannot run (replay evidence; "
+            f"the dual decision paths were removed in LIQUIDITY-INTEL-001). "
+            f"Use --profile {PROFILE_NAME}."
+        )
     if key not in PROFILES:
         raise KeyError(
             f"unknown session profile {name!r}; available: {sorted(PROFILES)}"

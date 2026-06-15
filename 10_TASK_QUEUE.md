@@ -8,6 +8,35 @@ Claude must complete tasks in order unless explicitly instructed otherwise.
 
 ---
 
+# Phase 13: Single-model rebuild
+
+## Task LIQUIDITY-INTEL-001: ONE clean autonomous model (liquidity_intel)
+
+Status: IMPLEMENTED (branch rebuild/liquidity_intel; 810 tests pass).
+Live-trading gated by the real-history replay ship bar.
+
+Goal:
+Rebuild into one decision engine, one execution path, one trading
+service, one account source, one accounting source. Retire every prior
+profile and dual path. Profit-seeking posture model with protected stops.
+
+Expected output (done):
+- src/strategy/liquidity_intel.py (posture engine) + intel_planner.py,
+- single profile + retired-name guard (session_profiles.py),
+- fork removed from scripts/trading_service.py,
+- tests (liquidity_intel / intel_planner / single_path) + retargets,
+- single-engine ship gate (scripts/decision_replay.py),
+- 27_LIQUIDITY_INTEL_DESIGN.md.
+
+Tests: pytest (810 pass); tests/test_single_path.py enforces invariants.
+
+Stop condition / next step:
+- On the Windows MT5 host: run scripts/decision_replay.py --days 25; if
+  the ship bar passes, run --profile liquidity_intel; else stay FLAT.
+- commit LIQUIDITY-INTEL-001.
+
+---
+
 # Phase 0: Project Foundation
 
 ## Task P0-001: Create Project Control Pack

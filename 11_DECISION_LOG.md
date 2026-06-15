@@ -45,6 +45,84 @@ Proposed / Accepted / Rejected / Superseded
 
 ---
 
+# Latest Decisions
+
+## Decision ID:
+2026-06-15-01
+
+## Date:
+2026-06-15
+
+## Area:
+Architecture / Strategy / Execution / Risk / Testing
+
+## Decision:
+Full rebuild into ONE clean autonomous XAU/USD model named
+`liquidity_intel` (Task LIQUIDITY-INTEL-001). Retire every prior decision
+profile (demo_challenge, smc_challenge, smc_v2) and the dual/institutional
+execution paths. Enforce a single account source (.env), a single
+execution path (one pipeline + one planner + one gateway), one journal,
+one accounting source (MT5), and one trading service. The new engine
+(src/strategy/liquidity_intel.py) is a market POSTURE model
+(TREND/LIQUIDITY_REVERSAL/RANGE_SCALP/WAIT/FLAT) that decides for itself
+from D1/H4/H1/M15/M5/M1 + liquidity map + sweeps + structure + FVG/OB +
+premium/discount + orderflow, with stops placed BEYOND the engineered
+liquidity (never at the naked pool) and a fixed-weight quality bar.
+
+## Reason:
+The owner directed a from-scratch single model. The repo had three
+overlapping profiles and a profile-name fork in trading_service.py
+(dual pipeline+planner stacks). Replay had already retired the
+SMC/challenge family (-82.7R/25d). Consolidating to one path removes the
+dual-code-path risk the owner flagged and makes the model auditable.
+
+## Evidence:
+810 tests pass; full tree compiles; offline replay of the engine runs
+across hundreds of steps without error and the ship gate correctly
+rejects negative net R. Single-path invariants are test-enforced
+(tests/test_single_path.py): retired profiles raise, deleted modules are
+unimportable, the service builds exactly one pipeline + one planner.
+
+## Alternatives Considered:
+(a) Evolve the smc_v2 brain under a new name — rejected by the owner in
+favor of a true from-scratch rewrite. (b) Add a gateway market-close path
+for hard EXIT/REVERSE — deferred: it would add a second order pathway and
+new failure modes; exits use the proven SL/TP + trailing, reverse is a
+fresh entry once flat.
+
+## Risk:
+A from-scratch engine has NO inherited expectancy; the edge is unproven.
+Posture/quality weights are first-pass.
+
+## Mitigation:
+SHIP BAR (scripts/decision_replay.py --days 25 on real MT5 history): the
+engine trades live demo only if net R is positive, DD <= 12R, >= 10
+trades; otherwise it stays FLAT. All risk anchors absolute (3%/trade,
+daily 5% pause, weekly 10% stop, max 3 open, mandatory SL, kill switch,
+accounting-unverified blocks entries, REAL refused). Demo only. Weights
+tuned only by replay evidence, never live.
+
+## Files Affected:
+NEW: src/strategy/liquidity_intel.py, src/execution/intel_planner.py,
+tests/test_liquidity_intel.py, tests/test_intel_planner.py,
+tests/test_single_path.py, tests/intel_helpers.py,
+27_LIQUIDITY_INTEL_DESIGN.md.
+EDITED: scripts/trading_service.py (fork removed), session_profiles.py
+(one profile + retired guard), src/execution/trading_service.py (printer),
+scripts/decision_replay.py (single-engine ship gate),
+scripts/generate_evidence_pack.py (registry), retargeted tests
+(test_smc_accounting, test_broker_execution, test_session_profiles,
+test_trading_service, test_decision_replay), control-pack docs.
+DELETED: src/strategy/smc_v2.py, smc_execution.py, day_narrative.py,
+src/execution/challenge_planner.py, scripts/v2_sweep.py, v2_longhaul.py,
+replay_probe.py, demo_session_run.py, and their tests.
+
+## Status:
+Accepted (IMPLEMENTED on branch rebuild/liquidity_intel; live-trading
+gated by the real-history replay ship bar).
+
+---
+
 # Initial Decisions
 
 ## Decision ID:

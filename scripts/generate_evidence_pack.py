@@ -285,28 +285,20 @@ _TABLE: Dict[str, dict] = {
         layer="execution",
         summary="sized+guarded+governed demo trade plans; never sends (F-3)",
         test_file="test_demo_planner.py", test_note="", **_MT5_BOUNDARY),
-    "src.execution.challenge_planner": dict(
+    "src.execution.intel_planner": dict(
         layer="execution",
-        summary="demo_challenge fixed-lot momentum planner; never sends "
-                "(DEMO-CHALLENGE-001)",
-        test_file="test_demo_challenge.py", test_note="", **_MT5_BOUNDARY),
-    "src.strategy.smc_execution": dict(
+        summary="the single liquidity_intel trade planner: equity-scaled "
+                "sizing, mandatory SL, protected add-ons; never sends "
+                "(LIQUIDITY-INTEL-001)",
+        test_file="test_intel_planner.py", test_note="", **_MT5_BOUNDARY),
+    "src.strategy.liquidity_intel": dict(
         layer="strategy",
-        summary="institutional SMC execution pipeline: HTF+liquidity+anchor+"
-                "trigger gates, tactical stops, fixed lots "
-                "(SMC-EXECUTION-001)",
-        test_file="test_smc_execution.py", test_note="", **_PURE_SHADOW_READY),
-    "src.strategy.day_narrative": dict(
-        layer="strategy",
-        summary="day-narrative state machine + conviction ledger for the "
-                "SMC v2 brain (SMC-V2-001; pure classifier)",
-        test_file="test_day_narrative.py", test_note="",
+        summary="the single autonomous decision engine: posture model "
+                "(TREND/LIQUIDITY_REVERSAL/RANGE_SCALP/WAIT/FLAT), protected "
+                "stops beyond engineered liquidity, quality bar "
+                "(LIQUIDITY-INTEL-001; replay-gated)",
+        test_file="test_liquidity_intel.py", test_note="",
         **_PURE_SHADOW_READY),
-    "src.strategy.smc_v2": dict(
-        layer="strategy",
-        summary="SMC v2 decision brain: narrative gate, playbooks, trade "
-                "memory, quality score (SMC-V2-001; replay-gated)",
-        test_file="test_smc_v2.py", test_note="", **_PURE_SHADOW_READY),
     "src.execution.demo_session": dict(
         layer="execution",
         summary="supervised demo session loop (DEMO-002; gateway-only orders)",

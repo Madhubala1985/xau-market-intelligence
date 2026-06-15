@@ -31,12 +31,12 @@ from src.execution.trading_service import ProgressPrinter
 from src.journal.journal import TradeJournal
 from src.risk.governor import RiskContext, RiskGovernor
 from src.risk.state_tracker import RiskStateSnapshot
-from src.strategy.smc_execution import make_challenge_limits
-from tests.test_demo_challenge import (
+from src.strategy.liquidity_intel import make_intel_limits as make_challenge_limits
+from tests.intel_helpers import (
     BROKER_SYMBOL,
     SYMBOL,
     broker_state,
-    challenge_decision,
+    intel_decision as challenge_decision,
 )
 
 NOW = datetime(2026, 6, 11, 10, 26, tzinfo=timezone.utc)
@@ -250,7 +250,7 @@ def _run_challenge_cycle(tmp_path, fake):
     """One real SupervisedDemoSession cycle with the challenge stack."""
     from src.broker.mt5_data_adapter import MT5DataAdapter
     from src.broker.mt5_settings import load_mt5_settings
-    from src.execution.challenge_planner import ChallengeTradePlanner
+    from src.execution.intel_planner import IntelTradePlanner as ChallengeTradePlanner
     from src.execution.demo_session import (
         CONFIRMATION_TOKEN,
         SupervisedDemoSession,
@@ -462,10 +462,10 @@ def test_service_labels_rejection_honestly(tmp_path):
                                 violations=0),
         journal=TradeJournal(tmp_path / "j.jsonl"),
         kill_switch=SimpleNamespace(engaged=False),
-        profile=get_profile("demo_challenge"),
+        profile=get_profile("liquidity_intel"),
         printer=ProgressPrinter(stream=stream),
         banner=BannerInfo(
-            profile="demo_challenge", execution_mode="EXECUTION",
+            profile="liquidity_intel", execution_mode="EXECUTION",
             account_login_masked="****11", account_type="DEMO",
             server="x", symbol="XAUUSDm", risk_summary="x", news_status="x",
             kill_switch_status="absent", journal_path="x", report_dir="x",

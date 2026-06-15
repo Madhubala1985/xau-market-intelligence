@@ -6,21 +6,56 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 12: Live Demo Readiness — continuous service operational
+Phase 13: Single-model rebuild — liquidity_intel (LIQUIDITY-INTEL-001)
 
 ## Current Task
 
-SMC-V2-001 (decision 2026-06-12-10 + ownership transfer): the owner
-handed the model and demo account to Claude (full autonomy; demo-only
-and risk anchors absolute). v1 (smc_challenge) is RETIRED from live
-trading by replay evidence: -82.7R over 25 replayed days (636 trades,
-DD 96.8R) — the live -4.8% was systematic. The v2 day-narrative brain
-(day classifier + conviction + playbooks + trade memory + quality bar +
-institutional 3/day cadence cap) replays at +10.7R/12d, -5.2R/25d
-pre-tuning; the walk-forward selectivity sweep decides the Monday plan.
-SHIP BAR: positive R on unseen validation days, else no live trading.
-See 12_HANDOFF.md for exact next steps; full day log in
-reports/runtime/supervision_ledger.md.
+LIQUIDITY-INTEL-001 (owner-directed, 2026-06-15): FULL REBUILD into ONE
+clean autonomous XAU/USD model. Every prior decision profile
+(demo_challenge, smc_challenge, smc_v2) and the dual/institutional
+execution paths are RETIRED and CANNOT run (get_profile raises; the
+modules are deleted; tests/test_single_path.py enforces it). There is
+now exactly one account source (.env), one execution path, one journal,
+one accounting source (MT5), one trading service, one decision engine.
+
+NEW MODEL / PROFILE: liquidity_intel. Run:
+  py -3.12 scripts\trading_service.py --profile liquidity_intel --stdout-progress
+
+- ENGINE (src/strategy/liquidity_intel.py, from scratch): a market
+  POSTURE model — each cycle reads D1/H4/H1/M15/M5/M1 + liquidity map +
+  sweeps + structure + FVG/OB + premium/discount + orderflow and decides
+  for itself: TREND (continuation, 3R) / LIQUIDITY_REVERSAL (sweep+reclaim
+  fade, 2R, stop beyond the rejection extreme) / RANGE_SCALP (1.5R) /
+  WAIT (explicit re-arm, never silent) / FLAT (dangerous vol/chop/news).
+  A fixed-weight quality bar gates entries; STRONG=1.5% / NORMAL=1.0%
+  equity risk.
+- STOP DOCTRINE: SL placed BEYOND the engineered liquidity pool
+  (_protect_stop_from_pool pushes a stop past any resting pool it would
+  sit at); too wide => reduce size or WAIT; never widened into the trap;
+  hard 8 USD ceiling.
+- PLANNER (src/execution/intel_planner.py): the ONE planner —
+  equity-scaled sizing, mandatory SL, protected add-ons only, no
+  hedging/averaging-down/martingale; never sends (gateway is the only
+  path).
+- CHASSIS REUSED UNCHANGED: MT5 adapter (source of truth), gateway,
+  governor, kill switch, journal, reconciliation, break-even/trailing.
+- EXIT/REVERSE: no gateway market-close path (one order path; stops never
+  widen) — protective exits via SL/TP + trailing; reverse = fresh entry
+  once flat. Engine surfaces MANAGE/EXIT/REVERSE intent for transparency.
+- ENVELOPE (single, anchors absolute): 3%/trade, daily 5% pause, weekly
+  10% stop, max 3 open, 25/day survival ceiling (quality bar governs real
+  cadence — no artificial fixed cap), spread <= 1.0; REAL accounts refused.
+- TESTS: 810 pass. New test_liquidity_intel / test_intel_planner /
+  test_single_path; retargeted accounting/broker/profiles/service/replay.
+- VALIDATION GATE: scripts/decision_replay.py --days 25 on the Windows
+  host -> reports/runtime/liquidity_intel_replay.md/.json. SHIP BAR: net R
+  positive, DD <= 12R, >= 10 trades, else stay FLAT live. Design contract:
+  27_LIQUIDITY_INTEL_DESIGN.md.
+
+Previously: SMC-V2-001 (decision 2026-06-12-10 + ownership transfer): the
+v2 day-narrative brain shipped Monday with maximum-selectivity knobs.
+RETIRED by this rebuild. v1 (smc_challenge) was already retired by replay
+evidence (-82.7R/25d).
 
 Previously: SMC-EXECUTION-008 (decision 2026-06-12-07): IMPLEMENTED — H8 zone
 consumption. An MT5-verified SL loss consumes its zone: for 30 min a new

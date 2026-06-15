@@ -73,7 +73,7 @@ def seq_now(times):
 
 def banner_info(mode="EXECUTION — orders WILL be sent to the .env account (DEMO)"):
     return BannerInfo(
-        profile="continuous",
+        profile="liquidity_intel",
         execution_mode=mode,
         account_login_masked=mask_login(LOGIN_VALUE),
         account_type="DEMO",
@@ -93,14 +93,14 @@ def make_service(tmp_path, *, results=None, flags=None, fake=None, journal=None,
                  warmstart=False, **session_overrides):
     session, fake, journal, kill_switch = make_session(
         tmp_path, results=results, flags=flags, fake=fake, journal=journal,
-        max_orders=None, profile_name="continuous", **session_overrides,
+        max_orders=None, profile_name="liquidity_intel", **session_overrides,
     )
     stream = StringIO()
     service = TradingService(
         session=session,
         journal=journal,
         kill_switch=kill_switch,
-        profile=profile or get_profile("continuous"),
+        profile=profile or get_profile("liquidity_intel"),
         printer=ProgressPrinter(stream=stream),
         banner=banner or banner_info(),
         report_dir=tmp_path / "reports",
@@ -124,7 +124,7 @@ def test_startup_banner_prints_required_fields(tmp_path):
     service.run()
     out = stream.getvalue()
     assert "Continuous MT5 Service" in out
-    assert "profile:      continuous" in out
+    assert "profile:      liquidity_intel" in out
     assert "EXECUTION — orders WILL be sent" in out
     assert "type=DEMO" in out
     assert "Exness-MT5Trial" in out
@@ -319,9 +319,9 @@ def test_weekly_loss_risk_shutdown_stops_cleanly(tmp_path):
     earlier = NOW - timedelta(hours=2)
     journal.log_record(TradeRecord(
         record_id="L-1", created_at_utc=earlier, symbol="XAUUSDM",
-        direction=Direction.LONG, outcome=TradeOutcome.LOSS, pnl=-120.0,
+        direction=Direction.LONG, outcome=TradeOutcome.LOSS, pnl=-250.0,
         opened_at_utc=earlier, closed_at_utc=earlier,
-    ))  # -120 on a 2000 balance = 6% weekly loss (limit 5%)
+    ))  # -250 on a 2000 balance = 12.5% weekly loss (limit 10%)
     service, *_ , stream = make_service(
         tmp_path, results=[no_trade_result()] * 5, journal=journal,
         max_cycles=5,
@@ -338,9 +338,9 @@ def test_daily_loss_pauses_but_service_keeps_running(tmp_path):
     earlier = NOW - timedelta(hours=2)
     journal.log_record(TradeRecord(
         record_id="L-1", created_at_utc=earlier, symbol="XAUUSDM",
-        direction=Direction.LONG, outcome=TradeOutcome.LOSS, pnl=-50.0,
+        direction=Direction.LONG, outcome=TradeOutcome.LOSS, pnl=-120.0,
         opened_at_utc=earlier, closed_at_utc=earlier,
-    ))  # -50 = 2.5% daily (limit 2%) but only 2.5% weekly (limit 5%)
+    ))  # -120 = 6% daily (limit 5%) but only 6% weekly (limit 10%)
     service, *_ , stream = make_service(
         tmp_path, results=[no_trade_result()] * 2, journal=journal,
         max_cycles=2,
