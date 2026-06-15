@@ -73,7 +73,7 @@ def seq_now(times):
 
 def banner_info(mode="EXECUTION — orders WILL be sent to the .env account (DEMO)"):
     return BannerInfo(
-        profile="liquidity_intel",
+        profile="gold_alpha",
         execution_mode=mode,
         account_login_masked=mask_login(LOGIN_VALUE),
         account_type="DEMO",
@@ -93,14 +93,14 @@ def make_service(tmp_path, *, results=None, flags=None, fake=None, journal=None,
                  warmstart=False, **session_overrides):
     session, fake, journal, kill_switch = make_session(
         tmp_path, results=results, flags=flags, fake=fake, journal=journal,
-        max_orders=None, profile_name="liquidity_intel", **session_overrides,
+        max_orders=None, profile_name="gold_alpha", **session_overrides,
     )
     stream = StringIO()
     service = TradingService(
         session=session,
         journal=journal,
         kill_switch=kill_switch,
-        profile=profile or get_profile("liquidity_intel"),
+        profile=profile or get_profile("gold_alpha"),
         printer=ProgressPrinter(stream=stream),
         banner=banner or banner_info(),
         report_dir=tmp_path / "reports",
@@ -124,7 +124,7 @@ def test_startup_banner_prints_required_fields(tmp_path):
     service.run()
     out = stream.getvalue()
     assert "Continuous MT5 Service" in out
-    assert "profile:      liquidity_intel" in out
+    assert "profile:      gold_alpha" in out
     assert "EXECUTION — orders WILL be sent" in out
     assert "type=DEMO" in out
     assert "Exness-MT5Trial" in out

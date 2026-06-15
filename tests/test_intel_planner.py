@@ -12,7 +12,7 @@ from src.execution.intel_planner import IntelTradePlanner
 from src.execution.positions import ReconciliationReport
 from src.risk.leverage_sizing import AccountSnapshot, TradingMode
 from src.risk.news_guard import NewsRiskState
-from src.strategy.liquidity_intel import make_intel_limits
+from src.strategy.gold_alpha import make_gold_limits as make_intel_limits
 from src.strategy.scoring import ConfidenceResult, ScoreRecommendation
 from tests.intel_helpers import SYMBOL, broker_state, intel_decision
 
@@ -74,8 +74,8 @@ def test_equity_scaled_size_within_survival_cap():
     plan = _plan(p, intel_decision(direction=Direction.SHORT, lot=0.05))
     assert plan.approved
     assert plan.lot_size >= 0.01
-    # loss-at-stop never exceeds the 3% survival cap.
-    assert plan.sizing.implied_loss <= 2000.0 * 0.030 + 1e-6
+    # loss-at-stop never exceeds the 6% gold_alpha survival cap.
+    assert plan.sizing.implied_loss <= 2000.0 * 0.06 + 1e-6
 
 
 def test_opposite_direction_position_blocks_no_hedging():

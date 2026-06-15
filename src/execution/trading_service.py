@@ -381,33 +381,23 @@ class ProgressPrinter:
                 )
 
     def _challenge_lines(self, ch: Optional[dict]) -> None:
-        """SMC-EXECUTION-001: institutional gate reasoning (one block/cycle)."""
+        """GOLD-ALPHA-001: per-cycle evidence + decision reasoning (one block).
+        Tolerant of missing keys so it renders any engine's output dict."""
         if not ch:
             return
         self._line(
             f"  profile={ch.get('profile')} "
-            f"fresh_entry_scan={ch.get('fresh_entry_scan')} "
-            f"new_candle_detected={ch.get('new_candle_detected')} "
-            f"local_structure_updated={ch.get('local_structure_updated')}"
+            f"regime={ch.get('regime', '-')} "
+            f"new_candle_detected={ch.get('new_candle_detected')}"
         )
         self._line(f"  htf_context={ch.get('htf_context')}")
-        # LIQUIDITY-INTEL-001: the day-narrative brain's reasoning.
         if ch.get("narrative"):
             self._line(f"  narrative={ch.get('narrative')}")
-        if ch.get("playbook") or ch.get("quality"):
-            self._line(
-                f"  playbook={ch.get('playbook', '-')} "
-                f"quality={ch.get('quality', '-')}"
-            )
-        self._line(
-            f"  killzone={ch.get('killzone')} "
-            f"liquidity_context={ch.get('liquidity_context')} "
-            f"disp={ch.get('displacement')}x"
-        )
         if ch.get("liquidity_map"):
             self._line(
                 f"  liquidity_map={ch.get('liquidity_map')} "
-                f"sweep_status={ch.get('sweep_status')}"
+                f"sweep_status={ch.get('sweep_status')} "
+                f"killzone={ch.get('killzone')}"
             )
         if ch.get("structure_state"):
             self._line(
@@ -416,17 +406,23 @@ class ProgressPrinter:
                 f"premium_discount={ch.get('premium_discount')} "
                 f"orderflow={ch.get('orderflow')}"
             )
+        if ch.get("candidates"):
+            self._line(f"  candidates: {ch.get('candidates')}")
         self._line(
-            f"  smc_anchor={ch.get('smc_anchor')} "
-            f"entry_trigger={ch.get('entry_trigger')} "
-            f"grade={ch.get('grade')} "
-            f"candidate={ch.get('direction')} "
+            f"  setup={ch.get('setup', '-')} "
+            f"direction={ch.get('direction')} "
+            f"ev={ch.get('ev', '-')} p_win={ch.get('p_win', '-')} "
+            f"target_r={ch.get('target_r', '-')} grade={ch.get('grade')} "
             f"lot_decision={ch.get('lot_decision')}"
         )
+        if ch.get("score_detail"):
+            self._line(f"  score: {ch.get('score_detail')}")
+        if ch.get("perf"):
+            self._line(f"  recent_performance: {ch.get('perf')}")
         price = ch.get("tactical_stop_price")
         distance = ch.get("tactical_stop_distance")
         self._line(
-            "  tactical_stop: "
+            "  stop: "
             + (f"price={price:.2f} distance={distance:.2f} "
                if price is not None else "price=none distance=none ")
             + f"source={ch.get('tactical_stop_source')}"
@@ -434,24 +430,19 @@ class ProgressPrinter:
         if ch.get("stop_logic"):
             risk_hit = ch.get("risk_if_sl_hit")
             self._line(
-                f"  stop_logic={ch.get('stop_logic')} "
+                f"  sl_reason={ch.get('stop_logic')} "
                 f"risk_if_sl_hit="
                 + (f"${risk_hit:.2f}" if risk_hit is not None else "n/a")
             )
-            self._line(f"  invalidation_reason={ch.get('invalidation_reason')}")
-        if ch.get("sl_tp_trail"):
-            self._line(f"  sl_tp_trail={ch.get('sl_tp_trail')}")
+            self._line(f"  invalidation={ch.get('invalidation_reason')}")
+        if ch.get("tp_trail"):
+            self._line(f"  tp/trail: {ch.get('tp_trail')}")
         if ch.get("waiting_for") or ch.get("reentry_plan"):
             self._line(
                 f"  reentry_plan={ch.get('reentry_plan') or '-'} "
                 f"waiting_for={ch.get('waiting_for') or '-'}"
             )
-        self._line(
-            f"  first_trade_profit_state="
-            f"{ch.get('first_trade_profit_state', '-')} "
-            f"add_on_allowed={ch.get('add_on_allowed', '-')}"
-        )
-        self._line(f"  smc_why: {ch.get('reason')}")
+        self._line(f"  why: {ch.get('reason')}")
 
     def _accounting_lines(self, acct: Optional[dict]) -> None:
         """SMC-EXECUTION-001: MT5 is the only source of truth for money."""

@@ -76,7 +76,7 @@ from src.execution.session_profiles import (  # noqa: E402
     PROFILES,
     get_profile,
 )
-from src.strategy.liquidity_intel import make_liquidity_intel_pipeline  # noqa: E402
+from src.strategy.gold_alpha import make_gold_alpha_pipeline  # noqa: E402
 from src.execution.trading_service import (  # noqa: E402
     BannerInfo,
     ProgressPrinter,
@@ -131,7 +131,7 @@ def main() -> int:
     )
     parser.add_argument("--profile", default=PROFILE_NAME,
                         choices=sorted(PROFILES),
-                        help="the single trading profile (liquidity_intel); "
+                        help="the single trading profile (gold_alpha); "
                              "retired names are refused")
     parser.add_argument("--dry-run", action="store_true",
                         help="run the identical loop with order sending "
@@ -205,12 +205,11 @@ def main() -> int:
             kill_switch=kill_switch,
         )
         journal = TradeJournal(JOURNAL_PATH)
-        # LIQUIDITY-INTEL-001: ONE decision engine, ONE planner, ONE path.
-        # There is no profile fork — the single liquidity_intel engine and
-        # its equity-scaled planner are always built; every safety layer
-        # (session, gateway, kill switch, journal, reconciliation, stops) is
-        # the proven chassis, reused unchanged.
-        pipeline = make_liquidity_intel_pipeline(
+        # GOLD-ALPHA-001: ONE decision engine, ONE planner, ONE path. No
+        # profile fork — the single gold_alpha EV engine and its equity-scaled
+        # planner are always built; every safety layer (session, gateway, kill
+        # switch, journal, reconciliation, stops) is the proven chassis reused.
+        pipeline = make_gold_alpha_pipeline(
             canonical, max_spread_price=profile.max_spread_price,
         )
         planner = IntelTradePlanner(limits=limits)
@@ -280,11 +279,11 @@ def main() -> int:
             ).assess(now).summary(),
             capital_phase=f"{phase.value} (equity ~{equity:,.0f})",
             thresholds=(
-                "liquidity_intel: posture-driven "
-                "(TREND/LIQUIDITY_REVERSAL/RANGE_SCALP/WAIT/FLAT) from "
-                "D1/H4/H1/M15/M5/M1; protected stops beyond engineered "
-                "liquidity; equity-scaled sizing; quality-bar gated; "
-                "add-ons only onto protected winners (>=0.5R/BE); max 3 open"
+                "gold_alpha: expected-value scored setups "
+                "(SWEEP_RECLAIM/TREND_CONTINUATION/RANGE_FADE/BOS_RETEST) "
+                "from D1/H4/H1/M15/M5/M1; trade when EV>bar; protected SL "
+                "beyond engineered liquidity; draw-on-liquidity targets; "
+                "BE+ATR trail; fast thesis-failure exit; post-trade learning"
             ),
         )
 

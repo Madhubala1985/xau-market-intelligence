@@ -1017,6 +1017,26 @@ class SupervisedDemoSession:
                         note(record.direction, record.stop_loss, closed_at)
                     except Exception:  # noqa: BLE001 - advisory only
                         pass
+            # GOLD-ALPHA-001 learning loop: feed EVERY close (win/TP/trail/SL)
+            # to the engine so it attributes the outcome and down-weights
+            # failing setups before the next decision.
+            note_close = getattr(self._pipeline, "note_trade_closed", None)
+            if note_close is not None:
+                try:
+                    note_close(record.direction, self._realized_r(record, net))
+                except Exception:  # noqa: BLE001 - advisory only
+                    pass
+
+    @staticmethod
+    def _realized_r(record, net_pnl: float) -> float:
+        """Realised R = net P&L / initial risk (lot * 100 * |entry-stop|)."""
+        try:
+            risk = abs(record.entry_price - record.stop_loss) * record.lot_size * 100.0
+            if risk > 0:
+                return float(net_pnl) / risk
+        except (TypeError, AttributeError):
+            pass
+        return 1.0 if net_pnl > 0 else -1.0
 
     @staticmethod
     def _original_stop_violated(record, closed) -> bool:
@@ -1108,6 +1128,34 @@ class SupervisedDemoSession:
                 f"{proposal.proposed_stop} status={result.status.value} "
                 f"({result.reason})",
             )
+
+        # GOLD-ALPHA-001 exit model: the engine may propose a TIGHTEN-ONLY stop
+        # (break-even, ATR/structure trail, or a fast thesis-failure exit on a
+        # CHOCH against the position). The gateway never widens a stop, so a
+        # winner is protected and a broken thesis exits fast.
+        manage = getattr(self._pipeline, "manage_stop", None)
+        if manage is None:
+            return
+        for position in positions:
+            try:
+                new_stop = manage(
+                    Direction(position.direction), position.entry_price,
+                    position.stop_loss, position.current_price, exec_candles)
+            except Exception:  # noqa: BLE001 - management advisory never crashes
+                new_stop = None
+            if new_stop is None:
+                continue
+            result = self._gateway.modify_stop(
+                ticket=position.ticket, symbol=position.symbol,
+                direction=Direction(position.direction),
+                current_stop=position.stop_loss, new_stop=new_stop,
+                take_profit=position.take_profit)
+            if result.status is ExecutionStatus.FILLED:
+                self._stop_updates += 1
+            self._event(
+                "STOP_UPDATE",
+                f"ticket {position.ticket} engine_exit -> {new_stop} "
+                f"status={result.status.value} ({result.reason})")
 
     # -- entry --------------------------------------------------------------------
     def _try_entry(
