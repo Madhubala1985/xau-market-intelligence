@@ -6,11 +6,32 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 13: Single-model rebuild — liquidity_intel (LIQUIDITY-INTEL-001)
+Phase 14: From-scratch profit model — gold_alpha (GOLD-ALPHA-001)
 
 ## Current Task
 
-LIQUIDITY-INTEL-001 — UPDATE 2026-06-15 (AGGRESSIVE GROWTH MODE,
+GOLD-ALPHA-001 (owner-directed, 2026-06-16): built a brand-new from-scratch
+XAU/USD profit-maximisation model; ALL prior profiles retired (liquidity_intel/
+smc_v2/smc_execution/day_narrative deleted). One profile `gold_alpha`, one path,
+one MT5 source, one planner, one journal. Engine = expected-value scorer over
+enumerated setups (sweep-reclaim/trend-continuation/range-fade/BOS-retest);
+protected SL beyond engineered liquidity; draw-on-liquidity targets; BE+ATR
+trail + fast CHOCH-against exit; post-trade attribution loop
+(src/strategy/trade_attribution.py) that down-weights failing setups. Full
+per-cycle evidence terminal output. 820 tests pass. Design: 28_GOLD_ALPHA_DESIGN.md.
+Commit 5abf550.
+
+REPLAY VERDICT (10d real history): net -15.93R, 17% win, DD 16.77R -> SHIP: NO.
+Root cause: the EV objective's p_win is uncalibrated (assumes ~35% vs realised
+17%) AND far liquidity targets inflate target_R; an EV-bar sweep (0.15..0.85)
+was identical -15.91R, so selectivity cannot rescue it. Per the owner's own
+process (validate before live) and "don't run a model that loses", it was NOT
+run live. Account confirmed flat ($2000, 0 positions). Honest morning report:
+reports/runtime/OVERNIGHT_STATUS.md. Only the (now-retired) day-narrative brain
+ever measured positive (+2.43R/10d). Recommendation pending owner: restore that
+edge under the gold_alpha path, or build a calibrated p_win model.
+
+Previously: LIQUIDITY-INTEL-001 — UPDATE 2026-06-15 (AGGRESSIVE GROWTH MODE,
 owner-directed): owner directed removal of the throttling risk engine to
 chase $2k->$10k on DEMO. Implemented + evidence-checked:
 - REMOVED (throttles): daily-loss pause, weekly-loss stop, loss cooldown,

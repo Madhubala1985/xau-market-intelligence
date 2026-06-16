@@ -9,7 +9,20 @@ This file allows Claude sessions to resume without losing direction.
 # Current Project State
 
 ## Current Phase:
-Phase 13: Single-model rebuild — liquidity_intel (LIQUIDITY-INTEL-001)
+Phase 14: From-scratch profit model — gold_alpha (GOLD-ALPHA-001)
+
+## GOLD-ALPHA-001 (2026-06-16, owner-directed): built from scratch; all prior
+profiles retired/deleted. One profile `gold_alpha` (EV-scored setups,
+protected SL, exit/trail, post-trade attribution loop). 820 tests pass.
+Commit 5abf550. REPLAY: -15.93R/10d, 17% win -> SHIP: NO (uncalibrated p_win +
+inflated far targets; EV-bar sweep flat at -15.91R). NOT run live (failed the
+validate-before-live gate; account flat $2000). Read
+reports/runtime/OVERNIGHT_STATUS.md. Next: owner picks — restore the proven
+day-narrative edge under the gold_alpha path, OR build a calibrated p_win model.
+Run command (only if a future build SHIPs): py -3.12 scripts\trading_service.py
+--profile gold_alpha --stdout-progress
+
+## (history below) Phase 13: liquidity_intel (LIQUIDITY-INTEL-001)
 
 ## Current Task ID:
 LIQUIDITY-INTEL-001 (owner-directed, 2026-06-15): full rebuild into ONE
