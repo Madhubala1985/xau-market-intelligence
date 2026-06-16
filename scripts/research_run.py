@@ -20,9 +20,10 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from research.data_loader import has_data, load_dataset  # noqa: E402
 from research.harness import run_setup  # noqa: E402
-from research.report import render  # noqa: E402
+from research.report import render, render_ranking  # noqa: E402
 from research.setups import REGISTRY  # noqa: E402
 from research.setups.base import MarketData  # noqa: E402
+from research.setups.post_spike_chop import make_filter  # noqa: E402
 
 
 def main(argv: list[str]) -> int:
@@ -45,17 +46,27 @@ def main(argv: list[str]) -> int:
     out_dir = REPO_ROOT / "reports" / "research"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    results = []
     for name in names:
         setup = REGISTRY[name]()
         result = run_setup(setup, data)
-        report_md = render(result)
+        results.append(result)
         out_path = out_dir / f"{setup.name}_{setup.version}.md"
-        out_path.write_text(report_md)
+        out_path.write_text(render(result))
+
+        # Setup 5 (post-spike chop) measured as expectancy uplift on this setup.
+        filtered = run_setup(setup, data, entry_filter=make_filter())
+        uplift = filtered.metrics.expectancy - result.metrics.expectancy
         print(
             f"[{setup.name} {setup.version}] {result.classification.value} — "
-            f"{result.metrics.trades} trades, expectancy {result.metrics.expectancy:+.3f}R "
-            f"-> {out_path.relative_to(REPO_ROOT)}"
+            f"{result.metrics.trades} trades, expectancy "
+            f"{result.metrics.expectancy:+.3f}R (post-spike-chop filter uplift "
+            f"{uplift:+.3f}R) -> {out_path.relative_to(REPO_ROOT)}"
         )
+
+    ranking_path = out_dir / "RANKING.md"
+    ranking_path.write_text(render_ranking(results))
+    print(f"ranking -> {ranking_path.relative_to(REPO_ROOT)}")
     return 0
 
 

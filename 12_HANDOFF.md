@@ -15,11 +15,16 @@ Phase 15: EDGE-DISCOVERY RESEARCH LAB (RESEARCH-LAB-001) — execution retired
 Repo pivoted to an XAU/USD edge-discovery research lab. No live orders; trading
 service not run; repo is infrastructure only. Built `research/` package
 (data_loader, metrics+frozen classification, causal forward-fill simulator with
-spread/slippage stress grid + session breakdown, report renderer) and **Setup 1
-(v1)**: London sweep of Asian low → reclaim → displacement → FVG mitigation long
-(fully mechanical, versioned). Added scripts/export_mt5_history.py (Windows-side,
-DATA-FETCH ONLY — never order_send) and scripts/research_run.py. Self-test:
-tests/test_research_lab.py (6 pass; 826 collected). Design: 29_RESEARCH_LAB.md.
+spread/slippage stress grid + session breakdown, report renderer + cross-setup
+RANKING) and **all 5 candidate setups** (versioned, mechanical, each with a
+positive detection test): (1) Asian-low sweep→reclaim→displacement→FVG long;
+(2) Asian-high sweep→rejection→bearish CHOCH→FVG short; (3) NY sweep of London
+high/low→failed continuation→reversal; (4) H1-BOS trend continuation→M5 FVG
+retest; (5) post-spike chop NO-TRADE filter (measured as expectancy uplift).
+Reuses MarketStructureEngine (CHOCH/BOS) + ZoneEngine FVG semantics. Added
+scripts/export_mt5_history.py (Windows-side, DATA-FETCH ONLY — never order_send)
+and scripts/research_run.py. Self-test: tests/test_research_lab.py (14 pass;
+834 collected). Design: 29_RESEARCH_LAB.md.
 Classification gate: ≥100 filled trades + expectancy ≥+0.10R + PF ≥1.30 + holds
 under cost grid ⇒ Proven Edge Candidate (only then may automation be proposed).
 

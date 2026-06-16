@@ -75,29 +75,45 @@ has **no real occurrences** — every result reads *Insufficient Data* by design
 Only a **Proven Edge Candidate** unlocks a proposal for an execution model — and
 that proposal is itself gated on out-of-sample / walk-forward confirmation.
 
-## Setups
+## Setups — all five implemented & self-tested
 
-### Setup 1 (v1): London sweep of Asian low → reclaim → displacement → FVG → long
-`research/setups/london_sweep_reclaim.py` — **implemented & self-tested.**
-Exact mechanical rules are documented in that module's docstring and emitted in
-every report. Summary: Asian range 00:00–07:00 UTC; in the London window
-07:00–11:00 UTC an M5 candle sweeps below the Asian low, price closes back above
-it (reclaim), a bullish displacement candle (range ≥ 1.5× baseline) leaves a
-3-candle FVG; buy the FVG mitigation, stop below the swept low, fixed 2R target;
-invalidate on a new low below the swept low before fill; one trade/day.
+Each module's docstring holds the exact frozen rules; the rules are also emitted
+in every report. All have positive detection tests on synthetic data.
 
-### Setups roadmap (not yet implemented — add as separate versioned modules)
-2. London sweep of Asian high → rejection → CHOCH → FVG mitigation → short.
-3. NY sweep of London high/low → failed continuation → reversal displacement.
-4. Trend-day continuation after H1/M15 BOS → M5 FVG retest.
-5. Post-spike chop-avoidance filter (a no-trade gate, measured as uplift).
+1. **`london_sweep_reclaim.py` — LondonSweepReclaimLong (v1).** Asian range
+   00:00–07:00 UTC; in 07:00–11:00 an M5 candle sweeps below the Asian low, price
+   closes back above (reclaim), a bullish displacement (range ≥ 1.5× baseline)
+   leaves a 3-candle FVG; buy the mitigation, stop below the swept low, fixed 2R;
+   invalidate on a new low before fill; one trade/day.
+2. **`london_asian_high_short.py` — LondonAsianHighShort (v1).** Mirror on the
+   sell side with a structural gate: sweep of Asian high → rejection → **bearish
+   CHOCH** (reused `MarketStructureEngine`) → bear FVG mitigation short; stop above
+   the swept high.
+3. **`ny_london_sweep_reversal.py` — NyLondonSweepReversal (v1).** NY (12:00–16:00)
+   sweep of the London-session high/low → failed continuation (close back inside)
+   → reversal displacement + FVG; stop beyond the swept extreme. Both directions.
+4. **`trend_bos_fvg_retest.py` — TrendBosFvgRetest (v1).** Multi-timeframe: the
+   most recent **H1 BOS/CHOCH** (causal — H1 bar must be closed) sets trend; first
+   M5 displacement+FVG in that direction is traded on its retest.
+5. **`post_spike_chop.py` — post-spike chop filter (v1).** A **no-trade filter**,
+   not a directional setup: suppresses entries during overlapping chop after a
+   spike. Measured as **expectancy uplift** on the other setups
+   (`measure_uplift` / harness `entry_filter`), not as a standalone edge.
+
+The directional setups (1–4) are in `research/setups.REGISTRY` and run by
+`scripts/research_run.py`, which also writes a cross-setup `RANKING.md`.
 
 ## Status / what to build next
 
-- **Done:** lab scaffolding, loader, metrics+classification, forward simulator,
-  cost-stress grid, session breakdown, report renderer, Setup 1 (v1), Windows
-  exporter, end-to-end synthetic test (6 tests pass; 826 total collected).
-- **Blocked on data:** real result tables require the one-time Windows export.
-- **Next:** (a) run the export; (b) `research_run.py` to produce Setup 1's first
-  real evidence table; (c) implement Setups 2–4 as versioned modules; (d) only if
-  a setup reaches *Proven Edge Candidate*, write an execution-model proposal.
+- **Done:** lab scaffolding, loader, metrics+classification, strictly-causal
+  forward simulator, cost-stress grid, session breakdown, report renderer +
+  cross-setup ranking, **all 5 setups**, Windows exporter, end-to-end synthetic
+  tests (14 pass; 834 total collected). No execution; no orders.
+- **Blocked on data:** real result tables require the one-time Windows export
+  (`scripts/export_mt5_history.py`) — `data/raw/` is empty, so every result reads
+  *Insufficient Data* until candles land.
+- **Next:** (a) run the export and sync `data/raw/*.csv`; (b) `research_run.py`
+  to produce the first real evidence tables + ranking; (c) inspect which setups
+  clear ≥100 occurrences and survive the cost grid; (d) only if a setup reaches
+  *Proven Edge Candidate*, write an execution-model proposal (itself gated on
+  out-of-sample / walk-forward confirmation). Rule refinements = new versions.

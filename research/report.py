@@ -38,6 +38,46 @@ def _cancellation_reasons(results: Sequence[TradeResult]) -> str:
     return f"invalidated={inval}, expired_unfilled={timeout}"
 
 
+def _rank_key(r: ResearchResult) -> tuple:
+    """Sort setups best-first: classification tier, then expectancy, then PF."""
+    tier = {
+        Classification.PROVEN_EDGE_CANDIDATE: 3,
+        Classification.WEAK_EDGE: 2,
+        Classification.NO_EDGE: 1,
+        Classification.INSUFFICIENT_DATA: 0,
+    }[r.classification]
+    return (tier, r.metrics.expectancy, r.metrics.profit_factor)
+
+
+def render_ranking(results: List[ResearchResult]) -> str:
+    """Render the cross-setup quality ranking (the lab's top-level scoreboard)."""
+    ordered = sorted(results, key=_rank_key, reverse=True)
+    lines: List[str] = []
+    a = lines.append
+    a("# Setup Quality Ranking")
+    a("")
+    a("Best-first by classification tier, then expectancy, then profit factor. "
+      "No automation is justified unless a setup reaches **Proven Edge Candidate**.")
+    a("")
+    a("| rank | setup | version | class | trades | win rate | expectancy R | PF | max DD R |")
+    a("|---|---|---|---|---|---|---|---|---|")
+    for n, r in enumerate(ordered, 1):
+        m = r.metrics
+        a(f"| {n} | {r.setup} | {r.version} | {r.classification.value} | "
+          f"{m.trades} | {m.win_rate * 100:.1f}% | {m.expectancy:+.3f} | "
+          f"{m.profit_factor:.2f} | {m.max_drawdown_r:.1f} |")
+    a("")
+    proven = [r for r in ordered if r.classification == Classification.PROVEN_EDGE_CANDIDATE]
+    if proven:
+        a(f"**Best setup:** `{proven[0].setup}` — Proven Edge Candidate. "
+          "An execution-model proposal may follow (gated on out-of-sample confirmation).")
+    else:
+        a("**Best setup:** none qualifies as a Proven Edge Candidate. "
+          "Automation stays forbidden; gather more data or refine rules as new versions.")
+    a("")
+    return "\n".join(lines)
+
+
 def render(result: ResearchResult, n_examples: int = 5) -> str:
     m = result.metrics
     lines: List[str] = []

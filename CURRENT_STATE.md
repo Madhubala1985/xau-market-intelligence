@@ -17,12 +17,16 @@ repeatable setup with positive expectancy on ≥100 occurrences before ANY
 automation is allowed. Built `research/` package: data_loader (CSV from
 data/raw/, M1-aggregation), metrics + frozen classification thresholds
 (Insufficient Data <100 trades / No Edge / Weak Edge / Proven Edge Candidate),
-a strictly-causal forward-fill simulator with a spread/slippage stress grid and
-session breakdown, a report renderer, and **Setup 1 (v1)** — London sweep of
-Asian low → reclaim → displacement → FVG mitigation long (fully mechanical,
-versioned). Plus `scripts/export_mt5_history.py` (Windows-side, data-fetch only)
-and `scripts/research_run.py`. End-to-end self-test on synthetic data:
-tests/test_research_lab.py (6 pass; 826 total collected). Design: 29_RESEARCH_LAB.md.
+a strictly-causal forward-fill simulator with a spread/slippage stress grid,
+session breakdown, a report renderer + cross-setup RANKING, and **all FIVE
+candidate setups** (versioned, fully mechanical, each with a positive detection
+test): (1) London sweep of Asian low→reclaim→displacement→FVG long;
+(2) London sweep of Asian high→rejection→bearish CHOCH→FVG short;
+(3) NY sweep of London high/low→failed continuation→reversal; (4) H1-BOS trend
+continuation→M5 FVG retest; (5) post-spike chop NO-TRADE filter measured as
+expectancy uplift. Plus `scripts/export_mt5_history.py` (Windows-side, data-fetch
+only) and `scripts/research_run.py`. Self-test: tests/test_research_lab.py
+(14 pass; 834 total collected). Design: 29_RESEARCH_LAB.md.
 
 **Blocked on data:** MT5 is Windows-only/unavailable here and data/raw/ is empty,
 so no real occurrences exist yet — every result reads *Insufficient Data* until

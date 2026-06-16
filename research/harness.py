@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence
 
 from research.metrics import (
     Classification,
@@ -189,10 +189,17 @@ def run_setup(
     *,
     base_cost: CostModel = CostModel(),
     cost_grid: Sequence[CostModel] = DEFAULT_COST_GRID,
+    entry_filter: Optional[Callable[[Sequence[Candle], int], bool]] = None,
 ) -> ResearchResult:
-    """Run a setup end-to-end: detect -> simulate -> metrics -> stress -> classify."""
+    """Run a setup end-to-end: detect -> simulate -> metrics -> stress -> classify.
+
+    `entry_filter(candles, arm_index) -> True` suppresses an intent (used to
+    measure no-trade filters like Setup 5's post-spike chop avoidance).
+    """
     candles = data.exec_candles
     intents = setup.scan(data)
+    if entry_filter is not None:
+        intents = [it for it in intents if not entry_filter(candles, it.arm_index)]
 
     base_results = simulate(intents, candles, base_cost)
     base_metrics = compute_metrics(base_results)
