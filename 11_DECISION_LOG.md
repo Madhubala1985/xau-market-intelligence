@@ -45,6 +45,63 @@ Proposed / Accepted / Rejected / Superseded
 
 ---
 
+## Decision ID:
+2026-06-17-01
+
+## Date:
+2026-06-17
+
+## Area:
+Architecture / Strategy / Execution
+
+## Decision:
+STOP building autonomous trading bots. Pivot XAU_Model to an edge-discovery
+**research lab**. Retire all live execution for now (no orders, trading service
+not run). Use the repo only as infrastructure. Prove ONE repeatable XAU/USD
+setup with positive expectancy on ≥100 occurrences BEFORE any automation is
+permitted. New `research/` package: data_loader, metrics + frozen classification
+thresholds, strictly-causal forward-fill simulator with cost-stress grid +
+session breakdown, report renderer, and Setup 1 v1 (London sweep of Asian low →
+reclaim → displacement → FVG mitigation long). Windows-side data exporter
+(data-fetch only) + research_run CLI. See 29_RESEARCH_LAB.md.
+
+## Reason:
+Owner directive (2026-06-17): every prior full-model approach (GOLD-ALPHA-001,
+LIQUIDITY-INTEL-001, smc_v2, demo_challenge, …) shipped before a repeatable edge
+was proven, and failed. Evidence had to come first. The research lab forces
+that: expectancy on real samples, no curve-fit, no confidence theatre.
+
+## Evidence:
+GOLD-ALPHA-001 replay: -15.93R/10d, 17% win, DD 16.77R, SHIP: NO. Pattern of
+build-then-fail across prior phases (CURRENT_STATE history). MT5 unavailable in
+research env + empty data/raw confirmed the need for an explicit offline data
+pipeline.
+
+## Alternatives Considered:
+- Patch gold_alpha's p_win calibration and re-run live — rejected: keeps trading
+  before an edge is proven, repeating the failure mode.
+- Keep the control-pack "must not change direction" rule literally — rejected:
+  the owner explicitly redirected; the directive is the new authority.
+
+## Risk:
+No real backtest results until the Windows MT5 export is run (data/raw empty).
+Setup 1 may turn out to have no edge.
+
+## Mitigation:
+Lab is fully self-verified on synthetic data (tests/test_research_lab.py). Until
+data lands, all results honestly read *Insufficient Data*. Classification gate is
+frozen in advance so no result can be talked up. Execution stays retired until a
+Proven Edge Candidate exists.
+
+## Files Affected:
+research/ (new package), scripts/export_mt5_history.py, scripts/research_run.py,
+tests/test_research_lab.py, 29_RESEARCH_LAB.md, CURRENT_STATE.md, 12_HANDOFF.md.
+
+## Status:
+Accepted
+
+---
+
 # Latest Decisions
 
 ## Decision ID:

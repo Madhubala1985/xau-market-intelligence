@@ -6,9 +6,30 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 14: From-scratch profit model — gold_alpha (GOLD-ALPHA-001)
+Phase 15: EDGE-DISCOVERY RESEARCH LAB (RESEARCH-LAB-001) — execution retired
 
 ## Current Task
+
+RESEARCH-LAB-001 (owner directive, 2026-06-17): **Stop building trading bots.**
+Pivot the repo to an XAU/USD edge-discovery research lab. No live orders; the
+trading service is not run; the repo is infrastructure only. Goal: prove ONE
+repeatable setup with positive expectancy on ≥100 occurrences before ANY
+automation is allowed. Built `research/` package: data_loader (CSV from
+data/raw/, M1-aggregation), metrics + frozen classification thresholds
+(Insufficient Data <100 trades / No Edge / Weak Edge / Proven Edge Candidate),
+a strictly-causal forward-fill simulator with a spread/slippage stress grid and
+session breakdown, a report renderer, and **Setup 1 (v1)** — London sweep of
+Asian low → reclaim → displacement → FVG mitigation long (fully mechanical,
+versioned). Plus `scripts/export_mt5_history.py` (Windows-side, data-fetch only)
+and `scripts/research_run.py`. End-to-end self-test on synthetic data:
+tests/test_research_lab.py (6 pass; 826 total collected). Design: 29_RESEARCH_LAB.md.
+
+**Blocked on data:** MT5 is Windows-only/unavailable here and data/raw/ is empty,
+so no real occurrences exist yet — every result reads *Insufficient Data* until
+the one-time Windows export runs. Anti-curve-fit rules binding: no look-ahead,
+versioned rules, no tiny-sample claims, mandatory cost stress.
+
+## (history) Phase 14: From-scratch profit model — gold_alpha (GOLD-ALPHA-001)
 
 GOLD-ALPHA-001 (owner-directed, 2026-06-16): built a brand-new from-scratch
 XAU/USD profit-maximisation model; ALL prior profiles retired (liquidity_intel/

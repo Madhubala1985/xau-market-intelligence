@@ -9,7 +9,29 @@ This file allows Claude sessions to resume without losing direction.
 # Current Project State
 
 ## Current Phase:
-Phase 14: From-scratch profit model — gold_alpha (GOLD-ALPHA-001)
+Phase 15: EDGE-DISCOVERY RESEARCH LAB (RESEARCH-LAB-001) — execution retired
+
+## RESEARCH-LAB-001 (2026-06-17, owner directive): STOP building trading bots.
+Repo pivoted to an XAU/USD edge-discovery research lab. No live orders; trading
+service not run; repo is infrastructure only. Built `research/` package
+(data_loader, metrics+frozen classification, causal forward-fill simulator with
+spread/slippage stress grid + session breakdown, report renderer) and **Setup 1
+(v1)**: London sweep of Asian low → reclaim → displacement → FVG mitigation long
+(fully mechanical, versioned). Added scripts/export_mt5_history.py (Windows-side,
+DATA-FETCH ONLY — never order_send) and scripts/research_run.py. Self-test:
+tests/test_research_lab.py (6 pass; 826 collected). Design: 29_RESEARCH_LAB.md.
+Classification gate: ≥100 filled trades + expectancy ≥+0.10R + PF ≥1.30 + holds
+under cost grid ⇒ Proven Edge Candidate (only then may automation be proposed).
+
+NEXT EXACT STEP: get data. On the Windows MT5 terminal, in the venv, run
+`python scripts/export_mt5_history.py --years 3` → writes data/raw/XAUUSD_*.csv;
+sync those CSVs to this env; then `python scripts/research_run.py` produces
+reports/research/london_sweep_reclaim_long_v1.md (the first real evidence table).
+After that: implement Setups 2–4 as separate versioned modules under
+research/setups/. Do NOT propose any execution model until a setup reaches
+Proven Edge Candidate.
+
+## (history) Phase 14: From-scratch profit model — gold_alpha (GOLD-ALPHA-001)
 
 ## GOLD-ALPHA-001 (2026-06-16, owner-directed): built from scratch; all prior
 profiles retired/deleted. One profile `gold_alpha` (EV-scored setups,
