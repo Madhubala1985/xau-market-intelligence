@@ -192,21 +192,13 @@ class ResearchForwardRunner:
     def _fire(self, intent: EntryIntent, now: datetime,
               m5: Sequence[Candle]) -> StepEvent:
         decision = intent_to_decision(intent, now, self._symbol)
-        ctx = self._risk_context(now, decision)
-        if ctx is None:
-            return StepEvent("FILL_ATTEMPT", intent.setup,
-                             "skipped: could not size (no balance / sizing rejected)",
-                             direction=intent.direction)
-        result = self._gateway.execute(decision, ctx)
-        return StepEvent("FILL_ATTEMPT", intent.setup,
-                         f"gateway: {result.status.value} ({result.reason})",
-                         direction=intent.direction, result=result)
 
-    def _risk_context(self, now: datetime, decision: TradeDecision) -> Optional[RiskContext]:
         broker = self._adapter.fetch_broker_state(now)
         balance = broker.equity or broker.balance or 0.0
         if balance <= 0:
-            return None
+            return StepEvent("FILL_ATTEMPT", intent.setup,
+                             "skipped: account balance is 0/unavailable from broker",
+                             direction=intent.direction)
         try:
             tick = self._adapter.fetch_tick()
             spread = max(0.0, tick.ask - tick.bid)
@@ -214,15 +206,23 @@ class ResearchForwardRunner:
             spread = 0.0
         sizing = self._sizer.size(decision, balance, self._risk_pct, spread_price=spread)
         if not sizing.approved or sizing.lot_size <= 0:
-            return None
+            # Surface the EXACT sizing reason (e.g. RISK_TOO_HIGH, STOP_TOO_WIDE).
+            return StepEvent(
+                "FILL_ATTEMPT", intent.setup,
+                f"skipped: sizing {sizing.status.value} — {sizing.reason} "
+                f"(balance {balance:.0f}, risk {self._risk_pct:.2%})",
+                direction=intent.direction)
+
         open_syms = frozenset({self._symbol}) if broker.open_positions else frozenset()
-        return RiskContext(
-            broker=broker,
-            current_spread=spread,
-            lot_size=sizing.lot_size,
-            intended_risk_pct=self._risk_pct,
-            open_symbols=open_syms,
+        ctx = RiskContext(
+            broker=broker, current_spread=spread, lot_size=sizing.lot_size,
+            intended_risk_pct=self._risk_pct, open_symbols=open_syms,
         )
+        result = self._gateway.execute(decision, ctx)
+        return StepEvent("FILL_ATTEMPT", intent.setup,
+                         f"gateway: {result.status.value} ({result.reason}) "
+                         f"lot {sizing.lot_size:g} @ risk {sizing.risk_pct:.2%}",
+                         direction=intent.direction, result=result)
 
     @staticmethod
     def _key(intent: EntryIntent) -> str:
