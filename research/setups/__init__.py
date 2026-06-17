@@ -14,6 +14,7 @@ other setups (see post_spike_chop.measure_uplift).
 from research.setups.base import EntryIntent, MarketData, Setup
 from research.setups.london_asian_high_short import LondonAsianHighShort
 from research.setups.london_sweep_reclaim import LondonSweepReclaimLong
+from research.setups.momentum_continuation import MomentumContinuation
 from research.setups.ny_london_sweep_reversal import NyLondonSweepReversal
 from research.setups.trend_bos_fvg_retest import TrendBosFvgRetest
 
@@ -25,6 +26,7 @@ __all__ = [
     "LondonAsianHighShort",
     "NyLondonSweepReversal",
     "TrendBosFvgRetest",
+    "MomentumContinuation",
     "REGISTRY",
 ]
 
@@ -34,4 +36,5 @@ REGISTRY = {
     LondonAsianHighShort.name: LondonAsianHighShort,
     NyLondonSweepReversal.name: NyLondonSweepReversal,
     TrendBosFvgRetest.name: TrendBosFvgRetest,
+    MomentumContinuation.name: MomentumContinuation,
 }

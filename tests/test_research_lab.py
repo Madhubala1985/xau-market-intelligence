@@ -314,6 +314,19 @@ def test_setup4_detects_trend_continuation_long_win():
     assert r.r_multiple == pytest.approx(2.0, abs=0.1)
 
 
+def test_momentum_continuation_detects_session_agnostic():
+    from research.setups.momentum_continuation import MomentumContinuation
+    # Reuse the setup-4 bullish-trend builder; momentum (factor 2.0) also fires.
+    data = MarketData(by_tf=_build_setup4_long_win(datetime(2026, 6, 20, tzinfo=UTC)))
+    intents = MomentumContinuation(baseline_lookback=10).scan(data)
+    assert len(intents) >= 1
+    assert intents[0].direction == Direction.LONG
+    assert intents[0].session == "ANY"
+    # rr=3 default => target is 3R from entry
+    it = intents[0]
+    assert it.target == pytest.approx(it.entry_price + 3 * (it.entry_price - it.stop), abs=0.2)
+
+
 def test_setup4_requires_h1_context():
     # No H1 data -> no trend -> no occurrences (multi-TF dependency enforced).
     data = MarketData(by_tf={Timeframe.M5: _build_setup4_long_win(
@@ -346,8 +359,8 @@ def test_filter_removes_intents_in_chop_window():
     assert blocked.metrics.occurrences == 0
 
 
-def test_registry_has_four_directional_setups():
-    assert len(REGISTRY) == 4
+def test_registry_has_directional_setups():
+    assert len(REGISTRY) == 5
     for cls in REGISTRY.values():
         s = cls()
         assert s.rules()["version"] == s.version

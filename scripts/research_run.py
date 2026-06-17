@@ -19,6 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from research.data_loader import has_data, load_dataset  # noqa: E402
+from src.data.enums import Timeframe  # noqa: E402
 from research.harness import run_setup  # noqa: E402
 from research.report import render, render_ranking  # noqa: E402
 from research.setups import REGISTRY  # noqa: E402
@@ -38,7 +39,8 @@ def main(argv: list[str]) -> int:
         print(f"unknown setup(s): {unknown}. available: {list(REGISTRY)}")
         return 2
 
-    data_by_tf, reports = load_dataset()
+    # The registered setups use M5 (exec) + H1 (HTF context) only.
+    data_by_tf, reports = load_dataset(timeframes=(Timeframe.M5, Timeframe.H1))
     for r in reports:
         print(r.summary())
     data = MarketData(by_tf=data_by_tf)
