@@ -123,6 +123,14 @@ class ResearchForwardRunner:
         events.extend(self._process_pending(last, now, m5))
         # 2) Detect new signals armed on THIS bar (fills begin next bar).
         events.extend(self._detect_new(data, last))
+        # 3) Heartbeat on every newly-closed bar so the loop is visibly alive
+        #    even through long quiet stretches (monitoring aid).
+        if not events:
+            events.append(StepEvent(
+                "HEARTBEAT", "-",
+                f"scanned {last.time_utc:%Y-%m-%d %H:%M} UTC bar @ {last.close:.2f}; "
+                f"{len(self._pending)} pending; no signal",
+            ))
         for e in events:
             if self._on_event:
                 self._on_event(e)

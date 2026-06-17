@@ -128,6 +128,20 @@ def test_invalidation_cancels_without_order():
     assert gw.calls == []                              # no order ever sent
 
 
+def test_heartbeat_on_quiet_bar():
+    from datetime import datetime
+    day = datetime(2026, 6, 4, tzinfo=UTC).replace(hour=0)
+    # A few calm Asian bars: no setup can trigger -> heartbeat each new bar.
+    candles = [_c(day, i * 5, 2000, 2000.5, 1999.5, 2000) for i in range(3)]
+    adapter = FakeAdapter(candles)
+    runner = ResearchForwardRunner(setups=[LondonSweepReclaimLong()],
+                                   adapter=adapter, gateway=FakeGateway())
+    events = _drive(adapter, runner)
+    assert events and all(e.kind == "HEARTBEAT" for e in events)
+    # same-bar re-poll emits nothing (no duplicate heartbeat)
+    assert runner.step(now=candles[-1].time_utc) == []
+
+
 def test_intent_to_decision_carries_sl_tp():
     from datetime import datetime
     candles = _build_winning_day(datetime(2026, 6, 3, tzinfo=UTC))

@@ -144,7 +144,7 @@ def main() -> int:
 def _print_event(e) -> None:
     ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
     arrow = {"SIGNAL_ARMED": "•", "INVALIDATED": "x", "EXPIRED": "·",
-             "FILL_ATTEMPT": "→"}.get(e.kind, "?")
+             "FILL_ATTEMPT": "→", "HEARTBEAT": "."}.get(e.kind, "?")
     print(f"[{ts}] {arrow} {e.kind:<13} {e.setup:<26} {e.detail}")
 
 
