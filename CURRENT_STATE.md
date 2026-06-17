@@ -28,6 +28,18 @@ expectancy uplift. Plus `scripts/export_mt5_history.py` (Windows-side, data-fetc
 only) and `scripts/research_run.py`. Self-test: tests/test_research_lab.py
 (14 pass; 834 total collected). Design: 29_RESEARCH_LAB.md.
 
+DEMO FORWARD-TEST RUNNER (owner directive, 2026-06-17): per owner direction to
+forward-test on the DEMO account, built `src/execution/research_forward.py`
+(`ResearchForwardRunner`) + `scripts/research_forward_runner.py`. Detects fresh
+M5 signals, manages pending mitigation entries (invalidation-first / expiry /
+next-bar fill — mirrors the backtest), and routes every fill through the
+existing ExecutionGateway so ALL safety applies (real-money refusal, kill
+switch, demo preflight, RiskGovernor final authority, broker stops-level,
+demo-only send). Demo-locked (ctor raises on real flags); PositionSizer refuses
+sub-minimum lots. Windows-only (refuses elsewhere). Tests:
+tests/test_research_forward.py (4 pass). NOTE: this is live DEMO observation,
+NOT proof of an edge — no backtest exists yet (data/raw empty).
+
 **Blocked on data:** MT5 is Windows-only/unavailable here and data/raw/ is empty,
 so no real occurrences exist yet — every result reads *Insufficient Data* until
 the one-time Windows export runs. Anti-curve-fit rules binding: no look-ahead,

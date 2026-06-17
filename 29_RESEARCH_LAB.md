@@ -103,6 +103,33 @@ in every report. All have positive detection tests on synthetic data.
 The directional setups (1–4) are in `research/setups.REGISTRY` and run by
 `scripts/research_run.py`, which also writes a cross-setup `RANKING.md`.
 
+## DEMO forward-test runner (owner directive, 2026-06-17)
+
+The owner directed forward-testing the setups on the **demo** account before a
+backtest exists. `src/execution/research_forward.py` (`ResearchForwardRunner`)
+does this, driven by `scripts/research_forward_runner.py` on the Windows MT5
+terminal:
+
+- Detects signals on each newly-closed M5 bar (only fresh arms, not the warm-up
+  window); manages each as a pending mitigation entry (invalidation-first,
+  expiry, fill begins the next bar — mirrors the backtest simulator).
+- Routes every fill through the existing **ExecutionGateway**, so all safety
+  layers apply unchanged: real-money refusal, kill switch, demo preflight, the
+  **RiskGovernor** (final authority), broker stops-level, demo-only sending.
+- **Demo-locked:** construction raises if execution flags request anything but
+  DEMO. Position sizing uses the existing `PositionSizer`; sub-minimum lots are
+  refused (not silently rounded), so tiny-account/wide-stop signals simply skip.
+- Fill model: market-on-touch through the gateway (gateway prices off the live
+  tick) — a conservative approximation of the backtest's exact limit fill.
+
+**This is forward observation, not evidence of an edge.** No backtest is behind
+these setups yet. Honest status: it shows whether the mechanics fire sanely on
+live demo, nothing more. Real expectancy still requires the export + backtest.
+
+Run (Windows): `python scripts/research_forward_runner.py --dry-run` (detect
+only) then `... ` without `--dry-run` to send demo orders. On any non-Windows /
+no-MT5 host it refuses with `ENVIRONMENT_ISSUE`. Tests: `tests/test_research_forward.py`.
+
 ## Status / what to build next
 
 - **Done:** lab scaffolding, loader, metrics+classification, strictly-causal

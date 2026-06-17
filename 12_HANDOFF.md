@@ -28,6 +28,18 @@ and scripts/research_run.py. Self-test: tests/test_research_lab.py (14 pass;
 Classification gate: ≥100 filled trades + expectancy ≥+0.10R + PF ≥1.30 + holds
 under cost grid ⇒ Proven Edge Candidate (only then may automation be proposed).
 
+DEMO FORWARD-TEST RUNNER (owner directive 2026-06-17): src/execution/research_forward.py
+(ResearchForwardRunner) + scripts/research_forward_runner.py forward-test the
+UNPROVEN setups on the demo account. Detects fresh M5 signals, manages pending
+mitigation entries (invalidation-first/expiry/next-bar fill = backtest mirror),
+routes every fill through the existing ExecutionGateway (real-money refusal,
+kill switch, demo preflight, RiskGovernor, stops-level all apply). Demo-locked
+(ctor raises on real flags). Market-on-touch fill. Runs ONLY on the Windows MT5
+host (refuses elsewhere with ENVIRONMENT_ISSUE). Tests: tests/test_research_forward.py
+(4 pass; 18 with the lab; full suite collects clean). NOT evidence of an edge —
+no backtest exists yet. To run demo: `python scripts/research_forward_runner.py
+--dry-run` first, then without --dry-run to send demo orders.
+
 NEXT EXACT STEP: get data. On the Windows MT5 terminal, in the venv, run
 `python scripts/export_mt5_history.py --years 3` → writes data/raw/XAUUSD_*.csv;
 sync those CSVs to this env; then `python scripts/research_run.py` produces
