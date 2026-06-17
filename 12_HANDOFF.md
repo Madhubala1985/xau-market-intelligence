@@ -28,6 +28,20 @@ and scripts/research_run.py. Self-test: tests/test_research_lab.py (14 pass;
 Classification gate: ≥100 filled trades + expectancy ≥+0.10R + PF ≥1.30 + holds
 under cost grid ⇒ Proven Edge Candidate (only then may automation be proposed).
 
+EDGE SEARCH ITERATION 1 (2026-06-18, autonomous — owner granted full autonomy):
+Got real data (scripts/fetch_yahoo_history.py → GC=F proxy, ~60d M5 / ~2y H1).
+Systematic edge scan (scripts/edge_scan.py): only real signal is H1 trend/breakout
+(+0.60 ATR/24h, 55.5%, n=1478); H1 reversion loses; M5 reverts short-horizon.
+Built donchian_breakout_trend (H1), momentum_continuation, mean_reversion_m5;
+added MARKET entry + time-stop to the harness. ALL 7 setups = No Edge /
+Insufficient Data. Donchian edge is NON-STATIONARY: train(2024-25) negative,
+test(2026) positive → fails the train/test gate (scripts/donchian_tune.py). NO
+Proven Edge Candidate; automation NOT justified; nothing deployed. Writeup:
+30_RESEARCH_FINDINGS.md. NEXT: (1) broker-feed multi-year M5 export for real
+stationarity testing on the trade timeframe; (2) regime-filtered H1 breakout as
+the top hypothesis — must be validated train/test before it counts. Do NOT
+forward-test for "edge" (can't create one that isn't there). 22 tests pass.
+
 DEMO FORWARD-TEST RUNNER (owner directive 2026-06-17): src/execution/research_forward.py
 (ResearchForwardRunner) + scripts/research_forward_runner.py forward-test the
 UNPROVEN setups on the demo account. Detects fresh M5 signals, manages pending

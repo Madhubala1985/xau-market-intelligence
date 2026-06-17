@@ -38,6 +38,7 @@ class ExitReason(str, Enum):
     STOP_LOSS = "STOP_LOSS"
     INVALIDATION = "INVALIDATION"   # structural invalidation before/around fill
     TIMEOUT = "TIMEOUT"             # entry/exit window expired
+    TIME_EXIT = "TIME_EXIT"         # held to max_hold_bars, exited at the close
     END_OF_DATA = "END_OF_DATA"     # ran out of candles while in a trade
 
 

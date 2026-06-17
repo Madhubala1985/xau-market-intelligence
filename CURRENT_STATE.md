@@ -45,6 +45,21 @@ so no real occurrences exist yet — every result reads *Insufficient Data* unti
 the one-time Windows export runs. Anti-curve-fit rules binding: no look-ahead,
 versioned rules, no tiny-sample claims, mandatory cost stress.
 
+## EDGE SEARCH ITERATION 1 (2026-06-18, autonomous): real-data backtest verdict
+Pulled real gold history (GC=F Yahoo proxy: ~60d M5, ~2y H1) via
+scripts/fetch_yahoo_history.py. Ran a systematic edge scan
+(scripts/edge_scan.py): H1 trend persists (20-bar Donchian breakout +0.60 ATR/24h,
+55.5%, n=1478); H1 mean-reversion loses; M5 is short-horizon mean-reverting.
+Built + backtested 7 setups (4 SMC FVG, momentum_continuation, donchian_breakout_trend,
+mean_reversion_m5). RESULT: NONE is a Proven Edge Candidate — all No Edge /
+Insufficient Data. Critically, Donchian's edge is NON-STATIONARY (train ~2024-25
+negative, test ~2026 positive) so it fails the train/test gate
+(scripts/donchian_tune.py). Harness gained MARKET entry + time-stop exits.
+Full writeup: 30_RESEARCH_FINDINGS.md; reports in reports/research/. Verdict:
+automation NOT justified; do not deploy. Next: broker-feed multi-year M5 for
+stationarity testing + a regime-filtered breakout hypothesis (validated train/test).
+22 lab+forward tests pass.
+
 ## (history) Phase 14: From-scratch profit model — gold_alpha (GOLD-ALPHA-001)
 
 GOLD-ALPHA-001 (owner-directed, 2026-06-16): built a brand-new from-scratch

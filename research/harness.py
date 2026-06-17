@@ -115,8 +115,23 @@ def _simulate_intent(
     fill_price: Optional[float] = None
     fill_time: Optional[datetime] = None
     fill_idx: Optional[int] = None
+
+    # MARKET entries (breakout/momentum) fill at the next bar's open, adverse cost.
+    if intent.entry_type == "MARKET":
+        j = intent.arm_index + 1
+        if j >= len(candles):
+            return _result(None, None, None, None, 0.0,
+                           TradeOutcome.NO_TRADE, ExitReason.TIMEOUT,
+                           note="no next bar to fill market entry")
+        nxt = candles[j]
+        fill_price = nxt.open + (cost.spread + cost.slippage) if is_long \
+            else nxt.open - (cost.spread + cost.slippage)
+        fill_time, fill_idx = nxt.time_utc, j
+
     last_idx = min(intent.expiry_index, len(candles) - 1)
     for i in range(intent.arm_index + 1, last_idx + 1):
+        if fill_idx is not None:
+            break
         c = candles[i]
         # Invalidation before fill: sweep failed (new extreme beyond invalidation).
         if is_long and c.low <= intent.invalidation_price:
@@ -168,6 +183,15 @@ def _simulate_intent(
             return _result(fill_price, fill_time, exit_price, c.time_utc, r,
                            TradeOutcome.WIN, ExitReason.TAKE_PROFIT, mfe, mae,
                            note=f"target hit ({intent.context.get('risk_usd', 0):.2f} risk)")
+        # Time stop: held long enough -> exit at this bar's close (adverse cost).
+        if intent.max_hold_bars is not None and (i - fill_idx) >= intent.max_hold_bars:
+            exit_price = c.close - cost.slippage if is_long else c.close + cost.slippage
+            r = ((exit_price - fill_price) if is_long else (fill_price - exit_price)) / risk
+            outcome = (TradeOutcome.WIN if r > 0 else
+                       TradeOutcome.LOSS if r < 0 else TradeOutcome.BREAKEVEN)
+            return _result(fill_price, fill_time, exit_price, c.time_utc, r,
+                           outcome, ExitReason.TIME_EXIT, mfe, mae,
+                           note=f"time exit after {intent.max_hold_bars} bars")
 
     # Ran out of data while open: mark to last close, label END_OF_DATA.
     last = candles[-1]
@@ -196,7 +220,9 @@ def run_setup(
     `entry_filter(candles, arm_index) -> True` suppresses an intent (used to
     measure no-trade filters like Setup 5's post-spike chop avoidance).
     """
-    candles = data.exec_candles
+    # A setup may declare a non-M5 execution timeframe (e.g. H1 trend setups).
+    exec_tf = getattr(setup, "exec_timeframe", Timeframe.M5)
+    candles = data.tf(exec_tf)
     intents = setup.scan(data)
     if entry_filter is not None:
         intents = [it for it in intents if not entry_filter(candles, it.arm_index)]

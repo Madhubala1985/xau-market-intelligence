@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Protocol, Sequence
+from typing import Dict, List, Optional, Protocol, Sequence
 
 from src.data.enums import Direction, Timeframe
 from src.data.schemas import Candle
@@ -39,6 +39,12 @@ class EntryIntent:
     invalidation_price: float
     expiry_index: int
     note: str = ""
+    # "LIMIT": fills when price trades into entry_price (mitigation setups).
+    # "MARKET": fills at the next bar's open (breakout/momentum entries).
+    entry_type: str = "LIMIT"
+    # Optional time stop: exit at the close once this many bars have been held
+    # (None = manage purely by stop/target). For trend setups that harvest drift.
+    max_hold_bars: Optional[int] = None
     context: Dict[str, float] = field(default_factory=dict)
 
     @property

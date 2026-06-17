@@ -359,8 +359,44 @@ def test_filter_removes_intents_in_chop_window():
     assert blocked.metrics.occurrences == 0
 
 
+def _market_intent(day, **kw):
+    from research.setups.base import EntryIntent
+    base = dict(setup="t", version="v1", day=day, direction=Direction.LONG,
+                session="ANY", arm_index=0, arm_time=day, entry_price=100.0,
+                stop=98.0, target=104.0, invalidation_price=98.0, expiry_index=1,
+                entry_type="MARKET")
+    base.update(kw)
+    return EntryIntent(**base)
+
+
+def test_market_entry_fills_next_open_and_targets():
+    day = datetime(2026, 7, 1, tzinfo=UTC)
+    candles = [
+        _c(day, 0, 100, 100, 100, 100),     # arm bar
+        _c(day, 5, 100, 101, 99, 100),      # fill at THIS open (100)
+        _c(day, 10, 100, 105, 100, 104),    # high 105 >= target 104 -> WIN +2R
+    ]
+    r = simulate([_market_intent(day)], candles, NO_COST)[0]
+    assert r.entry_price == 100.0
+    assert r.exit_reason == ExitReason.TAKE_PROFIT
+    assert r.r_multiple == pytest.approx(2.0, abs=0.05)
+
+
+def test_time_exit_closes_position():
+    day = datetime(2026, 7, 2, tzinfo=UTC)
+    candles = [
+        _c(day, 0, 100, 100, 100, 100),
+        _c(day, 5, 100, 101, 99.5, 100),    # fill @100
+        _c(day, 10, 100, 101.5, 99.5, 101), # chop, no stop/target
+        _c(day, 15, 101, 101.5, 100.5, 101),# hold reaches max_hold -> exit @ close 101
+    ]
+    r = simulate([_market_intent(day, max_hold_bars=2, target=110.0)], candles, NO_COST)[0]
+    assert r.exit_reason == ExitReason.TIME_EXIT
+    assert r.r_multiple == pytest.approx(0.5, abs=0.05)   # (101-100)/2
+
+
 def test_registry_has_directional_setups():
-    assert len(REGISTRY) == 5
+    assert len(REGISTRY) == 7
     for cls in REGISTRY.values():
         s = cls()
         assert s.rules()["version"] == s.version
