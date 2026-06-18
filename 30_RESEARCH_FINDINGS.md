@@ -69,6 +69,36 @@ gate (positive in BOTH), **nothing qualifies. No Proven Edge Candidate exists.**
 3. **Do NOT deploy any current setup.** Forward-testing on demo will not create an
    edge that the backtest says isn't there.
 
+## Iteration 3 (2026-06-18): MACRO track — real yields + dollar regime
+
+Pivoted from price patterns to gold's actual drivers. Free, keyless FRED data
+(`research/macro_data.py`): 10y TIPS real yield (DFII10, 2003+) and broad dollar
+(DTWEXBGS, 2006+), as-of joined to 15y daily gold with a 1-day publication lag.
+Tool: `scripts/macro_edge_scan.py`.
+
+**Robust descriptive finding (large sample, economically sound):** gold's forward
+1-day return by regime (20d trend of yields & dollar) —
+- EASING (both falling): +13.7%/yr, n=1122
+- MIXED: +14.1%/yr, n=1406
+- **TIGHTENING (both rising): −0.3%/yr, n=1139** — tightening flattens gold's drift.
+
+**Strategy ("hold gold unless tightening"), 15y, 5-fold:** Sharpe 0.66 vs B&H
+0.56, maxDD 37% vs 50.5%, positive Sharpe in all 5 folds (beats B&H in bear/chop
+2011-17 & 2020-23; lags in raging bulls). Looked like a real risk-overlay edge —
+**BUT it is lookback-fragile:** the Sharpe improvement appears only at N=20;
+N=10/40/60 match or underperform B&H. So the *descriptive* regime effect is real
+and robust, but a naive binary overlay does NOT yield a parameter-robust edge
+over buy-and-hold. Current regime (2026-06-17): TIGHTENING (yields & dollar both
+rising) — the overlay would reduce gold here.
+
+**Verdict:** the macro thesis is confirmed (real yields + dollar genuinely drive
+gold; tightening is the bad state), but extracting robust tradeable alpha from a
+2-variable binary regime is fragile. Right next step: a CONTINUOUS multi-factor
+macro model (real yield level+change, dollar, breakevens, term premium, COT
+positioning) with proper walk-forward cross-validation and a held-out test —
+judged on out-of-sample Sharpe, not in-sample fit. This is the most promising
+direction found; it is NOT yet deployable.
+
 ## Iteration 2 (2026-06-18): regime filter + multi-year, multi-timeframe
 
 Pursued the one lead (H1 breakout) with regime filters (slow-EMA trend

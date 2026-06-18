@@ -38,3 +38,6 @@ trade_dump_*.json
 
 # Kill switch / runtime control state
 control/
+
+# macro feature cache (FRED keyless CSV) — refetched on demand
+data/raw/macro/
