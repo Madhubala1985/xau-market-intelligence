@@ -123,6 +123,23 @@ NOT alpha. Genuine edges would require different resources (intraday/broker tick
 data + latency, options/vol, cross-asset RV, alternative data) — bigger projects
 with uncertain payoff. Run: `python scripts/macro_model_run.py`.
 
+## FINAL DELIVERABLE & CONCLUSION (2026-06-18)
+
+The research arc is **concluded**. Verdict: with free public data at the daily
+horizon, **no tradeable edge in gold beats buy-and-hold.** Both the price-pattern
+and macro tracks converged on this, validated across 15 years and multiple
+regimes. This is a documented negative result — it says where NOT to risk money.
+
+The one defensible artifact shipped: **`research/regime.py` + `scripts/gold_regime.py`**
+— a macro regime *risk dial* (advisory, ensemble of lookbacks to avoid the
+single-N fragility). It scales suggested gold exposure down in real-yield+dollar
+tightening regimes to cut drawdown. It is **risk management, not alpha**, and does
+NOT auto-trade. Current reading: TIGHTENING (~33% suggested exposure).
+
+No trading model is deployed. If gold is held, the regime dial manages risk; the
+search for active alpha is closed unless new data/resources change the inputs
+(intraday/broker tick data, options/vol, cross-asset RV, alternative data).
+
 ## Iteration 2 (2026-06-18): regime filter + multi-year, multi-timeframe
 
 Pursued the one lead (H1 breakout) with regime filters (slow-EMA trend

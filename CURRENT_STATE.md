@@ -45,6 +45,17 @@ so no real occurrences exist yet — every result reads *Insufficient Data* unti
 the one-time Windows export runs. Anti-curve-fit rules binding: no look-ahead,
 versioned rules, no tiny-sample claims, mandatory cost stress.
 
+## RESEARCH ARC CONCLUDED (2026-06-18, full discretion): no daily edge; ship risk dial
+After price-pattern + macro tracks (real data, 15y, multi-regime, walk-forward),
+the verdict is final: NO tradeable daily edge in gold beats buy-and-hold on free
+public data. Documented negative result. Shipped the one defensible artifact:
+research/regime.py + scripts/gold_regime.py — an ensemble macro regime RISK DIAL
+(advisory, not auto-trading; cuts drawdown in real-yield+dollar tightening
+regimes; NOT alpha). Current reading: TIGHTENING (~33% suggested exposure). No
+trading model deployed. Active-alpha search closed unless new data/resources.
+Full arc: 30_RESEARCH_FINDINGS.md. Macro model: scripts/macro_model_run.py.
+Tests pass (incl. tests/test_regime_signal.py).
+
 ## EDGE SEARCH ITERATION 1 (2026-06-18, autonomous): real-data backtest verdict
 Pulled real gold history (GC=F Yahoo proxy: ~60d M5, ~2y H1) via
 scripts/fetch_yahoo_history.py. Ran a systematic edge scan
