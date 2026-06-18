@@ -68,3 +68,25 @@ gate (positive in BOTH), **nothing qualifies. No Proven Edge Candidate exists.**
    validated train/test on more data before it means anything.
 3. **Do NOT deploy any current setup.** Forward-testing on demo will not create an
    edge that the backtest says isn't there.
+
+## Iteration 2 (2026-06-18): regime filter + multi-year, multi-timeframe
+
+Pursued the one lead (H1 breakout) with regime filters (slow-EMA trend
+alignment, ATR high-volatility state), validated by train/test and k-fold.
+
+- **H1, vol-filtered breakout:** train/test both positive, but a 3-fold split
+  showed one fold negative for each variant -> **Weak Edge, not stationary.**
+- **Daily, vol+trend-filtered breakout (5y):** looked excellent — positive in all
+  3 folds, PF 2.35, +0.62R — but only 55 trades (Insufficient Data).
+- **Daily, same strategy, 15y (3.7k bars, 2011–2026), 5-fold:** the decisive
+  test. **Lost in 2011–2017, breakeven 2017–2023, +0.75R only in 2023–2026.**
+  Full 15y: 129 trades, +0.096R, PF 1.15 -> **Weak Edge**, entirely recency-driven.
+
+**Verdict for the whole search:** no robust, stationary, mechanically-tradeable
+edge exists in gold price action on the timeframes/data tested. Every positive
+result is a regime artifact — extending the window to cover gold's 2011–2019
+bear/range markets turns it negative. The recent breakout profitability is a BET
+that gold keeps trending, not an edge. **No Proven Edge Candidate. Nothing is
+fit to deploy, on demo or otherwise.** Loader now skips malformed vendor rows;
+DonchianBreakoutTrend gained optional regime filters + a configurable exec
+timeframe. Tooling: scripts/edge_scan.py, scripts/donchian_tune.py.

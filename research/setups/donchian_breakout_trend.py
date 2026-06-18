@@ -60,13 +60,23 @@ class DonchianBreakoutTrend:
         tp_atr: float = 4.0,
         cooldown: int = 12,
         max_hold_bars: Optional[int] = None,
+        trend_filter_ema: Optional[int] = None,
+        atr_regime_lookback: Optional[int] = None,
+        atr_regime_min_pctile: float = 0.5,
+        exec_timeframe: Timeframe = Timeframe.H1,
     ) -> None:
+        self.exec_timeframe = exec_timeframe  # instance overrides the class default
         self.lookback = lookback
         self.atr_len = atr_len
         self.stop_atr = stop_atr
         self.tp_atr = tp_atr
         self.cooldown = cooldown
         self.max_hold_bars = max_hold_bars
+        # Regime gates (optional): only trade breakouts aligned with a slow EMA
+        # trend, and/or only when ATR is in a high-volatility state.
+        self.trend_filter_ema = trend_filter_ema
+        self.atr_regime_lookback = atr_regime_lookback
+        self.atr_regime_min_pctile = atr_regime_min_pctile
 
     def rules(self) -> Dict[str, object]:
         return {
@@ -74,13 +84,31 @@ class DonchianBreakoutTrend:
             "exec_timeframe": "H1", "lookback": self.lookback, "atr_len": self.atr_len,
             "stop_atr": self.stop_atr, "tp_atr": self.tp_atr, "cooldown": self.cooldown,
             "max_hold_bars": self.max_hold_bars, "entry": "MARKET next bar", "session": "ANY",
+            "trend_filter_ema": self.trend_filter_ema,
+            "atr_regime_lookback": self.atr_regime_lookback,
+            "atr_regime_min_pctile": self.atr_regime_min_pctile,
         }
 
+    def _ema(self, candles: List[Candle], span: int) -> List[float]:
+        k = 2.0 / (span + 1)
+        out: List[float] = []
+        e = candles[0].close
+        for c in candles:
+            e = c.close * k + e * (1 - k)
+            out.append(e)
+        return out
+
+    def _atr_series(self, candles: List[Candle]) -> List[Optional[float]]:
+        return [_atr(candles, i, self.atr_len) for i in range(len(candles))]
+
     def scan(self, data: MarketData) -> List[EntryIntent]:
-        candles = data.tf(Timeframe.H1)
+        candles = data.tf(self.exec_timeframe)
         n = len(candles)
         if n <= self.lookback + 1:
             return []
+        ema = self._ema(candles, self.trend_filter_ema) if self.trend_filter_ema else None
+        atr_ser = self._atr_series(candles) if self.atr_regime_lookback else None
+
         intents: List[EntryIntent] = []
         last_arm = -10 ** 9
         for i in range(self.lookback + 1, n - 1):
@@ -98,6 +126,21 @@ class DonchianBreakoutTrend:
             atr = _atr(candles, i, self.atr_len)
             if atr is None or atr <= 0:
                 continue
+
+            # Regime gate 1: breakout must align with the slow-EMA trend.
+            if ema is not None:
+                if fresh_long and c.close <= ema[i]:
+                    continue
+                if fresh_short and c.close >= ema[i]:
+                    continue
+            # Regime gate 2: only in a high-volatility state (ATR percentile).
+            if atr_ser is not None:
+                lo = max(0, i - self.atr_regime_lookback)
+                window = [a for a in atr_ser[lo:i] if a is not None]
+                if window:
+                    rank = sum(1 for a in window if a <= atr) / len(window)
+                    if rank < self.atr_regime_min_pctile:
+                        continue
 
             entry_ref = candles[i + 1].open  # market fill reference (next-bar open)
             is_long = fresh_long

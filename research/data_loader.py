@@ -175,7 +175,13 @@ def _read_csv(path: Path, tf: Timeframe) -> List[Candle]:
                 f"{path.name} missing required columns: {sorted(missing)}"
             )
         for row in reader:
-            candles.append(_row_to_candle(row, tf))
+            try:
+                candles.append(_row_to_candle(row, tf))
+            except (ValueError, KeyError, TypeError):
+                # Malformed row (e.g. impossible OHLC from a bad vendor print).
+                # Skip it rather than fabricate; counted as an OHLC violation by
+                # the caller via the row-count gap.
+                continue
     return candles
 
 
