@@ -39,6 +39,12 @@ def main() -> int:
     ap.add_argument("--poll-seconds", type=float, default=20.0)
     ap.add_argument("--max-cycles", type=int, default=0, help="0 = run until Ctrl-C")
     ap.add_argument("--risk-pct", type=float, default=0.005)
+    ap.add_argument("--regime-bet", action="store_true",
+                    help="run ONLY the vol+trend-filtered breakout as an explicit "
+                         "regime BET (H1, market entry) — NOT a proven edge")
+    ap.add_argument("--regime-tf", choices=["H1", "1D"], default="H1",
+                    help="timeframe for --regime-bet (H1 trades more often; 1D is "
+                         "the cleaner regime bet but rare and needs a larger account)")
     args = ap.parse_args()
 
     try:
@@ -98,25 +104,45 @@ def main() -> int:
             expected_symbol=canonical, broker_symbol=settings.symbol,
             kill_switch=kill_switch,
         )
-        setups = [cls() for cls in REGISTRY.values()]
+        from src.data.enums import Timeframe
+        from research.setups.donchian_breakout_trend import DonchianBreakoutTrend
+        if args.regime_bet:
+            tf = Timeframe.H1 if args.regime_tf == "H1" else Timeframe.D1
+            setups = [DonchianBreakoutTrend(
+                stop_atr=2.0, tp_atr=4.0, trend_filter_ema=100,
+                atr_regime_lookback=200, atr_regime_min_pctile=0.5,
+                exec_timeframe=tf)]
+            exec_tf = tf
+            label = (f"REGIME BET (NOT a proven edge): vol+trend-filtered "
+                     f"{tf.value} breakout")
+        else:
+            setups = [cls() for cls in REGISTRY.values()]
+            exec_tf = Timeframe.M5
+            label = f"UNPROVEN setups (observation): {', '.join(REGISTRY)}"
+
         runner = ResearchForwardRunner(
             setups=setups, adapter=adapter, gateway=gateway,
             sizer=PositionSizer(), symbol=settings.symbol, risk_pct=args.risk_pct,
-            on_event=lambda e: _print_event(e),
+            exec_tf=exec_tf, on_event=lambda e: _print_event(e),
         )
 
         mode = "DRY_RUN (no orders sent)" if not flags.demo_send_enabled else \
             f"EXECUTION — DEMO orders WILL be sent ({account_type})"
         print("=" * 72)
-        print("RESEARCH FORWARD-TEST RUNNER — UNPROVEN setups, DEMO only")
+        print("RESEARCH FORWARD-TEST RUNNER — DEMO only")
         print(f"  account: {mask_login(settings.login)} ({account_type})  "
               f"server: {settings.server}  symbol: {settings.symbol}")
-        print(f"  mode: {mode}")
-        print(f"  risk/trade: {args.risk_pct:.2%}   setups: "
-              f"{', '.join(REGISTRY)}")
+        print(f"  mode: {mode}   exec timeframe: {exec_tf.value}")
+        print(f"  strategy: {label}")
+        print(f"  risk/trade: {args.risk_pct:.2%}")
         print(f"  kill switch: {'ENGAGED' if kill_switch.engaged else 'absent'} "
               f"({KILL_SWITCH_PATH})")
-        print("  NOTE: no backtest behind these setups yet — observation only.")
+        if args.regime_bet:
+            print("  NOTE: this is a BET that gold keeps trending (Weak Edge, 15y "
+                  "non-stationary). No new entries fire when the vol/trend regime "
+                  "is off. Wide ATR stops may not size on a small account.")
+        else:
+            print("  NOTE: no proven edge behind these setups — observation only.")
         print("=" * 72)
 
         cycles = 0

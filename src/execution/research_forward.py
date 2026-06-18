@@ -81,6 +81,7 @@ class ResearchForwardRunner:
         risk_pct: float = 0.005,
         exec_count: int = 400,
         h1_count: int = 300,
+        exec_tf: Timeframe = Timeframe.M5,
         on_event: Optional[Callable[[StepEvent], None]] = None,
     ) -> None:
         # DEMO LOCK: refuse to exist if anything real is requested.
@@ -97,6 +98,7 @@ class ResearchForwardRunner:
         self._risk_pct = risk_pct
         self._exec_count = exec_count
         self._h1_count = h1_count
+        self._exec_tf = exec_tf            # bar timeframe driving detection/fills
         self._on_event = on_event
 
         self._pending: Dict[str, _Pending] = {}
@@ -107,22 +109,24 @@ class ResearchForwardRunner:
     def step(self, now: Optional[datetime] = None) -> List[StepEvent]:
         """Process one cycle. Returns events; no-op until a NEW M5 bar closes."""
         now = now or datetime.now(timezone.utc)
-        m5 = list(self._adapter.fetch_candles(Timeframe.M5, self._exec_count))
-        if not m5:
+        exec_candles = list(self._adapter.fetch_candles(self._exec_tf, self._exec_count))
+        if not exec_candles:
             return []
-        last = m5[-1]
+        last = exec_candles[-1]
         if last.time_utc == self._last_bar_time:
             return []                       # same bar; nothing new
         self._last_bar_time = last.time_utc
 
-        h1 = list(self._adapter.fetch_candles(Timeframe.H1, self._h1_count))
-        data = MarketData(by_tf={Timeframe.M5: m5, Timeframe.H1: h1})
+        by_tf = {self._exec_tf: exec_candles}
+        if self._exec_tf != Timeframe.H1:   # M5 setups also need H1 context
+            by_tf[Timeframe.H1] = list(self._adapter.fetch_candles(Timeframe.H1, self._h1_count))
+        data = MarketData(by_tf=by_tf)
 
         events: List[StepEvent] = []
-        # 1) Manage existing pending intents against the just-closed bar.
-        events.extend(self._process_pending(last, now, m5))
+        # 1) Manage existing pending (LIMIT) intents against the just-closed bar.
+        events.extend(self._process_pending(last, now, exec_candles))
         # 2) Detect new signals armed on THIS bar (fills begin next bar).
-        events.extend(self._detect_new(data, last))
+        events.extend(self._detect_new(data, last, now, exec_candles))
         # 3) Heartbeat on every newly-closed bar so the loop is visibly alive
         #    even through long quiet stretches (monitoring aid).
         if not events:
@@ -137,7 +141,8 @@ class ResearchForwardRunner:
         return events
 
     # -- internals -----------------------------------------------------------
-    def _detect_new(self, data: MarketData, last: Candle) -> List[StepEvent]:
+    def _detect_new(self, data: MarketData, last: Candle, now: datetime,
+                    exec_candles: Sequence[Candle]) -> List[StepEvent]:
         events: List[StepEvent] = []
         for setup in self._setups:
             for intent in setup.scan(data):
@@ -146,10 +151,6 @@ class ResearchForwardRunner:
                 key = self._key(intent)
                 if key in self._handled or key in self._pending:
                     continue
-                self._pending[key] = _Pending(
-                    intent=intent,
-                    expiry_bars=max(1, intent.expiry_index - intent.arm_index),
-                )
                 self._handled.add(key)
                 events.append(StepEvent(
                     "SIGNAL_ARMED", intent.setup,
@@ -157,6 +158,14 @@ class ResearchForwardRunner:
                     f"SL {intent.stop:.2f} TP {intent.target:.2f}: {intent.note}",
                     direction=intent.direction,
                 ))
+                if intent.entry_type == "MARKET":
+                    # Breakout/momentum: fire immediately (no pullback wait).
+                    events.append(self._fire(intent, now, exec_candles))
+                else:
+                    self._pending[key] = _Pending(
+                        intent=intent,
+                        expiry_bars=max(1, intent.expiry_index - intent.arm_index),
+                    )
         return events
 
     def _process_pending(self, bar: Candle, now: datetime,
@@ -226,4 +235,4 @@ class ResearchForwardRunner:
 
     @staticmethod
     def _key(intent: EntryIntent) -> str:
-        return f"{intent.setup}:{intent.day.date().isoformat()}"
+        return f"{intent.setup}:{intent.arm_time.isoformat()}"

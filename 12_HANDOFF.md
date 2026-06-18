@@ -42,6 +42,16 @@ stationarity testing on the trade timeframe; (2) regime-filtered H1 breakout as
 the top hypothesis — must be validated train/test before it counts. Do NOT
 forward-test for "edge" (can't create one that isn't there). 22 tests pass.
 
+REGIME-BET DEMO DEPLOY (owner choice 2026-06-18, eyes-open): owner chose to run
+the vol+trend-filtered breakout on demo as an explicit BET (not a proven edge).
+Runner generalized: exec_tf param (H1/D1) + MARKET entry fires immediately
+through the gateway. Run: `py -3.12 scripts\research_forward_runner.py --regime-bet
+[--regime-tf H1|1D] [--risk-pct 0.01] [--dry-run]`. Banner labels it a BET;
+no new entries when vol/trend regime is off; wide daily ATR stops may not size
+on a ~$2k account (use H1 or a larger demo balance). Still demo-locked. This is
+NOT a reversal of the no-edge verdict — it is a labeled regime bet the owner
+opted into. 23 tests pass.
+
 DEMO FORWARD-TEST RUNNER (owner directive 2026-06-17): src/execution/research_forward.py
 (ResearchForwardRunner) + scripts/research_forward_runner.py forward-test the
 UNPROVEN setups on the demo account. Detects fresh M5 signals, manages pending

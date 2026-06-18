@@ -142,6 +142,43 @@ def test_heartbeat_on_quiet_bar():
     assert runner.step(now=candles[-1].time_utc) == []
 
 
+class _FakeMarketSetup:
+    name = "fakemkt"
+    version = "v1"
+
+    def rules(self):
+        return {}
+
+    def scan(self, data):
+        from research.setups.base import EntryIntent
+        c = data.tf(Timeframe.M5)
+        if len(c) < 2:
+            return []
+        last = c[-1]
+        return [EntryIntent(
+            setup=self.name, version=self.version, day=last.time_utc,
+            direction=Direction.LONG, session="ANY", arm_index=len(c) - 1,
+            arm_time=last.time_utc, entry_price=last.close, stop=last.close - 2.0,
+            target=last.close + 4.0, invalidation_price=last.close - 2.0,
+            expiry_index=len(c), entry_type="MARKET")]
+
+
+def test_market_entry_fires_immediately_through_gateway():
+    from datetime import datetime
+    day = datetime(2026, 7, 3, tzinfo=UTC)
+    candles = [_c(day, i * 5, 2000 + i, 2001 + i, 1999 + i, 2000 + i) for i in range(3)]
+    adapter = FakeAdapter(candles, balance=50000.0)
+    gw = FakeGateway()
+    runner = ResearchForwardRunner(setups=[_FakeMarketSetup()], adapter=adapter,
+                                   gateway=gw, sizer=PositionSizer())
+    events = _drive(adapter, runner)
+    # MARKET signals fire on the SAME bar they arm (no pending wait).
+    assert any(e.kind == "SIGNAL_ARMED" for e in events)
+    assert any(e.kind == "FILL_ATTEMPT" for e in events)
+    assert len(gw.calls) >= 1
+    assert gw.calls[0][0].direction == Direction.LONG
+
+
 def test_intent_to_decision_carries_sl_tp():
     from datetime import datetime
     candles = _build_winning_day(datetime(2026, 6, 3, tzinfo=UTC))
