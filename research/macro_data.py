@@ -26,6 +26,8 @@ CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "raw" / "macro"
 SERIES = {
     "real_yield_10y": "DFII10",      # 10y TIPS real yield (the key gold driver)
     "broad_dollar": "DTWEXBGS",      # nominal broad US dollar index
+    "breakeven_10y": "T10YIE",       # 10y breakeven inflation expectations
+    "nominal_10y": "DGS10",          # 10y nominal Treasury yield
 }
 
 
@@ -72,6 +74,30 @@ def asof_join(
         cutoff = t.toordinal() - lag_days
         idx = bisect_right([k.toordinal() for k in keys], cutoff) - 1
         out.append(series[keys[idx]] if idx >= 0 else None)
+    return out
+
+
+def load_cot_net_spec() -> Dict[date, float]:
+    """Gold COMEX speculator net position as a fraction of open interest.
+
+    Keyed by the COT report_date (the Tuesday). Callers must as-of join with a
+    publication lag (>= 4 days: the report is released the following Friday) so
+    the value is never used before it was public.
+    """
+    path = CACHE_DIR / "COT_gold.csv"
+    out: Dict[date, float] = {}
+    if not path.exists():
+        return out
+    reader = csv.reader(io.StringIO(path.read_text()))
+    next(reader, None)
+    for row in reader:
+        try:
+            d = datetime.fromisoformat(row[0].replace("Z", "")).date()
+            longs, shorts, oi = float(row[1]), float(row[2]), float(row[3])
+        except (ValueError, IndexError):
+            continue
+        if oi > 0:
+            out[d] = (longs - shorts) / oi
     return out
 
 

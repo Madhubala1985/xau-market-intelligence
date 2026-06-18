@@ -99,6 +99,30 @@ positioning) with proper walk-forward cross-validation and a held-out test —
 judged on out-of-sample Sharpe, not in-sample fit. This is the most promising
 direction found; it is NOT yet deployable.
 
+## Iteration 4 (2026-06-18): multi-factor walk-forward macro model
+
+Built the continuous, cross-validated model (`scripts/macro_model_run.py`,
+`research/macro_data.py`) the fragility result called for. 8 factors (real-yield
+/ dollar / breakeven / nominal-yield momentum + COT gold net-spec level & 52w
+z-score), all point-in-time/lagged; Ridge, expanding-window walk-forward, refit
+quarterly, OOS-only predictions. 15y daily gold, ~2,700 OOS days (2015-2026).
+
+Results: **OOS IC = +0.079** (weak but real predictive signal). As a strategy it
+**does NOT beat buy & hold**: long/flat Sharpe 0.64 vs B&H 0.83 (underperforms in
+all 5 folds; only lower drawdown, 18.5% vs 22.3%); long/short Sharpe 0.07
+(disastrous — no short edge in a secular bull). Final coefficients are tiny and
+several economically wrong-signed -> mostly noise + a slight long tilt.
+
+**Converged conclusion (price-pattern + macro tracks):** at the daily horizon
+with free public data, there is NO tradeable edge that beats simply holding gold.
+Macro factors relate to gold but the relationship is largely contemporaneous, not
+predictive enough to beat B&H after costs. The only defensible practical output
+is a RISK overlay: hold gold (positive drift), scale exposure down in real-yield+
+dollar tightening regimes to cut drawdown (drawdown-positive, ~Sharpe-neutral) —
+NOT alpha. Genuine edges would require different resources (intraday/broker tick
+data + latency, options/vol, cross-asset RV, alternative data) — bigger projects
+with uncertain payoff. Run: `python scripts/macro_model_run.py`.
+
 ## Iteration 2 (2026-06-18): regime filter + multi-year, multi-timeframe
 
 Pursued the one lead (H1 breakout) with regime filters (slow-EMA trend
