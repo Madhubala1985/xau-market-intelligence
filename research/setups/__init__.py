@@ -13,6 +13,7 @@ other setups (see post_spike_chop.measure_uplift).
 
 from research.setups.base import EntryIntent, MarketData, Setup
 from research.setups.donchian_breakout_trend import DonchianBreakoutTrend
+from research.setups.fibonacci_retracement import FibonacciRetracement
 from research.setups.london_asian_high_short import LondonAsianHighShort
 from research.setups.london_sweep_reclaim import LondonSweepReclaimLong
 from research.setups.mean_reversion_m5 import MeanReversionM5
@@ -31,6 +32,7 @@ __all__ = [
     "MomentumContinuation",
     "DonchianBreakoutTrend",
     "MeanReversionM5",
+    "FibonacciRetracement",
     "REGISTRY",
 ]
 
@@ -43,4 +45,5 @@ REGISTRY = {
     MomentumContinuation.name: MomentumContinuation,
     DonchianBreakoutTrend.name: DonchianBreakoutTrend,
     MeanReversionM5.name: MeanReversionM5,
+    FibonacciRetracement.name: FibonacciRetracement,
 }

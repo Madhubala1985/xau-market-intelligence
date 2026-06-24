@@ -395,8 +395,40 @@ def test_time_exit_closes_position():
     assert r.r_multiple == pytest.approx(0.5, abs=0.05)   # (101-100)/2
 
 
+def test_fibonacci_retracement_detects_short():
+    from research.setups.fibonacci_retracement import FibonacciRetracement
+    day = datetime(2026, 7, 5, tzinfo=UTC)
+
+    def H(i, o, h, l, c):
+        return _c(day, i * 60, o, h, l, c)
+
+    # down-leg: swing HIGH@idx2 (110), swing LOW@idx6 (90); retrace up tags 0.5
+    # (=100) then closes back through -> short. swing_strength=2, trend off.
+    candles = [
+        H(0, 100, 101, 99, 100), H(1, 100, 102, 99, 101),
+        H(2, 101, 110, 101, 109),                      # swing high 110
+        H(3, 106, 108, 104, 105), H(4, 105, 106, 101, 102),
+        H(5, 102, 103, 96, 97),
+        H(6, 97, 98, 90, 91),                          # swing low 90
+        H(7, 91, 95, 91, 94), H(8, 94, 97, 93, 96),    # low confirmed @ idx8
+        H(9, 96, 101, 96, 100.5),                      # tag: high 101 >= 0.5 level (100)
+        H(10, 100.5, 102, 98, 99),                     # close 99 < 100 -> confirm short
+        H(11, 99, 100, 97, 98),                        # fill bar (market next open)
+    ]
+    setup = FibonacciRetracement(swing_strength=2, exec_timeframe=Timeframe.M5,
+                                 require_trend=False, confirm_within=24)
+    shorts = [it for it in setup.scan(MarketData(by_tf={Timeframe.M5: candles}))
+              if it.direction == Direction.SHORT]
+    assert len(shorts) >= 1
+    it = shorts[0]
+    assert it.stop > it.entry_price            # stop beyond swing high
+    assert it.target < it.entry_price          # short target below entry
+    assert it.stop == pytest.approx(110.10, abs=0.01)
+    assert it.entry_type == "MARKET"
+
+
 def test_registry_has_directional_setups():
-    assert len(REGISTRY) == 7
+    assert len(REGISTRY) == 8
     for cls in REGISTRY.values():
         s = cls()
         assert s.rules()["version"] == s.version

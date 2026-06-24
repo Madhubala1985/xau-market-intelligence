@@ -123,6 +123,29 @@ NOT alpha. Genuine edges would require different resources (intraday/broker tick
 data + latency, options/vol, cross-asset RV, alternative data) — bigger projects
 with uncertain payoff. Run: `python scripts/macro_model_run.py`.
 
+## Iteration 5 (2026-06-24): Fibonacci retracement + random-entry control
+
+Mechanical Fib continuation (`research/setups/fibonacci_retracement.py`,
+`scripts/fib_run.py`): swing detection (MarketStructureEngine, configurable
+strength) -> trend (LH+LL / HH+HL) -> tag 0.5-0.786 zone -> candle closes back
+through 0.5 -> MARKET entry; stop beyond the swing, fixed 2R. Same gate, 5-fold
+walk-forward, cost-stress, on GC=F H1 & M5.
+
+| TF | trades | exp | PF | class | cost-stress | random baseline | verdict |
+|---|---|---|---|---|---|---|---|
+| H1 | 404 | +0.098R | 1.15 | Weak Edge | +0.122→+0.027 | **+0.059R ±0.068** | Fib z=+0.57 → **indistinguishable from noise** |
+| M5 | 254 | −0.112R | 0.85 | No Edge | all negative | −0.058R ±0.087 | Fib z=−0.62 (worse than random) |
+
+**The control is the whole point.** H1 Fib grazes "Weak Edge" (+0.098R) — but a
+random-entry baseline with IDENTICAL stop/target/RR and the same long/short mix,
+placed at random bars, earns +0.059R. Fib sits only +0.57 std above random
+(p=0.28) → the apparent edge is the trend + R-geometry + direction mix, NOT the
+Fibonacci levels. The levels add nothing. H1 is also non-stationary (fold3
+−0.22R) and fails the Proven cost-decay; M5 is outright No Edge and worse than
+random. **Verdict: No tradeable edge from Fib levels — confirmed at the same
+standard that killed the SMC setups, and the random control proves the levels
+themselves are inert.**
+
 ## FINAL DELIVERABLE & CONCLUSION (2026-06-18)
 
 The research arc is **concluded**. Verdict: with free public data at the daily
