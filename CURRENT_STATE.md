@@ -45,6 +45,18 @@ so no real occurrences exist yet — every result reads *Insufficient Data* unti
 the one-time Windows export runs. Anti-curve-fit rules binding: no look-ahead,
 versioned rules, no tiny-sample claims, mandatory cost stress.
 
+## PROJECT CLOSED (2026-06-27): successful negative result — terminal docs written
+The repo is closed as a finished research project. Terminal documents:
+40_CONCLUSION.md (the question, full Phase 1-11 + isolation-battery evidence
+chain, verdict, the one shipped artifact) and 41_METHODOLOGY.md (the reusable,
+market-agnostic edge-falsification harness). Verdict: no isolated or composite
+price-based edge in free daily/H1 XAU/USD survives a random baseline + OOS
+replication; the only real effects (vol-regime, real-yields, COT) are
+non-tradeable, risk-overlay only. Shipped artifact: the regime risk dial
+(research/regime.py + scripts/gold_regime.py, advisory). Also: edge audit
+(31_EDGE_AUDIT.md) + single-factor isolation battery (0/6 factors a hit). No
+further strategy work warranted on free-data XAU/USD price patterns. 32 tests pass.
+
 ## RESEARCH ARC CONCLUDED (2026-06-18, full discretion): no daily edge; ship risk dial
 After price-pattern + macro tracks (real data, 15y, multi-regime, walk-forward),
 the verdict is final: NO tradeable daily edge in gold beats buy-and-hold on free
