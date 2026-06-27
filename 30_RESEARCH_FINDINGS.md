@@ -123,6 +123,29 @@ NOT alpha. Genuine edges would require different resources (intraday/broker tick
 data + latency, options/vol, cross-asset RV, alternative data) — bigger projects
 with uncertain payoff. Run: `python scripts/macro_model_run.py`.
 
+## Iteration 6 (2026-06-25): single-factor isolation battery — "never isolated" gap closed
+
+Each SMC factor tested ALONE (minimal rule: factor appears → MARKET next bar in
+its implied direction; fixed 1.5×ATR stop, 2R target; no confluence). GC=F H1,
+walk-forward, cost-stress, vs random baseline; Bonferroni z≥2.39 (6 tests) +
+holdout-fold replication required for a "hit". Code: `research/setups/single_factor.py`,
+`scripts/factor_isolation.py`.
+
+| factor | trades | exp | PF | maxDD | z vs random | gate | HIT |
+|---|---|---|---|---|---|---|---|
+| FVG | 1214 | +0.004R | 1.01 | 72.7R | +0.74 | Weak Edge | no |
+| liquidity sweep | 1461 | −0.247R | 0.68 | 372.4R | −5.77 | No Edge | no |
+| displacement | 1007 | −0.083R | 0.88 | 129.0R | −0.84 | No Edge | no |
+| CHOCH | 493 | −0.013R | 0.98 | 35.6R | +0.65 | No Edge | no |
+| order block | 998 | −0.002R | 1.00 | 64.4R | +0.54 | No Edge | no |
+| supply/demand | 1138 | −0.047R | 0.93 | 100.6R | +0.19 | No Edge | no |
+
+**0 of 6 hits.** Five are indistinguishable from random; liquidity sweep is
+significantly WORSE than random (z=−5.77). The "never isolated" gap from the edge
+audit (`31_EDGE_AUDIT.md`) is now permanently closed: none of the core SMC entry
+factors has a standalone edge. (Several show a positive *holdout* fold but fail
+the full-sample gate + z-test → recency artifacts, correctly rejected.)
+
 ## Iteration 5 (2026-06-24): Fibonacci retracement + random-entry control
 
 Mechanical Fib continuation (`research/setups/fibonacci_retracement.py`,
