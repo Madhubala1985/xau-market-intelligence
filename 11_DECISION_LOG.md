@@ -4180,3 +4180,35 @@ scripts/trading_service.py.
 
 ## Status:
 Accepted
+
+---
+
+# Decision 2026-07-05-01
+
+## Area:
+Project status + gate policy under the owner's reopen directive
+(ALPHA-HUNT-001; supersedes the 40_CONCLUSION.md "closed" status, not its
+evidence)
+
+## Decision:
+Owner directive 2026-07-05: reopen with full authority to Claude; goal is a
+profitable model; high trade counts acceptable; "remove gates" allowed.
+Interpretation adopted: (a) REMOVED — the closed-project freeze, process
+bureaucracy, retired-profile guards, research cadence caps, scope limits on
+data/methods. (b) KEPT — the statistical honesty gates (strictly-causal sim,
+cost stress grid, walk-forward, random-entry baseline with Bonferroni, OOS
+holdout replication): they are the measuring instrument that distinguishes a
+profitable model from a backtest illusion; removing them cannot create profit.
+(c) ABSOLUTE (owner's own standing rules, per memory + control pack):
+demo-only, mandatory SL, no martingale/averaging, MT5 truth, kill switch.
+The search direction is exclusively the space 40_CONCLUSION.md marked never
+tested (intraday at scale, time-of-day, cross-asset lead-lag, ML, vol
+structure) using new free data (Dukascopy M1 2019-2026, 4 instruments) —
+NOT a re-test of the falsified SMC/price-pattern space.
+
+## Files Affected:
+42_ALPHA_HUNT.md (new program), scripts/fetch_dukascopy.py (new),
+CURRENT_STATE.md, 12_HANDOFF.md, 10_TASK_QUEUE.md.
+
+## Status:
+Accepted

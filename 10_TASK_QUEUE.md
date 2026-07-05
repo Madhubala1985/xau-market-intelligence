@@ -814,3 +814,30 @@ Stop condition:
 
 Status:
 In progress (started 2026-06-12).
+
+---
+
+## Task ALPHA-HUNT-001: Reopened edge search on the never-tested space
+
+Goal:
+Owner directive 2026-07-05 — make the model profitable; full authority; high
+trade counts fine. Attack ONLY the space 40_CONCLUSION.md never tested, with
+new data. Program and phase gates: 42_ALPHA_HUNT.md.
+
+Rules:
+- Statistical honesty gates kept (decision 2026-07-05-01): causal sim, cost
+  stress, walk-forward, random baseline (Bonferroni), untouched 2026 holdout.
+- Demo-only, mandatory SL, no martingale, MT5 truth, kill switch: absolute.
+- Do NOT re-test falsified factors (31_EDGE_AUDIT.md) except as controls.
+
+Phases:
+A. Data — Dukascopy M1 2019-2026: XAUUSD/XAGUSD/EURUSD/DOLLARIDXUSD (running).
+B. Map — conditional-return grid scan (time-of-day, DOW, sessions, fixes,
+   momentum/reversal horizons, vol conditioning) vs shuffled baselines.
+C. Model — purged walk-forward ML on engineered features; OOS IC, then
+   cost-stressed trade sim through the frozen classification gate.
+D. Verify — 2026 holdout replication + random-entry z >= 2.39.
+E. Deploy — survivors only, demo, via ResearchForwardRunner -> gateway.
+
+Status:
+In progress (started 2026-07-05). Phase A running.

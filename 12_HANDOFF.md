@@ -9,7 +9,34 @@ This file allows Claude sessions to resume without losing direction.
 # Current Project State
 
 ## Current Phase:
-Phase 15: EDGE-DISCOVERY RESEARCH LAB (RESEARCH-LAB-001) — execution retired
+Phase 16: ALPHA-HUNT-001 — REOPENED (owner directive 2026-07-05); see 42_ALPHA_HUNT.md
+
+## ALPHA-HUNT-001 (2026-07-05, owner directive): project reopened with full
+authority — goal is a profitable model, high trade counts fine. Decision
+2026-07-05-01: statistical honesty gates KEPT (they are the instrument);
+demo-only + mandatory SL + no martingale + kill switch absolute; everything
+else (process gates, cadence caps, closed-project freeze) removable. Target =
+the never-tested space from 40_CONCLUSION.md: intraday at scale, time-of-day
+structure, cross-asset M1 lead-lag, ML with purged walk-forward, vol structure.
+
+State at handoff (2026-07-05):
+- scripts/fetch_dukascopy.py built + validated (Dukascopy free M1 feed; spot
+  cross-checked vs Yahoo GC=F on 2024-01-25 05:00, matches within basis).
+- Phase A RUNNING in background: M1 2019-01-01..2026-07-04 for XAUUSD,
+  XAGUSD, EURUSD, DOLLARIDXUSD → data/raw/dukascopy/{INSTR}_M1_{YYYY}.csv +
+  combined {INSTR}_M1_dukascopy.csv. Log: logs/dukascopy_fetch.log.
+- NEXT EXACT STEP: when the fetch finishes, convert the combined XAUUSD CSV to
+  the lab schema data/raw/XAUUSD_1M.csv (columns time_utc,open,high,low,close,
+  tick_volume,spread,real_volume; loader aggregates M5/M15/H1 itself), replace
+  the old 60d Yahoo M5/15M/1H files (keep 1D + macro), sanity-check bar counts
+  (~2700 sessions × ~1380 bars), RESERVE 2026 as the untouched holdout, then
+  build Phase B: scripts/intraday_scan.py — conditional-return grid
+  (time-of-day × DOW, session opens, London fixes, momentum/reversal horizon
+  spectrum, vol conditioning) with shuffled baselines + Bonferroni across the
+  full grid. Then Phase C (purged walk-forward ML), D (holdout + random
+  baseline), E (demo deploy via ResearchForwardRunner → ExecutionGateway).
+
+## (history) Phase 15 header below
 
 ## RESEARCH-LAB-001 (2026-06-17, owner directive): STOP building trading bots.
 Repo pivoted to an XAU/USD edge-discovery research lab. No live orders; trading

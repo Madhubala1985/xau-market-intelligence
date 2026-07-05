@@ -6,9 +6,25 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 15: EDGE-DISCOVERY RESEARCH LAB (RESEARCH-LAB-001) — execution retired
+Phase 16: ALPHA-HUNT-001 — project REOPENED (owner directive 2026-07-05)
 
 ## Current Task
+
+ALPHA-HUNT-001 (owner directive, 2026-07-05): owner reopened the project with
+full authority granted to Claude: make the model profitable, any changes
+allowed, high trade counts fine. Interpretation recorded in 11_DECISION_LOG.md
+(2026-07-05-01): process gates removed; statistical honesty gates (causal sim,
+cost stress, random baseline, OOS holdout) KEPT — they are the measuring
+instrument; demo-only/mandatory-SL/no-martingale/kill-switch absolute. The
+attack targets the space 40_CONCLUSION.md explicitly never tested: intraday at
+scale (7.5y Dukascopy M1 vs the old 60d), time-of-day/fixing structure,
+cross-asset M1 lead-lag (XAG/EUR/DXY), ML feature models with purged
+walk-forward, vol structure. Program: 42_ALPHA_HUNT.md. Data fetcher:
+scripts/fetch_dukascopy.py (validated vs Yahoo overlap). Phase A (data) running
+2026-07-05; then B map → C model → D verify → E demo deploy via the existing
+gateway path.
+
+## (history) Phase 15 task text
 
 RESEARCH-LAB-001 (owner directive, 2026-06-17): **Stop building trading bots.**
 Pivot the repo to an XAU/USD edge-discovery research lab. No live orders; the
