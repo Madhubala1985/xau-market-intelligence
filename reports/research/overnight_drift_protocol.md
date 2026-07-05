@@ -49,3 +49,33 @@ grid: 1.0× / 1.5× / 2.0× measured median spreads.
 If any criterion fails, the anomaly is either not capturable at retail costs
 or non-stationary — record it in 30_RESEARCH_FINDINGS.md and stop. Do NOT
 re-tune the window on validation/holdout data.
+
+---
+
+# VERDICT (2026-07-05, same day — pre-registered criteria applied)
+
+**Candidate v1: FAILED — not promoted.**
+
+| criterion | result |
+|---|---|
+| 1. tick-level net capture t≥2 | **FAIL** — n=157 sampled train days: net +0.13 bps, median −0.82, t=+0.22 (entry spread 2.29 bps, exit 2.18) |
+| 2. 2025 validation | not evaluated (short-circuited by 1/4/5; data stays unexamined) |
+| 3. 2026 holdout | not evaluated (stays untouched) |
+| 4. random baseline p99.9 | **FAIL** — gross +3.09 at percentile 99.80 vs p99.9=+3.10 (hairline, but the rule is the rule) |
+| 5. no train year < −1 bps net | **FAIL** — 2022 net −1.64 at measured cost |
+
+Bar-level train stats (gross +3.09 bps/trade, t=+11.1, all 6 years positive)
+confirm the ANOMALY is real in mid prices; the tick test proves it is NOT
+capturable through a ~2.2-2.3 bps spread. The effect lives inside the spread.
+
+**Conditional path (recorded, not acted on):** the cost was measured on
+Dukascopy quotes. If the actual execution venue (Exness raw-spread XAUUSDm)
+shows all-in round-trip cost ≤ ~1.3 bps at 16:50/18:20 ET (spread +
+commission, measured on the demo account, e.g. 2 weeks of symbol_info
+sampling at those clock times), net expectancy ≈ +1.5-1.8 bps/trade and the
+candidate re-enters at criterion 2. Venue measurement is a cost-parameter
+update, NOT a rule change. Until then: dead.
+
+**Program lesson for Phase C:** at ~2 bps retail round-trip, tradeable XAU
+effects need |edge| well above ~5 bps/trade → target 4h-48h holds with
+conditioning, not sub-hour windows.
