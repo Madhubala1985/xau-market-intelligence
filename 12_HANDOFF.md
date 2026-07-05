@@ -19,22 +19,40 @@ else (process gates, cadence caps, closed-project freeze) removable. Target =
 the never-tested space from 40_CONCLUSION.md: intraday at scale, time-of-day
 structure, cross-asset M1 lead-lag, ML with purged walk-forward, vol structure.
 
-State at handoff (2026-07-05):
-- scripts/fetch_dukascopy.py built + validated (Dukascopy free M1 feed; spot
-  cross-checked vs Yahoo GC=F on 2024-01-25 05:00, matches within basis).
-- Phase A RUNNING in background: M1 2019-01-01..2026-07-04 for XAUUSD,
-  XAGUSD, EURUSD, DOLLARIDXUSD → data/raw/dukascopy/{INSTR}_M1_{YYYY}.csv +
-  combined {INSTR}_M1_dukascopy.csv. Log: logs/dukascopy_fetch.log.
-- NEXT EXACT STEP: when the fetch finishes, convert the combined XAUUSD CSV to
-  the lab schema data/raw/XAUUSD_1M.csv (columns time_utc,open,high,low,close,
-  tick_volume,spread,real_volume; loader aggregates M5/M15/H1 itself), replace
-  the old 60d Yahoo M5/15M/1H files (keep 1D + macro), sanity-check bar counts
-  (~2700 sessions × ~1380 bars), RESERVE 2026 as the untouched holdout, then
-  build Phase B: scripts/intraday_scan.py — conditional-return grid
-  (time-of-day × DOW, session opens, London fixes, momentum/reversal horizon
-  spectrum, vol conditioning) with shuffled baselines + Bonferroni across the
-  full grid. Then Phase C (purged walk-forward ML), D (holdout + random
-  baseline), E (demo deploy via ResearchForwardRunner → ExecutionGateway).
+State at handoff (2026-07-05, end of day):
+- Phase A DONE: 7.5y Dukascopy M1 for XAUUSD/XAGUSD/EURUSD/DOLLARIDXUSD in
+  data/raw/dukascopy/; XAUUSD converted to lab schema data/raw/XAUUSD_1M.csv
+  (2.66M bars; zero-volume filler bars dropped — ALWAYS filter volume>0).
+  VALIDATED: same-instant H1 opens vs GLD correlate 0.9997 (vs GC=F only
+  0.88-0.95 — that gap is futures basis + async sampling, documented in
+  scripts/dukascopy_to_lab.py). Old Yahoo intraday archived (archive_yahoo/).
+- Phase B DONE: scripts/intraday_scan.py (212 cells, Bonferroni z>=3.68) →
+  reports/research/intraday_scan.md. Findings: (1) M5 mean reversion z=-8.6
+  but ~0.07 bps — sub-spread, untradeable; (2) ALL of gold's drift sits in
+  the COMEX-reopen hour, ET-anchored (ET18 +2.35 bps t=4.7; first 10 min
+  +2.52 bps t=9.3); (3) calm-regime H1 continuation (z≈3.2, sub-threshold)
+  → Phase C feature.
+- OVERNIGHT-DRIFT CANDIDATE v1: **FAILED its pre-registered gate** —
+  reports/research/overnight_drift_protocol.md (protocol frozen BEFORE
+  validation; criteria 1/4/5 failed). Tick-level truth: reopen spread 5.7
+  bps kills reopen entry; pre-close entry (16:50→18:20 ET, gross +3.09 bps
+  t=11.1, positive 6/6 train years) nets only +0.13 bps (t=0.22, n=157
+  sampled days) through the measured 2.29 bps Dukascopy entry spread. The
+  anomaly is REAL in mids and lives inside the spread. Conditional revival:
+  measure the REAL venue cost on the Exness demo (symbol_info spread at
+  16:50/18:20 ET for ~2 weeks); if all-in ≤ ~1.3 bps → re-enter at
+  criterion 2. Evaluator: scripts/overnight_drift_run.py. 2025+2026 data
+  remain UNEXAMINED for this rule.
+- PROGRAM LESSON: at ~2 bps retail round-trip, tradeable XAU effects need
+  edge >> 5 bps/trade → 4h-48h holds, not sub-hour windows.
+- NEXT EXACT STEP: run Phase C — scripts/ml_walkforward.py (purged expanding
+  walk-forward, Ridge + HistGradientBoosting, horizons 4/12/24 H1 bars,
+  cross-asset features, non-overlapping IC eval, Bonferroni t>=2.64 over 6
+  combos, top-decile net > 0 at 4.5 bps RT cost bar; 2026 untouched). It
+  needs DOLLARIDXUSD which was still downloading at handoff
+  (logs/dukascopy_fetch.log). Then: if any combo passes → Phase D holdout;
+  else record and consider (a) venue-cost measurement study for v1, (b)
+  daily-horizon ML with macro features, (c) honest negative extension.
 
 ## (history) Phase 15 header below
 
