@@ -13,16 +13,38 @@ Phase 16: ALPHA-HUNT-001 — project REOPENED (owner directive 2026-07-05)
 ALPHA-HUNT-001 (owner directive, 2026-07-05): owner reopened the project with
 full authority granted to Claude: make the model profitable, any changes
 allowed, high trade counts fine. Interpretation recorded in 11_DECISION_LOG.md
-(2026-07-05-01): process gates removed; statistical honesty gates (causal sim,
-cost stress, random baseline, OOS holdout) KEPT — they are the measuring
-instrument; demo-only/mandatory-SL/no-martingale/kill-switch absolute. The
-attack targets the space 40_CONCLUSION.md explicitly never tested: intraday at
-scale (7.5y Dukascopy M1 vs the old 60d), time-of-day/fixing structure,
-cross-asset M1 lead-lag (XAG/EUR/DXY), ML feature models with purged
-walk-forward, vol structure. Program: 42_ALPHA_HUNT.md. Data fetcher:
-scripts/fetch_dukascopy.py (validated vs Yahoo overlap). Phase A (data) running
-2026-07-05; then B map → C model → D verify → E demo deploy via the existing
-gateway path.
+(2026-07-05-01): process gates removed; statistical honesty gates KEPT;
+demo-only/mandatory-SL/no-martingale/kill-switch absolute. Program:
+42_ALPHA_HUNT.md.
+
+DAY-1 RESULTS (2026-07-05, decisions 2026-07-05-01/02):
+- Phase A DONE: 7.5y Dukascopy M1 × 4 instruments (XAU/XAG/EUR/DXY),
+  validated (GLD same-instant corr 0.9997; filler bars filtered).
+  scripts/fetch_dukascopy.py + dukascopy_to_lab.py. data/raw/XAUUSD_1M.csv.
+- Phase B DONE (intraday_scan.py, 212 cells, Bonferroni): gold's entire
+  intraday drift sits in the COMEX-reopen hour (ET18, t=4.7 hourly / t=9.3
+  first 10 min); M5 mean reversion real but ~0.07 bps (sub-spread); calm-
+  regime continuation z≈3.2 sub-threshold.
+- OVERNIGHT-DRIFT v1 (the reopen anomaly, pre-close entry 16:50→18:20 ET):
+  gross +3.09 bps/trade t=+11.1, positive 6/6 train years — but FAILED its
+  pre-registered gate (criteria 1/4/5): tick-measured net through the 2.29
+  bps spread is +0.13 bps (t=0.22, n=157). The anomaly lives inside the
+  spread. Protocol + verdict: reports/research/overnight_drift_protocol.md.
+  CONDITIONAL REVIVAL: scripts/measure_venue_spread.py (Windows, READ-ONLY)
+  measures real Exness XAUUSDm spread at 16:50/18:20 ET; if round-trip
+  ≤ 2.6 bps over ≥8 days → v1 re-enters at criterion 2 (2025 validation,
+  then 2026 holdout, then demo forward). 2025/2026 remain unexamined.
+- Phase C DONE (ml_walkforward.py): purged expanding walk-forward, Ridge +
+  HistGradientBoosting × horizons 4/12/24 H1 bars, cross-asset features —
+  ALL 6 combos No Edge (best IC +0.043, t=1.24; bar was t≥2.64).
+- Phase B2 DONE (event study, reports/research/event_study.md): no post-
+  announcement drift after 533 × 08:30 ET drops, 82 FOMC, 539 × 10:00 ET
+  events. Gold digests macro prints in minutes.
+- STANDING LESSON: at ~2 bps retail half-turn, tradeable XAU effects need
+  edge >> 5 bps/trade; nothing in the free intraday space clears it.
+- NEXT: (1) owner/Windows runs measure_venue_spread.py ~2 weeks (the one
+  live thread); (2) optional: daily-horizon ML with macro features (prior
+  weak); (3) else the negative result now covers intraday + events too.
 
 ## (history) Phase 15 task text
 

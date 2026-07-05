@@ -4212,3 +4212,36 @@ CURRENT_STATE.md, 12_HANDOFF.md, 10_TASK_QUEUE.md.
 
 ## Status:
 Accepted
+
+---
+
+# Decision 2026-07-05-02
+
+## Area:
+ALPHA-HUNT-001 day-1 verdicts (overnight-drift candidate, Phase C ML,
+event study) and the single live thread
+
+## Decision:
+(a) Overnight-drift v1 (long 16:50→18:20 ET Mon-Thu) is NOT promoted: it
+failed pre-registered criteria 1/4/5 (tick-level net +0.13 bps t=0.22
+through the measured 2.29 bps spread; random-baseline percentile 99.80 <
+99.9; 2022 net −1.64). The mid-price anomaly is real (gross t=+11.1, 6/6
+years) but uncapturable at bank-grade costs. No re-tuning on validation/
+holdout data; 2025/2026 stay unexamined for this rule.
+(b) The only revival path is a VENUE COST MEASUREMENT: scripts/
+measure_venue_spread.py (Windows MT5, read-only, no orders) samples the
+Exness XAUUSDm spread at the rule's clock times; round-trip ≤ 2.6 bps over
+≥ 8 days re-enters v1 at criterion 2; otherwise it stays dead.
+(c) Phase C (purged walk-forward ML, 6 combos) and Phase B2 (event study,
+15 cells) are both No Edge; recorded in reports/research/ml_walkforward.md
+and reports/research/event_study.md.
+(d) No demo deployment of anything: nothing passed a gate. Deploying a
+failed candidate would convert a research negative into account losses.
+
+## Files Affected:
+scripts/measure_venue_spread.py (new), scripts/overnight_drift_run.py,
+scripts/ml_walkforward.py, scripts/intraday_scan.py, reports/research/*,
+CURRENT_STATE.md, 12_HANDOFF.md.
+
+## Status:
+Accepted
