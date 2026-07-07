@@ -45,14 +45,29 @@ State at handoff (2026-07-05, end of day):
   remain UNEXAMINED for this rule.
 - PROGRAM LESSON: at ~2 bps retail round-trip, tradeable XAU effects need
   edge >> 5 bps/trade → 4h-48h holds, not sub-hour windows.
-- NEXT EXACT STEP: run Phase C — scripts/ml_walkforward.py (purged expanding
-  walk-forward, Ridge + HistGradientBoosting, horizons 4/12/24 H1 bars,
-  cross-asset features, non-overlapping IC eval, Bonferroni t>=2.64 over 6
-  combos, top-decile net > 0 at 4.5 bps RT cost bar; 2026 untouched). It
-  needs DOLLARIDXUSD which was still downloading at handoff
-  (logs/dukascopy_fetch.log). Then: if any combo passes → Phase D holdout;
-  else record and consider (a) venue-cost measurement study for v1, (b)
-  daily-horizon ML with macro features, (c) honest negative extension.
+- Phase C DONE (2026-07-05): ml_walkforward.py — all 6 combos No Edge
+  (best IC +0.043 t=1.24, bar 2.64). Phase B2 DONE: event study — no
+  post-announcement drift (1154 events).
+- Phase C2 DONE (2026-07-07, decision 2026-07-07-01): daily-horizon ML with
+  JOINT price + macro features. Protocol frozen BEFORE the run:
+  reports/research/daily_ml_protocol.md. Script: scripts/ml_daily_macro.py.
+  D1 2011-2025 (2026 untouched holdout), Ridge + HGB × 1/5/20-day horizons,
+  expanding walk-forward (3y initial, 126-day windows, horizon embargo),
+  pooled non-overlapping OOS Spearman IC, Bonferroni t>=2.64, top-decile
+  net > 0 at 4.5 bps RT. Result: ALL 6 No Edge (best hgb h=5 IC +0.097
+  t=+2.18; hgb h=20 16/20 positive folds but n=126 → t=+1.14). All ICs
+  positive — the same weak long-tilt as June's macro-only model; not
+  provable at the bar; the bar was NOT weakened post hoc.
+  Report: reports/research/ml_daily_macro.md.
+- NEXT EXACT STEP: the ONE live thread is the venue-cost measurement for
+  overnight-drift v1 — the OWNER runs, on the Windows MT5 host (read-only,
+  no orders):  py -3.12 scripts\measure_venue_spread.py
+  daily at ~16:45-18:25 ET (or leave it running) for ~2 weeks. If measured
+  round-trip ≤ 2.6 bps → v1 re-enters at criterion 2 (2025 validation, then
+  2026 holdout, then demo forward). If it fails → close ALPHA-HUNT-001 as an
+  honest negative extension of 40_CONCLUSION.md (now covering intraday,
+  time-of-day, events, H1 ML, daily price+macro ML) in a 43_* terminal doc.
+  No demo deployment of anything: nothing has passed a gate.
 
 ## (history) Phase 15 header below
 

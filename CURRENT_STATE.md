@@ -42,9 +42,18 @@ DAY-1 RESULTS (2026-07-05, decisions 2026-07-05-01/02):
   events. Gold digests macro prints in minutes.
 - STANDING LESSON: at ~2 bps retail half-turn, tradeable XAU effects need
   edge >> 5 bps/trade; nothing in the free intraday space clears it.
-- NEXT: (1) owner/Windows runs measure_venue_spread.py ~2 weeks (the one
-  live thread); (2) optional: daily-horizon ML with macro features (prior
-  weak); (3) else the negative result now covers intraday + events too.
+- PHASE C2 DONE (2026-07-07, decision 2026-07-07-01): daily-horizon ML with
+  JOINT price + macro features (the one untested daily combination). Protocol
+  frozen pre-run (reports/research/daily_ml_protocol.md): D1 2011-2025,
+  Ridge + HGB × 1/5/20-day horizons, purged expanding walk-forward, pooled
+  non-overlapping OOS IC, Bonferroni t>=2.64, 4.5 bps cost bar. ALL 6 combos
+  No Edge (best hgb h=5 IC +0.097 t=+2.18; all ICs positive = the same weak
+  long-tilt as the June macro model, never provable at the bar).
+  reports/research/ml_daily_macro.md.
+- NEXT: (1) owner/Windows runs measure_venue_spread.py ~2 weeks (the ONLY
+  live thread left); (2) if it fails too, close ALPHA-HUNT-001 as an honest
+  negative extension of 40_CONCLUSION.md — the negative result then covers
+  intraday, time-of-day, events, H1 ML, and daily price+macro ML.
 
 ## (history) Phase 15 task text
 

@@ -4245,3 +4245,40 @@ CURRENT_STATE.md, 12_HANDOFF.md.
 
 ## Status:
 Accepted
+
+---
+
+# Decision 2026-07-07-01
+
+## Area:
+ALPHA-HUNT-001 Phase C2 — daily-horizon ML with joint price + macro features
+
+## Decision:
+Phase C2 is recorded as **No Edge**. Protocol was frozen BEFORE the run
+(reports/research/daily_ml_protocol.md): XAUUSD D1 2011-2025 (2026 untouched),
+Ridge + HistGradientBoosting × horizons 1/5/20 trading days (6 combos,
+Bonferroni t >= 2.64), expanding walk-forward (3y initial train, 126-day test
+windows, horizon-length embargo), pooled NON-OVERLAPPING OOS Spearman IC, and
+a 4.5 bps round-trip cost bar on the top decile. Results
+(reports/research/ml_daily_macro.md): every combo has positive IC — the same
+weak long-tilt the June macro-only model found (its OOS IC was +0.079) — but
+NONE clears the bar. Best: hgb h=5 IC +0.097 t=+2.18 (bar 2.64); hgb h=20 has
+16/20 positive folds but only n=126 non-overlapping samples (t=+1.14). The
+bar is not weakened post hoc; a consistent-but-unprovable tilt is exactly
+what the honesty gates exist to keep out of the account.
+
+## Consequence:
+The negative result now covers the daily joint price+macro space in addition
+to intraday/time-of-day/events/H1-ML. The ONE live thread remains the venue
+spread measurement for overnight-drift v1 (owner runs
+scripts/measure_venue_spread.py on the Windows MT5 host, ~2 weeks). If that
+also fails, ALPHA-HUNT-001 closes as an honest negative extension of
+40_CONCLUSION.md.
+
+## Files Affected:
+reports/research/daily_ml_protocol.md (new, frozen pre-run),
+scripts/ml_daily_macro.py (new), reports/research/ml_daily_macro.md (new),
+CURRENT_STATE.md, 12_HANDOFF.md.
+
+## Status:
+Accepted
