@@ -9,7 +9,36 @@ This file allows Claude sessions to resume without losing direction.
 # Current Project State
 
 ## Current Phase:
-Phase 16: ALPHA-HUNT-001 — REOPENED (owner directive 2026-07-05); see 42_ALPHA_HUNT.md
+Phase 17: GOLD-INTEL-001 — built + gate FAILED, model FLAT (2026-07-07);
+see 44_GOLD_INTEL_DESIGN.md + reports/research/gold_intel_gate_results.md
+
+## GOLD-INTEL-001 (2026-07-07, owner directive: "superintelligent model, no
+ML training, Claude decides"): built the three-brain gold_intel engine —
+restored day-narrative brain + regime dial + cost gates + exit model,
+brakes reinstated (3%/trade, 5%/10% daily/weekly, 3 open), gold_alpha
+retired, Dukascopy replay harness (scripts/intel_replay.py) so multi-year
+gates run in WSL. 906 tests pass. Commits b5d6ee2, a8c19bf, c23d80c + final.
+
+GATE VERDICT (pre-registered, frozen before each run): **FAIL — FLAT.**
+v1 flat-USD costs: −130.4R/577 trades/2/14 windows. v2 bps costs:
+−73.7R/566/2/14. Zero-cost diagnostic: −1.56R/596 — the brain's decisions
+are a coin flip BEFORE costs; costs only decide how fast it loses. The
+day-narrative composite is falsified at scale; its June record was
+regime-local. NO service start, NO run command, NO re-tune (gross ≈ 0
+means selectivity has nothing to select — the gold_alpha EV-sweep lesson).
+2026 holdout unexamined (clean for future protocols). Decisions
+2026-07-07-02/-03.
+
+NEXT EXACT STEP (unchanged from Phase 16, still the ONE live thread): the
+owner runs, on the Windows MT5 host (read-only, no orders):
+  py -3.12 scripts\measure_venue_spread.py
+daily ~16:45-18:25 ET for ~2 weeks. Round-trip ≤ 2.6 bps revives
+overnight-drift v1 at criterion 2 (2025 validation → 2026 holdout → demo
+forward). Otherwise ALPHA-HUNT-001 closes as an honest negative extension
+(intraday, time-of-day, events, H1 ML, daily price+macro ML, and now the
+day-narrative composite are ALL falsified) in a 43_* terminal doc.
+
+## (history) Phase 16 header below
 
 ## ALPHA-HUNT-001 (2026-07-05, owner directive): project reopened with full
 authority — goal is a profitable model, high trade counts fine. Decision

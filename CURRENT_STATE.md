@@ -6,7 +6,34 @@ XAU/USD Adaptive Liquidity Intelligence System
 
 ## Current Phase
 
-Phase 16: ALPHA-HUNT-001 — project REOPENED (owner directive 2026-07-05)
+Phase 17: GOLD-INTEL-001 — three-brain rebuild BUILT, ship gate FAILED,
+model FLAT (2026-07-07). Phase 16 ALPHA-HUNT-001 results stand.
+
+## GOLD-INTEL-001 (owner directive 2026-07-07: "superintelligent model, no
+ML training, many trades/opportunity-based, Claude decides")
+
+BUILT (decisions 2026-07-07-02/03; design 44_GOLD_INTEL_DESIGN.md): ONE
+engine `gold_intel` on the single path — (1) restored day-narrative brain
+(commit 0137446; the only decision layer with a positive replay record),
+(2) macro regime dial (tighten-only STRONG->NORMAL demotion), (3) cost
+brain (no entries 16:55-18:20 ET; est. cost <= 0.40R of stop), exit model
+(BE at +1R, 1.5xATR trail, CHOCH thesis-failure exit). Circuit-breakers
+REINSTATED (3%/trade, 5% daily pause, 10% weekly stop, 3 open; planner
+tiers 3%/2%). gold_alpha retired/deleted. New Dukascopy replay harness
+(scripts/intel_replay.py) runs the multi-year ship gate in WSL. 906 tests.
+
+SHIP GATE VERDICT — **FAIL, model stays FLAT** (pre-registered protocols
+frozen+committed before each run; reports/research/gold_intel_gate_results.md):
+- v1 (flat 0.50 USD costs): −130.4R / 577 trades / 2/14 windows / DD 140R.
+- v2 (2.2+1.0 bps price-proportional): −73.7R / 566 / 2/14 / DD 100R.
+- gross (zero-cost diagnostic): **−1.56R over 596 trades — the brain's raw
+  decisions are a coin flip before costs.** Not a cost artifact; not a
+  tuning miss. The June 2026 record (+2.43R/10d) was regime-local.
+- The day-narrative composite is now falsified at scale; 40_CONCLUSION.md
+  extends to the strongest composite the project had. 2026 holdout stays
+  unexamined. The service is NOT started; no run command is provided.
+- KEPT AS INSTRUMENT: any future candidate brain drops into the same
+  one-command gate: python scripts/intel_replay.py --gate
 
 ## Current Task
 

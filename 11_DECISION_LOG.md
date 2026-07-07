@@ -4329,3 +4329,45 @@ reports/research/gold_intel_replay_gate.json, tests/*.
 
 ## Status:
 Accepted
+
+---
+
+# Decision 2026-07-07-03
+
+## Area:
+GOLD-INTEL-001 — final gate verdict: FAIL both cost models; brain falsified
+
+## Decision:
+Gate v2 (price-proportional 2.2+1.0 bps costs, frozen pre-run): **FAIL** —
+566 trades, net −73.69R, 2/14 windows non-negative, pooled DD 99.8R. The
+zero-cost diagnostic settles the decomposition: gross decision quality is
+−1.56R over 596 trades — a coin flip BEFORE costs. The day-narrative
+composite (the strongest decision layer this project ever measured) has NO
+persistent edge across 2019-2025; its June 2026 positive record was
+regime-local/small-sample. Full table:
+reports/research/gold_intel_gate_results.md.
+
+CONSEQUENCES (per the frozen protocols):
+(a) gold_intel stays FLAT — the service is not started and no run command
+is provided. Protecting the demo balance is the position.
+(b) The 2026 holdout stays unexamined (clean for any future protocol).
+(c) No re-tune attempted: with gross ≈ 0 there is no positive subset for
+selectivity to find (same lesson as the gold_alpha EV-bar sweep, which was
+flat at every bar). Any future attempt must be a NEW pre-registered
+protocol (train 2019-2023 / validate 2024-2025), and these FAILs stay on
+the record.
+(d) The engine, harness, and gates remain in the tree as the working
+instrument: any future candidate brain drops into the same one-command
+multi-year gate (scripts/intel_replay.py --gate).
+(e) The ONE live thread remains the venue-spread measurement for
+overnight-drift v1 (owner runs scripts/measure_venue_spread.py on the
+Windows host ~2 weeks; round-trip ≤ 2.6 bps revives v1 at criterion 2).
+
+## Files Affected:
+reports/research/gold_intel_gate_results.md (new),
+reports/research/gold_intel_replay_gate_v2.json,
+reports/research/gold_intel_replay_gate_gross.json,
+CURRENT_STATE.md, 12_HANDOFF.md.
+
+## Status:
+Accepted
