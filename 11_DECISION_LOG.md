@@ -4282,3 +4282,50 @@ CURRENT_STATE.md, 12_HANDOFF.md.
 
 ## Status:
 Accepted
+
+---
+
+# Decision 2026-07-07-02
+
+## Area:
+GOLD-INTEL-001 — three-brain rebuild + replay ship gate verdict (v1)
+
+## Decision:
+(a) Built the single gold_intel engine per the owner's 2026-07-07 directive
+("superintelligent model, no ML training, many trades/opportunity-based,
+Claude decides"): restored day-narrative brain (commit 0137446; the only
+decision layer with a positive replay record) + macro regime dial
+(tighten-only demotion) + cost gates (reopen window; cost <= 0.40R of stop)
++ chassis exit model. Circuit-breakers REINSTATED (3%/trade, 5% daily, 10%
+weekly, 3 open; planner tiers 3%/2%): the aggressive uncapped era
+weekly-stopped its account in days. gold_alpha retired/deleted. 906 tests.
+Design: 44_GOLD_INTEL_DESIGN.md.
+(b) Pre-registered ship gate v1 (frozen before the run, commit a8c19bf):
+14 windows Mar+Sep 2019-2025, DecisionReplay conservative fills, FLAT 0.50
+USD spread + 0.30 slippage. RESULT: **FAIL** — 577 trades, net −130.37R,
+2/14 windows non-negative (both 2025), pooled DD 139.8R. The June 2026
+positive record (+2.43R/10d on Exness MT5 data) does NOT replicate across
+7 years of Dukascopy history. gold_intel stays FLAT; the service is not
+started.
+(c) HONEST MEASUREMENT DEFECT in v1, recorded before any v2 run: the flat
+0.50 USD spread is 3.8 bps at 2019 prices but 1.6 bps at 2025 prices —
+costs were overstated in early years and understated recently (the only
+2 positive windows are the understated ones). Gate v2 (new protocol,
+registered before running) uses PRICE-PROPORTIONAL costs — 2.2 bps spread
++ 1.0 bps slippage (≈4.2 bps round trip, the program's standard bar) —
+which is HARSHER on the 2025 windows and gentler on 2019-2021. A zero-cost
+decomposition run is included as a diagnostic (gross decision quality),
+NOT a gate.
+(d) The v1 FAIL stands on its own terms and is never reinterpreted as a
+pass; v2 is a corrected-measurement protocol, not results shopping.
+
+## Files Affected:
+src/strategy/gold_intel.py (+ day_narrative/smc_v2/smc_execution restored),
+src/execution/session_profiles.py, src/execution/intel_planner.py,
+scripts/trading_service.py, scripts/decision_replay.py,
+scripts/intel_replay.py, 44_GOLD_INTEL_DESIGN.md,
+reports/research/gold_intel_gate_protocol.md,
+reports/research/gold_intel_replay_gate.json, tests/*.
+
+## Status:
+Accepted

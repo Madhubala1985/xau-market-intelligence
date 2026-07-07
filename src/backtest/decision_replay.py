@@ -134,7 +134,13 @@ class DecisionReplay:
         spread: float = DEFAULT_SPREAD,
         symbol: str = "XAUUSD",
         warmup: int = 60,
+        spread_bps: Optional[float] = None,
+        slippage_bps: Optional[float] = None,
     ) -> None:
+        """spread_bps/slippage_bps: PRICE-PROPORTIONAL costs (basis points of
+        the fill price). When set they override the flat USD `spread` and
+        module SLIPPAGE — a flat USD charge misprices multi-year replays
+        (0.50 USD is 3.8 bps at $1,300 gold but 1.6 bps at $3,100)."""
         self._m5 = list(m5)
         self._m1 = list(m1)
         self._m15 = list(m15)
@@ -142,9 +148,21 @@ class DecisionReplay:
         self._h4 = list(h4)
         self._daily = list(daily)
         self._spread = spread
+        self._spread_bps = spread_bps
+        self._slippage_bps = slippage_bps
         self._symbol = symbol
         self._warmup = max(warmup, 10)
         self._times_cache: Dict[int, list] = {}
+
+    def _spread_at(self, price: float) -> float:
+        if self._spread_bps is not None:
+            return price * self._spread_bps * 1e-4
+        return self._spread
+
+    def _slippage_at(self, price: float) -> float:
+        if self._slippage_bps is not None:
+            return price * self._slippage_bps * 1e-4
+        return SLIPPAGE
 
     def run(self, pipelines: Dict[str, object]) -> Dict[str, ReplayResult]:
         results = {name: ReplayResult(name) for name in pipelines}
@@ -243,6 +261,7 @@ class DecisionReplay:
             free_margin=2000.0, leverage=200, open_positions=0,
             trade_allowed=True,
         )
+        current_spread = self._spread_at(window[-1].close)
         inp = PipelineInput(
             symbol=self._symbol,
             exec_candles=window,
@@ -252,7 +271,7 @@ class DecisionReplay:
             h1_candles=self._slice(self._h1, now, keep=300) or None,
             m1_candles=self._slice(self._m1, now, keep=600) or None,
             broker=broker,
-            current_spread=self._spread,
+            current_spread=current_spread,
             risk_pct=0.03,
             trades_today=trades_today,
             consecutive_losses=consecutive_losses,
@@ -279,17 +298,17 @@ class DecisionReplay:
         return list(candles[max(0, hi - keep):hi])
 
     def _fill_entry(self, open_price: float, direction: Direction) -> float:
-        adverse = self._spread + SLIPPAGE
+        adverse = self._spread_at(open_price) + self._slippage_at(open_price)
         return (
             open_price + adverse if direction is Direction.LONG
             else open_price - adverse
         )
 
-    @staticmethod
-    def _manage(pos: _OpenPosition, candle: Candle) -> bool:
+    def _manage(self, pos: _OpenPosition, candle: Candle) -> bool:
         t = pos.trade
         short = t.direction is Direction.SHORT
         risk = pos.risk
+        slippage = self._slippage_at(candle.close)
         stop = t.entry if pos.be_armed else t.stop
 
         # conservative ordering: the stop is checked FIRST
@@ -303,17 +322,17 @@ class DecisionReplay:
             t.exit_price = stop
             if pos.be_armed:
                 t.outcome = "BREAKEVEN"
-                t.r_multiple = round(-SLIPPAGE / risk, 2) if risk else 0.0
+                t.r_multiple = round(-slippage / risk, 2) if risk else 0.0
             else:
                 t.outcome = "LOSS"
-                t.r_multiple = round(-1.0 - SLIPPAGE / risk, 2) \
+                t.r_multiple = round(-1.0 - slippage / risk, 2) \
                     if risk else -1.0
             return True
         if tp_hit:
             t.exit_time = candle.time_utc
             t.exit_price = t.target
             t.outcome = "WIN"
-            gain = abs(t.entry - t.target) - SLIPPAGE
+            gain = abs(t.entry - t.target) - slippage
             t.r_multiple = round(gain / risk, 2) if risk else 0.0
             return True
         if reached_1r and not pos.be_armed:

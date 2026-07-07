@@ -39,7 +39,9 @@ from research.regime import gold_macro_regime  # noqa: E402
 DUKA = ROOT / "data" / "raw" / "dukascopy"
 OUT_DIR = ROOT / "reports" / "research"
 SYMBOL = "XAUUSD"
-REPLAY_SPREAD = 0.50   # pre-registered mid-stress fill spread (USD)
+REPLAY_SPREAD = 0.50       # gate v1 flat spread (USD) — kept for the record
+SPREAD_BPS = 2.2           # gate v2: measured Dukascopy entry spread (bps)
+SLIPPAGE_BPS = 1.0         # gate v2: slippage per side (bps)
 WARMUP_M5 = 300
 
 # Pre-registered gate windows (protocol file): Mar 1-28 + Sep 1-28, 2019-2025.
@@ -114,7 +116,7 @@ class ReplayIntelEngine(GoldIntelEngine):
 
 
 def run_window(start: date, end: date, m1_all: pd.DataFrame,
-               rmap: dict) -> ReplayResult:
+               rmap: dict, *, cost_mode: str = "v2") -> ReplayResult:
     lo = pd.Timestamp(start, tz="UTC") - pd.Timedelta(days=45)  # HTF warmup
     hi = pd.Timestamp(end, tz="UTC") + pd.Timedelta(days=1)
     m1 = m1_all[(m1_all.index >= lo) & (m1_all.index < hi)]
@@ -126,13 +128,19 @@ def run_window(start: date, end: date, m1_all: pd.DataFrame,
     engine.__dict__ = base.__dict__          # adopt built engine state
     engine.__class__ = ReplayIntelEngine
     engine.regime_by_date = rmap
+    costs = {
+        "v1": dict(spread=REPLAY_SPREAD),
+        "v2": dict(spread=REPLAY_SPREAD, spread_bps=SPREAD_BPS,
+                   slippage_bps=SLIPPAGE_BPS),
+        "gross": dict(spread=0.0, spread_bps=0.0, slippage_bps=0.0),
+    }[cost_mode]
     replay = DecisionReplay(
         to_candles(m5_replay, "M5"),
         m15=to_candles(resample(m1, "15min"), "M15"),
         h1=to_candles(resample(m1, "1h"), "H1"),
         h4=to_candles(resample(m1, "4h"), "H4"),
         daily=to_candles(resample(m1, "1D"), "D1"),
-        spread=REPLAY_SPREAD, symbol=SYMBOL, warmup=WARMUP_M5,
+        symbol=SYMBOL, warmup=WARMUP_M5, **costs,
     )
     return replay.run({"gold_intel": engine})["gold_intel"]
 
@@ -142,12 +150,14 @@ def main() -> int:
     ap.add_argument("--start"); ap.add_argument("--end")
     ap.add_argument("--gate", action="store_true")
     ap.add_argument("--holdout", action="store_true")
+    ap.add_argument("--cost-mode", default="v2",
+                    choices=("v1", "v2", "gross"))
     args = ap.parse_args()
 
     if args.gate:
-        windows, tag = GATE_WINDOWS, "gate"
+        windows, tag = GATE_WINDOWS, f"gate_{args.cost_mode}"
     elif args.holdout:
-        windows, tag = HOLDOUT_WINDOWS, "holdout"
+        windows, tag = HOLDOUT_WINDOWS, f"holdout_{args.cost_mode}"
     else:
         windows = [(date.fromisoformat(args.start),
                     date.fromisoformat(args.end))]
@@ -164,7 +174,7 @@ def main() -> int:
     rows, all_trades = [], []
     t0 = time.time()
     for start, end in windows:
-        res = run_window(start, end, m1_all, rmap)
+        res = run_window(start, end, m1_all, rmap, cost_mode=args.cost_mode)
         s = res.summary()
         rows.append({"window": f"{start}..{end}", **{
             k: s[k] for k in ("trades", "wins", "losses", "breakevens",
@@ -184,7 +194,7 @@ def main() -> int:
         peak = max(peak, eq)
         mdd = max(mdd, peak - eq)
     report = {
-        "tag": tag, "spread": REPLAY_SPREAD, "windows": rows,
+        "tag": tag, "cost_mode": args.cost_mode, "windows": rows,
         "total_trades": n, "total_net_r": total_r,
         "windows_nonnegative": f"{nonneg}/{len(rows)}",
         "pooled_max_dd_r": round(mdd, 2),

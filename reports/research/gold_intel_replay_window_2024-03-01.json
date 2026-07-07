@@ -1,0 +1,20 @@
+{
+  "tag": "window_2024-03-01",
+  "spread": 0.5,
+  "windows": [
+    {
+      "window": "2024-03-01..2024-03-14",
+      "trades": 22,
+      "wins": 5,
+      "losses": 13,
+      "breakevens": 4,
+      "net_r": -8.45,
+      "win_rate": 0.23,
+      "max_drawdown_r": 8.45
+    }
+  ],
+  "total_trades": 22,
+  "total_net_r": -8.45,
+  "windows_nonnegative": "0/1",
+  "pooled_max_dd_r": 8.45
+}

@@ -1,0 +1,150 @@
+{
+  "tag": "gate",
+  "spread": 0.5,
+  "windows": [
+    {
+      "window": "2019-03-01..2019-03-28",
+      "trades": 35,
+      "wins": 12,
+      "losses": 20,
+      "breakevens": 3,
+      "net_r": -8.36,
+      "win_rate": 0.34,
+      "max_drawdown_r": 10.81
+    },
+    {
+      "window": "2019-09-01..2019-09-28",
+      "trades": 39,
+      "wins": 11,
+      "losses": 25,
+      "breakevens": 3,
+      "net_r": -12.42,
+      "win_rate": 0.28,
+      "max_drawdown_r": 15.97
+    },
+    {
+      "window": "2020-03-01..2020-03-28",
+      "trades": 43,
+      "wins": 11,
+      "losses": 26,
+      "breakevens": 6,
+      "net_r": -14.14,
+      "win_rate": 0.26,
+      "max_drawdown_r": 16.45
+    },
+    {
+      "window": "2020-09-01..2020-09-28",
+      "trades": 41,
+      "wins": 8,
+      "losses": 27,
+      "breakevens": 6,
+      "net_r": -18.06,
+      "win_rate": 0.2,
+      "max_drawdown_r": 19.61
+    },
+    {
+      "window": "2021-03-01..2021-03-28",
+      "trades": 38,
+      "wins": 11,
+      "losses": 24,
+      "breakevens": 3,
+      "net_r": -13.64,
+      "win_rate": 0.29,
+      "max_drawdown_r": 17.34
+    },
+    {
+      "window": "2021-09-01..2021-09-28",
+      "trades": 43,
+      "wins": 17,
+      "losses": 22,
+      "breakevens": 4,
+      "net_r": -3.43,
+      "win_rate": 0.4,
+      "max_drawdown_r": 8.01
+    },
+    {
+      "window": "2022-03-01..2022-03-28",
+      "trades": 43,
+      "wins": 13,
+      "losses": 25,
+      "breakevens": 5,
+      "net_r": -7.96,
+      "win_rate": 0.3,
+      "max_drawdown_r": 13.44
+    },
+    {
+      "window": "2022-09-01..2022-09-28",
+      "trades": 44,
+      "wins": 11,
+      "losses": 29,
+      "breakevens": 4,
+      "net_r": -17.76,
+      "win_rate": 0.25,
+      "max_drawdown_r": 18.86
+    },
+    {
+      "window": "2023-03-01..2023-03-28",
+      "trades": 44,
+      "wins": 15,
+      "losses": 26,
+      "breakevens": 3,
+      "net_r": -10.16,
+      "win_rate": 0.34,
+      "max_drawdown_r": 11.21
+    },
+    {
+      "window": "2023-09-01..2023-09-28",
+      "trades": 42,
+      "wins": 13,
+      "losses": 27,
+      "breakevens": 2,
+      "net_r": -9.33,
+      "win_rate": 0.31,
+      "max_drawdown_r": 11.03
+    },
+    {
+      "window": "2024-03-01..2024-03-28",
+      "trades": 42,
+      "wins": 11,
+      "losses": 23,
+      "breakevens": 8,
+      "net_r": -12.5,
+      "win_rate": 0.26,
+      "max_drawdown_r": 13.36
+    },
+    {
+      "window": "2024-09-01..2024-09-28",
+      "trades": 40,
+      "wins": 13,
+      "losses": 22,
+      "breakevens": 5,
+      "net_r": -6.16,
+      "win_rate": 0.33,
+      "max_drawdown_r": 7.56
+    },
+    {
+      "window": "2025-03-01..2025-03-28",
+      "trades": 43,
+      "wins": 18,
+      "losses": 20,
+      "breakevens": 5,
+      "net_r": 1.69,
+      "win_rate": 0.42,
+      "max_drawdown_r": 7.96
+    },
+    {
+      "window": "2025-09-01..2025-09-28",
+      "trades": 40,
+      "wins": 14,
+      "losses": 18,
+      "breakevens": 7,
+      "net_r": 1.86,
+      "win_rate": 0.35,
+      "max_drawdown_r": 7.03
+    }
+  ],
+  "total_trades": 577,
+  "total_net_r": -130.37,
+  "windows_nonnegative": "2/14",
+  "pooled_max_dd_r": 139.8
+}
