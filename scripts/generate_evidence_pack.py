@@ -290,18 +290,37 @@ _TABLE: Dict[str, dict] = {
         summary="the single trade planner: equity-scaled sizing, mandatory SL, "
                 "protected add-ons; never sends (GOLD-ALPHA-001)",
         test_file="test_intel_planner.py", test_note="", **_MT5_BOUNDARY),
-    "src.strategy.gold_alpha": dict(
+    "src.strategy.gold_intel": dict(
         layer="strategy",
-        summary="GoldAlpha: the single XAU/USD expected-value decision engine "
-                "(setup enumeration + EV scoring + protected SL + exit/trail + "
-                "post-trade learning) (GOLD-ALPHA-001; replay-gated)",
-        test_file="test_gold_alpha.py", test_note="", **_PURE_SHADOW_READY),
-    "src.strategy.trade_attribution": dict(
+        summary="GoldIntel: the single XAU/USD engine — day-narrative brain "
+                "(only decision layer with a positive real-history replay "
+                "record) + macro regime dial (tighten-only) + cost gates "
+                "(reopen window / min stop / spread-vs-stop) "
+                "(GOLD-INTEL-001; replay-gated)",
+        test_file="test_gold_intel.py", test_note="", **_PURE_SHADOW_READY),
+    "src.strategy.day_narrative": dict(
         layer="strategy",
-        summary="post-trade WHY classifier + rolling performance store that "
-                "down-weights failing setups (GOLD-ALPHA-001 learning loop)",
-        test_file="test_trade_attribution.py", test_note="",
-        **_PURE_SHADOW_READY),
+        summary="pure day classifier (TREND/RANGE/TRAP/POST_SPIKE/EXHAUSTED) "
+                "+ conviction ledger feeding the gold_intel brain",
+        test_file="test_day_narrative.py", test_note="", **_PURE_SHADOW_READY),
+    "src.strategy.smc_v2": dict(
+        layer="strategy",
+        summary="day-narrative playbook pipeline (per-state playbooks, "
+                "quality score, trade memory, cadence cap) — internal to "
+                "gold_intel, not a selectable profile",
+        test_file="test_smc_v2.py", test_note="", **_PURE_SHADOW_READY),
+    "src.strategy.smc_execution": dict(
+        layer="strategy",
+        summary="A+B+C+D gate chassis (HTF context, killzone/liquidity, SMC "
+                "anchor, executable trigger + tactical stop) — internal to "
+                "gold_intel, not a selectable profile",
+        test_file="test_smc_execution.py", test_note="", **_PURE_SHADOW_READY),
+    "src.execution.research_forward": dict(
+        layer="execution",
+        summary="ResearchForwardRunner: demo-locked forward-test runner that "
+                "routes research-lab setups through the ExecutionGateway "
+                "(RESEARCH-LAB-001; Windows MT5 host only)",
+        test_file="test_research_forward.py", test_note="", **_MT5_BOUNDARY),
     "src.execution.demo_session": dict(
         layer="execution",
         summary="supervised demo session loop (DEMO-002; gateway-only orders)",

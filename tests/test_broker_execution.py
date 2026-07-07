@@ -31,7 +31,7 @@ from src.execution.trading_service import ProgressPrinter
 from src.journal.journal import TradeJournal
 from src.risk.governor import RiskContext, RiskGovernor
 from src.risk.state_tracker import RiskStateSnapshot
-from src.strategy.gold_alpha import make_gold_limits as make_challenge_limits
+from src.strategy.gold_intel import make_intel_limits as make_challenge_limits
 from tests.intel_helpers import (
     BROKER_SYMBOL,
     SYMBOL,
@@ -462,10 +462,10 @@ def test_service_labels_rejection_honestly(tmp_path):
                                 violations=0),
         journal=TradeJournal(tmp_path / "j.jsonl"),
         kill_switch=SimpleNamespace(engaged=False),
-        profile=get_profile("gold_alpha"),
+        profile=get_profile("gold_intel"),
         printer=ProgressPrinter(stream=stream),
         banner=BannerInfo(
-            profile="gold_alpha", execution_mode="EXECUTION",
+            profile="gold_intel", execution_mode="EXECUTION",
             account_login_masked="****11", account_type="DEMO",
             server="x", symbol="XAUUSDm", risk_summary="x", news_status="x",
             kill_switch_status="absent", journal_path="x", report_dir="x",

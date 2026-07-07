@@ -44,7 +44,7 @@ from src.journal.journal import TradeJournal
 from src.risk.governor import RiskGovernor
 from src.strategy.pipeline import PipelineContext, PipelineResult, PipelineStage
 from src.strategy.scoring import ConfidenceResult, ScoreRecommendation
-from src.strategy.gold_alpha import make_gold_limits as make_challenge_limits
+from src.strategy.gold_intel import make_intel_limits as make_challenge_limits
 from tests.test_broker_execution import _cycle_outcome
 from tests.intel_helpers import BROKER_SYMBOL, SYMBOL
 from tests.test_demo_session import (
@@ -97,7 +97,7 @@ def build_session(tmp_path, fake, results):
     adapter.connect()
     kill_switch = KillSwitch(tmp_path / "KILL_SWITCH")
     # These tests verify the MT5-truth accounting + risk-breaker MECHANISM, so
-    # they use throttle-ENABLED governor limits (the gold_alpha live profile
+    # they use throttle-ENABLED governor limits (the gold_intel live profile
     # runs with breakers off; the mechanism itself stays correct and tested).
     limits = make_challenge_limits(SYMBOL).__class__(
         expected_symbol=SYMBOL, max_risk_per_trade=0.03, max_daily_loss=0.05,

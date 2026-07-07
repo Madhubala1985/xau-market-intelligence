@@ -106,17 +106,17 @@ def main() -> int:
     symbol = args.symbol or data["m5"][-1].symbol
     canonical = symbol.strip().upper()
 
-    from src.strategy.gold_alpha import make_gold_alpha_pipeline
+    from src.strategy.gold_intel import make_gold_intel_pipeline
 
-    pipelines = {"gold_alpha": make_gold_alpha_pipeline(canonical)}
+    pipelines = {"gold_intel": make_gold_intel_pipeline(canonical)}
     replay = DecisionReplay(
         data["m5"], m1=data["m1"], m15=data["m15"], h1=data["h1"],
         h4=data["h4"], daily=data["daily"], symbol=canonical, warmup=290,
     )
     print(f"replaying {len(data['m5']) - 290} M5 steps through the "
-          "liquidity_intel engine ...")
+          "gold_intel engine ...")
     results = replay.run(pipelines)
-    res = results["gold_alpha"]
+    res = results["gold_intel"]
     gate = ship_verdict(res)
 
     def dump(trades):

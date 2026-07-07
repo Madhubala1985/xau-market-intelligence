@@ -76,7 +76,9 @@ from src.execution.session_profiles import (  # noqa: E402
     PROFILES,
     get_profile,
 )
-from src.strategy.gold_alpha import make_gold_alpha_pipeline  # noqa: E402
+from src.strategy.gold_intel import (  # noqa: E402
+    make_gold_intel_pipeline,
+)
 from src.execution.trading_service import (  # noqa: E402
     BannerInfo,
     ProgressPrinter,
@@ -131,7 +133,7 @@ def main() -> int:
     )
     parser.add_argument("--profile", default=PROFILE_NAME,
                         choices=sorted(PROFILES),
-                        help="the single trading profile (gold_alpha); "
+                        help="the single trading profile (gold_intel); "
                              "retired names are refused")
     parser.add_argument("--dry-run", action="store_true",
                         help="run the identical loop with order sending "
@@ -205,14 +207,37 @@ def main() -> int:
             kill_switch=kill_switch,
         )
         journal = TradeJournal(JOURNAL_PATH)
-        # GOLD-ALPHA-001: ONE decision engine, ONE planner, ONE path. No
-        # profile fork — the single gold_alpha EV engine and its equity-scaled
-        # planner are always built; every safety layer (session, gateway, kill
-        # switch, journal, reconciliation, stops) is the proven chassis reused.
-        pipeline = make_gold_alpha_pipeline(
+        # GOLD-INTEL-001: ONE decision engine, ONE planner, ONE path. No
+        # profile fork — the single gold_intel engine (day-narrative brain +
+        # regime dial + cost gates) and its equity-scaled planner are always
+        # built; every safety layer (session, gateway, kill switch, journal,
+        # reconciliation, stops) is the proven chassis reused.
+        pipeline = make_gold_intel_pipeline(
             canonical, max_spread_price=profile.max_spread_price,
         )
-        planner = IntelTradePlanner(limits=limits)
+        # Risk brain: feed the macro regime dial from the cached FRED store.
+        # Stale/missing macro reads UNAVAILABLE and changes nothing (the dial
+        # is tighten-only; it can demote size, never create or upsize trades).
+        try:
+            from research.macro_data import load_series
+            from research.regime import gold_macro_regime
+            ry = load_series("real_yield_10y")
+            dx = load_series("broad_dollar")
+            last_obs = max(max(ry), max(dx))
+            age_days = (datetime.now(timezone.utc).date() - last_obs).days
+            if age_days <= 10:
+                reading = gold_macro_regime(
+                    [v for _, v in sorted(ry.items())],
+                    [v for _, v in sorted(dx.items())])
+                pipeline.set_regime(reading.exposure, reading.label)
+            else:
+                pipeline.set_regime(None, "")
+        except Exception:
+            pipeline.set_regime(None, "")
+        # GOLD-INTEL-001 tiers: 3% STRONG / 2% NORMAL (the envelope's 3% cap
+        # bounds them); the replay-validated brain sets the cadence.
+        planner = IntelTradePlanner(
+            limits=limits, risk_pct_strong=0.03, risk_pct_normal=0.02)
         exposure_governor = None
         session = SupervisedDemoSession(
             adapter=adapter,
@@ -279,11 +304,11 @@ def main() -> int:
             ).assess(now).summary(),
             capital_phase=f"{phase.value} (equity ~{equity:,.0f})",
             thresholds=(
-                "gold_alpha: expected-value scored setups "
-                "(SWEEP_RECLAIM/TREND_CONTINUATION/RANGE_FADE/BOS_RETEST) "
-                "from D1/H4/H1/M15/M5/M1; trade when EV>bar; protected SL "
-                "beyond engineered liquidity; draw-on-liquidity targets; "
-                "BE+ATR trail; fast thesis-failure exit; post-trade learning"
+                "gold_intel: day-narrative brain (quality_bar 0.70 / strong "
+                "0.78, 2 entries/day, 3R trend targets) + regime dial "
+                "(tighten-only STRONG->NORMAL demotion) + cost gates (no "
+                "entries 16:55-18:20 ET; min stop 2.0 USD; spread <= 12% of "
+                "stop); tiers 3%/2% under the 3% envelope cap"
             ),
         )
 

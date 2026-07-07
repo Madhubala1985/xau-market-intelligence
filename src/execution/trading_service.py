@@ -381,7 +381,7 @@ class ProgressPrinter:
                 )
 
     def _challenge_lines(self, ch: Optional[dict]) -> None:
-        """GOLD-ALPHA-001: per-cycle evidence + decision reasoning (one block).
+        """GOLD-INTEL-001: per-cycle evidence + decision reasoning (one block).
         Tolerant of missing keys so it renders any engine's output dict."""
         if not ch:
             return
@@ -393,6 +393,17 @@ class ProgressPrinter:
         self._line(f"  htf_context={ch.get('htf_context')}")
         if ch.get("narrative"):
             self._line(f"  narrative={ch.get('narrative')}")
+        if ch.get("playbook") or ch.get("quality"):
+            self._line(
+                f"  playbook={ch.get('playbook', '-')} "
+                f"quality={ch.get('quality', '-')}"
+            )
+        if ch.get("regime_dial"):
+            self._line(f"  regime_dial={ch.get('regime_dial')}")
+        if ch.get("regime_demotion"):
+            self._line(f"  regime_demotion={ch.get('regime_demotion')}")
+        if ch.get("cost_gate"):
+            self._line(f"  cost_gate={ch.get('cost_gate')}")
         if ch.get("liquidity_map"):
             self._line(
                 f"  liquidity_map={ch.get('liquidity_map')} "

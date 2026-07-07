@@ -52,9 +52,9 @@ from src.strategy.scoring import ConfidenceResult
 
 # Risk TIER lots (parsed from setup_type). They select the EQUITY RISK TIER;
 # the broker lot is derived from the stop so size compounds with equity.
-# AGGRESSIVE GROWTH MODE (owner directive 2026-06-15, DEMO): STRONG 8% /
-# NORMAL 5% per trade, bounded by the 10% survival cap. Mandatory SL keeps
-# each trade's loss bounded; aggression rides position size + compounding.
+# Defaults are the aggressive-growth-mode tiers (owner directive 2026-06-15);
+# a profile may construct the planner with TIGHTER tiers (GOLD-INTEL-001
+# passes 3%/2% — the envelope cap still bounds whatever is passed).
 TIER_LOTS = (0.05, 0.10)
 RISK_PCT_NORMAL = 0.05
 RISK_PCT_STRONG = 0.08
@@ -80,10 +80,17 @@ class IntelTradePlanner:
         spec: Optional[SymbolSpec] = None,
         governor: Optional[RiskGovernor] = None,
         mode: TradingMode = TradingMode.DEMO,
+        risk_pct_strong: float = RISK_PCT_STRONG,
+        risk_pct_normal: float = RISK_PCT_NORMAL,
     ) -> None:
         if mode is not TradingMode.DEMO:
             raise ValueError(
                 "IntelTradePlanner is DEMO-only; real mode is forbidden")
+        if not (0 < risk_pct_normal <= risk_pct_strong <= 0.10):
+            raise ValueError(
+                "risk tiers must satisfy 0 < normal <= strong <= 10%")
+        self._risk_pct_strong = risk_pct_strong
+        self._risk_pct_normal = risk_pct_normal
         # Aggressive growth mode lifts the open-position throttle; structural
         # safety (mandatory SL, no averaging-down) is enforced per-trade below.
         if limits.max_open_trades > 10:
@@ -282,8 +289,9 @@ class IntelTradePlanner:
         stop."""
         spec = self._spec
         requested = self._requested_tier(decision)
-        tier_pct = (RISK_PCT_STRONG if requested >= max(TIER_LOTS) - 1e-9
-                    else RISK_PCT_NORMAL)
+        tier_pct = (self._risk_pct_strong
+                    if requested >= max(TIER_LOTS) - 1e-9
+                    else self._risk_pct_normal)
         # Never budget above the envelope's per-trade cap, so the planner
         # respects whatever limits it is constructed with (aggressive 10% live,
         # tighter in tests).

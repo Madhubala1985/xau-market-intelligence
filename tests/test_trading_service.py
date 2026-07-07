@@ -73,7 +73,7 @@ def seq_now(times):
 
 def banner_info(mode="EXECUTION — orders WILL be sent to the .env account (DEMO)"):
     return BannerInfo(
-        profile="gold_alpha",
+        profile="gold_intel",
         execution_mode=mode,
         account_login_masked=mask_login(LOGIN_VALUE),
         account_type="DEMO",
@@ -93,14 +93,14 @@ def make_service(tmp_path, *, results=None, flags=None, fake=None, journal=None,
                  warmstart=False, **session_overrides):
     session, fake, journal, kill_switch = make_session(
         tmp_path, results=results, flags=flags, fake=fake, journal=journal,
-        max_orders=None, profile_name="gold_alpha", **session_overrides,
+        max_orders=None, profile_name="gold_intel", **session_overrides,
     )
     stream = StringIO()
     service = TradingService(
         session=session,
         journal=journal,
         kill_switch=kill_switch,
-        profile=profile or get_profile("gold_alpha"),
+        profile=profile or get_profile("gold_intel"),
         printer=ProgressPrinter(stream=stream),
         banner=banner or banner_info(),
         report_dir=tmp_path / "reports",
@@ -124,7 +124,7 @@ def test_startup_banner_prints_required_fields(tmp_path):
     service.run()
     out = stream.getvalue()
     assert "Continuous MT5 Service" in out
-    assert "profile:      gold_alpha" in out
+    assert "profile:      gold_intel" in out
     assert "EXECUTION — orders WILL be sent" in out
     assert "type=DEMO" in out
     assert "Exness-MT5Trial" in out
@@ -314,46 +314,43 @@ def test_kill_switch_stops_cleanly(tmp_path):
     assert payload["stop_reason"] == "KILL_SWITCH"
 
 
-def test_aggressive_mode_does_not_weekly_stop(tmp_path):
-    # AGGRESSIVE GROWTH MODE (owner directive 2026-06-15): the weekly-loss
-    # circuit-breaker is OFF (limit 1.0). A 12.5% weekly loss does NOT stop the
-    # service. (The breaker MECHANISM is still covered at the governor level in
-    # test_risk_governor.py.)
+def test_weekly_loss_stops_the_service(tmp_path):
+    # GOLD-INTEL-001 reinstates the weekly 10% stop: a 12.5% weekly loss
+    # STOPS the service (RISK_SHUTDOWN).
     journal = TradeJournal(tmp_path / "journal.jsonl")
     earlier = NOW - timedelta(hours=2)
     journal.log_record(TradeRecord(
         record_id="L-1", created_at_utc=earlier, symbol="XAUUSDM",
         direction=Direction.LONG, outcome=TradeOutcome.LOSS, pnl=-250.0,
         opened_at_utc=earlier, closed_at_utc=earlier,
-    ))  # -250 on a 2000 balance = 12.5% weekly loss; breaker OFF
+    ))  # -250 on a 2000 balance = 12.5% weekly loss; breaker ON
     service, *_ , stream = make_service(
         tmp_path, results=[no_trade_result()] * 3, journal=journal,
         max_cycles=3,
     )
     report = service.run()
-    assert report.stop_reason == StopReason.MAX_CYCLES  # did NOT stop
-    assert report.cycles == 3
-    assert "RISK_SHUTDOWN" not in stream.getvalue()
+    assert report.stop_reason == StopReason.RISK_SHUTDOWN
+    assert "RISK_SHUTDOWN" in stream.getvalue()
 
 
-def test_aggressive_mode_does_not_daily_pause(tmp_path):
-    # AGGRESSIVE GROWTH MODE: the daily-loss pause is OFF (limit 1.0). A 6% day
-    # does NOT pause new entries.
+def test_daily_loss_pauses_entries(tmp_path):
+    # GOLD-INTEL-001 reinstates the daily 5% pause: a 6% day pauses new
+    # entries (DAY_PAUSED) but the service keeps managing positions.
     journal = TradeJournal(tmp_path / "journal.jsonl")
     earlier = NOW - timedelta(hours=2)
     journal.log_record(TradeRecord(
         record_id="L-1", created_at_utc=earlier, symbol="XAUUSDM",
         direction=Direction.LONG, outcome=TradeOutcome.LOSS, pnl=-120.0,
         opened_at_utc=earlier, closed_at_utc=earlier,
-    ))  # -120 = 6% daily; breaker OFF
+    ))  # -120 = 6% daily; pause ON
     service, *_ , stream = make_service(
         tmp_path, results=[no_trade_result()] * 2, journal=journal,
         max_cycles=2,
     )
     report = service.run()
-    assert report.stop_reason == StopReason.MAX_CYCLES  # did NOT stop
+    assert report.stop_reason == StopReason.MAX_CYCLES  # paused, not stopped
     assert report.cycles == 2
-    assert "DAY_PAUSED" not in stream.getvalue()
+    assert "DAY_PAUSED" in stream.getvalue()
 
 
 def test_ctrl_c_stops_cleanly(tmp_path):
