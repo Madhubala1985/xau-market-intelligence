@@ -21,10 +21,10 @@ The SINGLE autonomous XAU/USD decision engine: three brains on one path.
    - the COMEX close/reopen window (16:55-18:20 ET) is untradeable at retail
      costs (measured reopen spread ~5.7 bps vs ~2.3 normal; the reopen
      anomaly itself lives inside the spread — decision 2026-07-05-02);
-   - a stop under MIN_STOP_USD puts the round-trip cost inside the expected
-     win (XAU lesson: edges must clear >> 5 bps/trade);
-   - a live spread above MAX_SPREAD_FRACTION_OF_STOP of the stop distance
-     means the market is charging a material fraction of 1R to enter.
+   - ONE price-level-independent cost rule: estimated round-trip cost
+     (live spread + slippage allowance) must stay under MAX_COST_R of the
+     stop distance (1R) — beyond that the trade is structurally unwinnable
+     (XAU lesson: edges must clear >> 5 bps/trade).
 
 This module sends no orders and holds no credentials; the ExecutionGateway
 remains the only order pathway and the RiskGovernor has final authority.
@@ -60,8 +60,14 @@ DEFAULT_TREND_TARGET_R = 3.0
 ET = ZoneInfo("America/New_York")
 REOPEN_BLOCK_START_ET = (16, 55)   # inclusive, ET
 REOPEN_BLOCK_END_ET = (18, 20)     # exclusive, ET
-MIN_STOP_USD = 2.0
-MAX_SPREAD_FRACTION_OF_STOP = 0.12
+# ONE coherent cost rule, price-level independent: estimated round-trip cost
+# (live spread + slippage allowance) as a fraction of 1R (the stop distance)
+# must stay under MAX_COST_R. The June 2026 replay book was net positive
+# INCLUDING trades that paid ~0.3-0.4R in punitive costs; beyond ~0.4R a 2R
+# target needs >60% wins — structurally unwinnable. A fixed USD stop floor is
+# WRONG across price levels ($2k gold vs $4k gold) and is not used.
+SLIPPAGE_ALLOWANCE_USD = 0.30
+MAX_COST_R = 0.40
 
 # Risk brain: dial <= 1/3 (2+ of 3 lookbacks say TIGHTENING) demotes STRONG.
 REGIME_DEMOTE_BELOW = 0.34
@@ -141,6 +147,10 @@ class GoldIntelEngine(SmcV2Pipeline):
         # managed by the chassis regardless).
         block = self._cost_gate(inp, result)
         if block is not None:
+            # the brain counted this approval against its daily cadence cap,
+            # but no trade happened — restore the slot.
+            if self._entries_today > 0:
+                self._entries_today -= 1
             if ch:
                 ch["cost_gate"] = block
                 ch["reason"] = block
@@ -231,16 +241,12 @@ class GoldIntelEngine(SmcV2Pipeline):
                     "retail costs)")
         if d.entry_price and d.stop_loss:
             stop_dist = abs(d.entry_price - d.stop_loss)
-            if stop_dist < MIN_STOP_USD:
-                return (f"COST_STOP_TOO_TIGHT: stop {stop_dist:.2f} USD < "
-                        f"{MIN_STOP_USD:.2f} — round-trip cost would eat the "
-                        "expected win (XAU >>5 bps lesson)")
-            if inp.current_spread and inp.current_spread > (
-                    MAX_SPREAD_FRACTION_OF_STOP * stop_dist):
-                return (f"COST_SPREAD_VS_STOP: spread {inp.current_spread:.2f}"
-                        f" > {MAX_SPREAD_FRACTION_OF_STOP:.0%} of stop "
-                        f"{stop_dist:.2f} — entry cost is a material fraction "
-                        "of 1R")
+            cost = max(inp.current_spread or 0.0, 0.0) + SLIPPAGE_ALLOWANCE_USD
+            if stop_dist > 0 and cost / stop_dist > MAX_COST_R:
+                return (f"COST_TOO_LARGE_VS_RISK: est. cost {cost:.2f} USD = "
+                        f"{cost / stop_dist:.2f}R of the {stop_dist:.2f} stop "
+                        f"(max {MAX_COST_R:.2f}R) — structurally unwinnable "
+                        "(XAU >>5 bps lesson)")
         return None
 
 
