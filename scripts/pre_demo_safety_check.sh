@@ -38,10 +38,10 @@ fi
 
 echo "Checking required Phase 12 files..."
 for file in \
-  20_LEVERAGE_AND_PYRAMIDING_POLICY.md \
-  21_LIVE_DEMO_VALIDATION_PLAN.md \
-  22_MT5_WINDOWS_VALIDATION.md \
-  23_DEMO_TRADING_RUNBOOK.md; do
+  docs/20_LEVERAGE_AND_PYRAMIDING_POLICY.md \
+  docs/21_LIVE_DEMO_VALIDATION_PLAN.md \
+  docs/22_MT5_WINDOWS_VALIDATION.md \
+  docs/23_DEMO_TRADING_RUNBOOK.md; do
   if [ ! -s "$file" ]; then
     echo "FAIL: missing or empty $file"
     fail=1

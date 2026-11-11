@@ -2,28 +2,28 @@
 set -euo pipefail
 
 required_files=(
-  "00_PROJECT_CHARTER.md"
-  "01_SYSTEM_MINDSET.md"
-  "02_ARCHITECTURE.md"
-  "03_RISK_POLICY.md"
-  "04_ADAPTATION_POLICY.md"
-  "05_EXECUTION_POLICY.md"
-  "06_DATA_POLICY.md"
-  "07_TEST_POLICY.md"
-  "08_ERROR_POLICY.md"
-  "09_CLAUDE_WORKFLOW.md"
-  "10_TASK_QUEUE.md"
-  "11_DECISION_LOG.md"
-  "12_HANDOFF.md"
-  "13_XAUUSD_SMC_PLAYBOOK.md"
-  "14_SESSION_KILLZONE_POLICY.md"
-  "15_LIQUIDITY_ENGINEERING.md"
-  "16_ORDERFLOW_PROXY_POLICY.md"
-  "17_STOP_AND_TRAILING_POLICY.md"
-  "18_CAPITAL_AND_SCALING_POLICY.md"
-  "19_GOLD_FUTURES_CONFIRMATION_POLICY.md"
+  "docs/00_PROJECT_CHARTER.md"
+  "docs/01_SYSTEM_MINDSET.md"
+  "docs/02_ARCHITECTURE.md"
+  "docs/03_RISK_POLICY.md"
+  "docs/04_ADAPTATION_POLICY.md"
+  "docs/05_EXECUTION_POLICY.md"
+  "docs/06_DATA_POLICY.md"
+  "docs/07_TEST_POLICY.md"
+  "docs/08_ERROR_POLICY.md"
+  "docs/09_CLAUDE_WORKFLOW.md"
+  "docs/10_TASK_QUEUE.md"
+  "docs/11_DECISION_LOG.md"
+  "docs/12_HANDOFF.md"
+  "docs/13_XAUUSD_SMC_PLAYBOOK.md"
+  "docs/14_SESSION_KILLZONE_POLICY.md"
+  "docs/15_LIQUIDITY_ENGINEERING.md"
+  "docs/16_ORDERFLOW_PROXY_POLICY.md"
+  "docs/17_STOP_AND_TRAILING_POLICY.md"
+  "docs/18_CAPITAL_AND_SCALING_POLICY.md"
+  "docs/19_GOLD_FUTURES_CONFIRMATION_POLICY.md"
   "CLAUDE.md"
-  "CURRENT_STATE.md"
+  "docs/CURRENT_STATE.md"
   ".env.example"
 )
 
@@ -66,8 +66,8 @@ echo "Checking key policy values..."
 grep -q "ALLOW_DEMO_ORDERS=true" .env.example || { echo "FAIL: ALLOW_DEMO_ORDERS=true missing"; fail=1; }
 grep -q "ALLOW_REAL_ORDERS=false" .env.example || { echo "FAIL: ALLOW_REAL_ORDERS=false missing"; fail=1; }
 grep -q "MAX_RISK_PER_TRADE=0.005" .env.example || { echo "FAIL: demo risk 0.005 missing"; fail=1; }
-grep -q "Real-money execution is forbidden" 00_PROJECT_CHARTER.md || { echo "FAIL: real-money ban missing"; fail=1; }
-grep -q "Gold futures data may not directly trigger trades" 19_GOLD_FUTURES_CONFIRMATION_POLICY.md || { echo "FAIL: futures direct-trigger ban missing"; fail=1; }
+grep -q "Real-money execution is forbidden" docs/00_PROJECT_CHARTER.md || { echo "FAIL: real-money ban missing"; fail=1; }
+grep -q "Gold futures data may not directly trigger trades" docs/19_GOLD_FUTURES_CONFIRMATION_POLICY.md || { echo "FAIL: futures direct-trigger ban missing"; fail=1; }
 
 if [ "$fail" -ne 0 ]; then
   echo

@@ -10,29 +10,29 @@ You must follow the project control pack and must not change direction.
 
 Read these files before starting any task:
 
-1. CURRENT_STATE.md
-2. 12_HANDOFF.md
-3. 10_TASK_QUEUE.md
-4. 00_PROJECT_CHARTER.md
-5. 01_SYSTEM_MINDSET.md
-6. 02_ARCHITECTURE.md
-7. 03_RISK_POLICY.md
-8. 04_ADAPTATION_POLICY.md
-9. 05_EXECUTION_POLICY.md
-10. 06_DATA_POLICY.md
-11. 07_TEST_POLICY.md
-12. 08_ERROR_POLICY.md
-13. 09_CLAUDE_WORKFLOW.md
-14. 11_DECISION_LOG.md
+1. docs/CURRENT_STATE.md
+2. docs/12_HANDOFF.md
+3. docs/10_TASK_QUEUE.md
+4. docs/00_PROJECT_CHARTER.md
+5. docs/01_SYSTEM_MINDSET.md
+6. docs/02_ARCHITECTURE.md
+7. docs/03_RISK_POLICY.md
+8. docs/04_ADAPTATION_POLICY.md
+9. docs/05_EXECUTION_POLICY.md
+10. docs/06_DATA_POLICY.md
+11. docs/07_TEST_POLICY.md
+12. docs/08_ERROR_POLICY.md
+13. docs/09_CLAUDE_WORKFLOW.md
+14. docs/11_DECISION_LOG.md
 15. strategy-specific files relevant to the current task.
 
 ## Start Rule
 
 Always start by reading:
 
-1. CURRENT_STATE.md
-2. 12_HANDOFF.md
-3. 10_TASK_QUEUE.md
+1. docs/CURRENT_STATE.md
+2. docs/12_HANDOFF.md
+3. docs/10_TASK_QUEUE.md
 
 Then continue the next incomplete task.
 
@@ -87,9 +87,9 @@ Default mode must never be real.
 After every completed task:
 
 1. run required tests,
-2. update CURRENT_STATE.md,
-3. update 12_HANDOFF.md,
-4. update 11_DECISION_LOG.md if decision changed,
+2. update docs/CURRENT_STATE.md,
+3. update docs/12_HANDOFF.md,
+4. update docs/11_DECISION_LOG.md if decision changed,
 5. commit only relevant files.
 
 Commit message format:
@@ -102,7 +102,7 @@ P0-001: add master project control pack
 
 ## Session Limit Rule
 
-Before stopping or when context/session is getting full, update 12_HANDOFF.md with:
+Before stopping or when context/session is getting full, update docs/12_HANDOFF.md with:
 
 - current task,
 - completed work,
@@ -115,7 +115,7 @@ If resumed in same or new session, read HANDOFF.md and continue.
 
 ## Error Rule
 
-If tests fail or runtime errors happen, follow 08_ERROR_POLICY.md.
+If tests fail or runtime errors happen, follow docs/08_ERROR_POLICY.md.
 
 Do not bypass errors.
 
